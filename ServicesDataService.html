@@ -1,0 +1,359 @@
+<script type="text/babel">
+// Level helpers (path ids, track selection, and status calculation)
+const deriveLevelPathMap = (paths = []) => {
+  const findId = (namePart) => (paths || []).find(p => (p.PathName || "").includes(namePart))?.PathID;
+  const map = {};
+  LEVELS.forEach(def => {
+    const matchId = findId(def.pathMatch);
+    if (matchId) { map[def.id] = matchId; return; }
+    if (def.fallbackMatch) {
+      const fallbackId = findId(def.fallbackMatch);
+      if (fallbackId) map[def.id] = fallbackId;
+    }
+  });
+  return map;
+};
+
+const determineLevel2Track = (memberTasks = []) => {
+  const choices = (memberTasks || [])
+    .filter(mt => LEVEL2_TRACK_CHOICES[mt.TaskID] && mt.StatusID === "8")
+    .map(mt => ({
+      track: LEVEL2_TRACK_CHOICES[mt.TaskID],
+      completed: mt.Completed ? new Date(mt.Completed) : null,
+      id: parseInt(mt.MemberTaskCreditID || mt.MemberTaskID || 0) || 0
+    }));
+  if (!choices.length) return null;
+  choices.sort((a, b) => {
+    const aTime = a.completed ? a.completed.getTime() : 0;
+    const bTime = b.completed ? b.completed.getTime() : 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return b.id - a.id;
+  });
+  return choices[0].track;
+};
+
+const calculateLevelsProgress = (member, configFiles, dataFiles, levelPathMap) => {
+  const progress = {};
+  const memberTasks = (dataFiles.memberTasks || []).filter(mt => mt.CAPID === member.CAPID);
+  const memberPaths = (dataFiles.memberPaths || []).filter(mp => mp.CAPID === member.CAPID);
+  const memberLegacyLevels = (dataFiles.seniorLevels || []).filter(sl => sl.CAPID === member.CAPID);
+
+  LEVELS.forEach(def => {
+    const pathId = levelPathMap[def.id];
+    let totalReq = 0, totalComp = 0;
+
+    if (pathId && (configFiles.groups || []).length > 0) {
+      const groups = (configFiles.groups || []).filter(g => g.PathID === pathId);
+      groups.forEach(group => {
+        const req = parseInt(group.NumberOfRequiredTasks) || 0;
+        if (req === 0) return;
+        totalReq += req;
+        const groupTaskIds = (configFiles.assignments || []).filter(a => a.GroupID === group.GroupID).map(a => a.TaskID);
+        const comp = memberTasks.filter(mt => groupTaskIds.includes(mt.TaskID) && mt.StatusID === "8").length;
+        totalComp += Math.min(comp, req);
+      });
+    }
+
+    let percent = totalReq > 0 ? Math.round((totalComp / totalReq) * 100) : 0;
+    const legacyEntry = def.legacyKey ? memberLegacyLevels.find(sl => sl.Lvl === def.legacyKey) : null;
+    const creditsForPath = pathId ? memberPaths.filter(mp => mp.PathID === pathId) : [];
+    const approvedCredit = creditsForPath.find(mp => mp.StatusID === "8");
+    const pendingCredit = creditsForPath.find(mp => mp.StatusID === "26");
+    const disapprovedCredit = creditsForPath.find(mp => mp.StatusID === "27");
+
+    let status = 'not-started';
+    let approvalStatus = null;
+    let date = null;
+
+    if (legacyEntry || approvedCredit) {
+      status = 'completed';
+      approvalStatus = 'approved';
+      date = legacyEntry ? legacyEntry.Completed : approvedCredit.Completed;
+      percent = 100;
+    } else if (percent >= 100) {
+      if (pendingCredit || disapprovedCredit) {
+        status = 'pending';
+        approvalStatus = pendingCredit ? 'pending' : 'disapproved';
+        date = (pendingCredit || disapprovedCredit).Completed;
+      } else {
+        status = 'ready';
+        approvalStatus = 'ready';
+      }
+    } else if (percent > 0) {
+      status = 'in-progress';
+    }
+
+    progress[def.id] = {
+      percent,
+      status,
+      approvalStatus,
+      date,
+      pathId,
+      totalReq,
+      totalComp,
+      legacy: !!legacyEntry
+    };
+  });
+
+  // Legacy Level 2 awards should satisfy both parts in the new split
+  const legacyLevel2 = memberLegacyLevels.find(sl => sl.Lvl === 'LV2');
+  if (legacyLevel2) {
+    ['L2P1', 'L2P2'].forEach(id => {
+      if (progress[id] && progress[id].status !== 'completed') {
+        progress[id] = { ...progress[id], status: 'completed', approvalStatus: 'approved', percent: 100, date: legacyLevel2.Completed, legacy: true };
+      }
+    });
+  }
+
+  const baseComplete = {
+    1: progress.L1 && progress.L1.status === 'completed',
+    2: progress.L2P1 && progress.L2P1.status === 'completed' && progress.L2P2 && progress.L2P2.status === 'completed',
+    3: progress.L3 && progress.L3.status === 'completed',
+    4: progress.L4 && progress.L4.status === 'completed',
+    5: progress.L5 && progress.L5.status === 'completed',
+  };
+
+  let currentLevel = 0;
+  for (let lvl = 5; lvl >= 1; lvl--) {
+    if (baseComplete[lvl]) { currentLevel = lvl; break; }
+  }
+
+  return { progress, currentLevel };
+};
+
+function createDataService() {
+  let _rawData = {
+    members: [], duty: [], tracks: [], memberTasks: [], memberPaths: [], organization: [],
+    cadetDuty: [], seniorLevels: [], committees: [], contacts: [],
+    cadetRank: [], cadetAchv: [], cadetAchvAprs: [], cadetAchvFullReport: [],
+    cadetPhase: [], cadetAwards: [], cadetHFZ: [], cadetActivities: [],
+    training: [], seniorAwards: [], oFlights: [],
+    // ES Member Data
+    esMbrAchievements: [], esMbrTasks: [],
+    // VOLU Instructor Data
+    voluInstructors: []
+  };
+  let _rawConfig = {
+    paths: [], groups: [], tasks: [], assignments: [], lookups: [], cadetAchvEnum: [],
+    // ES Config Data
+    esAchievements: [], esTasks: [], esAchvStepTasks: [], esAchvStepAchv: []
+  };
+  let _levelPathMap = {};
+  let _unitChildrenMap = new Map();
+  let _esService = null;
+  let _esUnitAnalysisService = null;
+
+  const padUnit = (val) => (val || "").replace(/^0+/, '').padStart(3, '0');
+  const buildUnitChildren = () => {
+    const map = new Map();
+    (_rawData.organization || []).forEach(o => {
+      const parentId = String(o.NextLevel || "").trim();
+      const childId = String(o.ORGID || "").trim();
+      if (!parentId || parentId === childId) return;
+      if (!map.has(parentId)) map.set(parentId, []);
+      map.get(parentId).push(childId);
+    });
+    _unitChildrenMap = map;
+  };
+
+  const getDescendantOrgIds = (rootId) => {
+    const root = String(rootId || "").trim();
+    if (!root) return [];
+    const results = [root];
+    const queue = [root];
+    const visited = new Set([root]);
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      const kids = _unitChildrenMap.get(curr) || [];
+      kids.forEach(k => {
+        if (!visited.has(k)) {
+          visited.add(k);
+          results.push(k);
+          queue.push(k);
+        }
+      });
+    }
+    return results;
+  };
+
+  const findLevelPathIds = () => { _levelPathMap = deriveLevelPathMap(_rawConfig.paths || []); };
+
+  const parsePayload = (payload) => {
+    _rawConfig = {
+      paths: parseCSV(payload?.config?.paths) || [],
+      groups: parseCSV(payload?.config?.groups) || [],
+      tasks: parseCSV(payload?.config?.tasks) || [],
+      assignments: parseCSV(payload?.config?.assignments) || [],
+      lookups: parseCSV(payload?.config?.lookups) || [],
+      cadetAchvEnum: parseCSV(payload?.config?.cadetAchvEnum) || [],
+      // ES Config
+      esAchievements: parseCSV(payload?.config?.esAchievements) || [],
+      esTasks: parseCSV(payload?.config?.esTasks) || [],
+      esAchvStepTasks: parseCSV(payload?.config?.esAchvStepTasks) || [],
+      esAchvStepAchv: parseCSV(payload?.config?.esAchvStepAchv) || []
+    };
+    _rawData = {
+      members: parseCSV(payload?.data?.members) || [],
+      duty: parseCSV(payload?.data?.duty) || [],
+      tracks: parseCSV(payload?.data?.tracks) || [],
+      memberTasks: parseCSV(payload?.data?.memberTasks) || [],
+      memberPaths: parseCSV(payload?.data?.memberPaths) || [],
+      organization: parseCSV(payload?.data?.organization) || [],
+      cadetDuty: parseCSV(payload?.data?.cadetDuty) || [],
+      seniorLevels: parseCSV(payload?.data?.seniorLevels) || [],
+      committees: parseCSV(payload?.data?.committees) || [],
+      contacts: parseCSV(payload?.data?.contacts) || [],
+      cadetRank: parseCSV(payload?.data?.cadetRank) || [],
+      cadetAchv: parseCSV(payload?.data?.cadetAchv) || [],
+      cadetAchvAprs: parseCSV(payload?.data?.cadetAchvAprs) || [],
+      cadetAchvFullReport: parseCSV(payload?.data?.cadetAchvFullReport) || [],
+      cadetPhase: parseCSV(payload?.data?.cadetPhase) || [],
+      cadetAwards: parseCSV(payload?.data?.cadetAwards) || [],
+      cadetHFZ: parseCSV(payload?.data?.cadetHFZ) || [],
+      cadetActivities: parseCSV(payload?.data?.cadetActivities) || [],
+      training: parseCSV(payload?.data?.training) || [],
+      seniorAwards: parseCSV(payload?.data?.seniorAwards) || [],
+      oFlights: parseCSV(payload?.data?.oFlights) || [],
+      // ES Member Data
+      esMbrAchievements: parseCSV(payload?.data?.esMbrAchievements) || [],
+      esMbrTasks: parseCSV(payload?.data?.esMbrTasks) || [],
+      // VOLU Instructor Data
+      voluInstructors: parseCSV(payload?.data?.voluInstructors) || []
+    };
+    buildUnitChildren();
+    findLevelPathIds();
+    // Initialize ES service with config and data
+    _esService = createESDataService(_rawConfig, _rawData);
+    // Initialize ES Unit Analysis service
+    _esUnitAnalysisService = createESUnitAnalysisService(_rawConfig, _rawData, _esService);
+  };
+
+  const buildUnitName = (org) => {
+    if (!org) return "Unknown";
+    const r = org.Region || "";
+    const w = org.Wing || "";
+    const u = padUnit(org.Unit || "000");
+    return `${r}-${w}-${u}`;
+  };
+
+  const buildLevelsProgress = (member) => {
+    const { progress, currentLevel } = calculateLevelsProgress(member, _rawConfig, _rawData, _levelPathMap);
+    return { levelsProgress: progress, highestLevel: currentLevel };
+  };
+
+  const buildTracks = (member) => (_rawData.tracks || [])
+    .filter(t => t.CAPID === member.CAPID)
+    .map(t => ({ name: t.Track, level: t.TrackLevel, date: t.DateMod }));
+
+  const buildSeniorAwards = (member) => (_rawData.seniorAwards || [])
+    .filter(a => a.CAPID === member.CAPID && a.Completed && a.Completed !== '01/01/1900')
+    .map(a => ({
+      award: a.Award,
+      awardNo: a.AwardNo,
+      completed: a.Completed,
+      usrId: a.UsrID,
+      dateMod: a.DateMod
+    }));
+
+  const buildDuties = (member) => (_rawData.duty || [])
+    .filter(d => d.CAPID === member.CAPID)
+    .map(d => {
+      const org = (_rawData.organization || []).find(o => o.ORGID === d.ORGID);
+      const orgString = org ? `${org.Region}-${org.Wing}-${org.Unit}` : "Unknown";
+      return {
+        name: d.Duty,
+        isAsst: d.Asst === "1",
+        date: d.DateMod,
+        orgString,
+        displayName: `${d.Duty}${d.Asst === "1" ? " (A)" : ""}`
+      };
+    });
+
+  const applyDutyTrackWarnings = (duties, tracks) => {
+    const dutiesWithStatus = duties.map(duty => {
+      const cleanDuty = (duty.name || "").toUpperCase().trim();
+      const requiredTrack = DUTY_TO_TRACK_MAP[cleanDuty];
+      let hasTrack = true;
+      let warningMsg = "";
+      if (requiredTrack) {
+        const hasEnrolled = tracks.some(t => {
+          const trackName = (t.name || "").toUpperCase().trim();
+          return trackName.includes(requiredTrack) || requiredTrack.includes(trackName);
+        });
+        if (!hasEnrolled) { hasTrack = false; warningMsg = `Missing Track: ${requiredTrack}`; }
+      }
+      return { ...duty, hasTrack, warningMsg };
+    });
+
+    const tracksWithStatus = tracks.map(track => {
+      const isNone = track.level === "NONE";
+      let hasDuty = true;
+      let warningMsg = "";
+      if (isNone) {
+        const trackNameUpper = (track.name || "").toUpperCase().trim();
+        const relevantDutyExists = duties.some(d => {
+          const mappedTrack = DUTY_TO_TRACK_MAP[(d.name || "").toUpperCase().trim()];
+          return mappedTrack === trackNameUpper;
+        });
+        if (!relevantDutyExists) { hasDuty = false; warningMsg = "Enrolled (NONE) but no Duty Position assigned."; }
+      }
+      return { ...track, hasDuty, warningMsg };
+    });
+
+    return { dutiesWithStatus, tracksWithStatus };
+  };
+
+  const getProcessedMembers = (unitFilter, includeDescendants = false) => {
+    if (!_rawData.members || _rawData.members.length === 0) return [];
+    const validOrgIds = includeDescendants ? getDescendantOrgIds(unitFilter) : [unitFilter];
+    const validOrgSet = new Set(validOrgIds.map(id => String(id || "").trim()));
+    // Senior dashboard should only show senior members (including LIFE) with ACTIVE status
+    const membersInScope = _rawData.members.filter(m => {
+      const type = String(m.Type || m.TYPE || "").toUpperCase();
+      const isSenior = type === "SENIOR" || type === "LIFE";
+      const status = String(m.MbrStatus || "").toUpperCase();
+      const isActive = status === "ACTIVE";
+      return isSenior && isActive && validOrgSet.has(String(m.ORGID || "").trim());
+    });
+    return membersInScope.map(member => {
+      const org = (_rawData.organization || []).find(o => o.ORGID === member.ORGID);
+      const memberUnitName = buildUnitName(org);
+      const duties = buildDuties(member);
+      const tracks = buildTracks(member);
+      const { dutiesWithStatus, tracksWithStatus } = applyDutyTrackWarnings(duties, tracks);
+      const { levelsProgress, highestLevel } = buildLevelsProgress(member);
+      const level2Track = determineLevel2Track((_rawData.memberTasks || []).filter(mt => mt.CAPID === member.CAPID));
+      const seniorAwards = buildSeniorAwards(member);
+      const esQualifications = _esService.buildESQualifications(member, { forDashboard: true, forSenior: true });
+      const esQualificationsAll = _esService.buildESQualifications(member, { forDashboard: false, forSenior: true });
+      return {
+        ...member,
+        memberUnitName,
+        duties: dutiesWithStatus,
+        tracks: tracksWithStatus,
+        seniorAwards,
+        esQualifications,
+        esQualificationsAll,
+        levelsProgress,
+        level2Track,
+        currentLevel: highestLevel,
+        rankDate: member.RankDate
+      };
+    });
+  };
+
+  return {
+    initialize: parsePayload,
+    rawData: () => _rawData,
+    rawConfig: () => _rawConfig,
+    getProcessedMembers,
+    // ES Helper Methods
+    getESAchievementTasks: (achvID, capid) => _esService.getESAchievementTasks(achvID, capid),
+    buildESPrerequisiteTree: (achvID, ancestry) => _esService.buildESPrerequisiteTree(achvID, ancestry),
+    checkESQualificationEligibility: (achvID, member) => _esService.checkESQualificationEligibility(achvID, member),
+    getAllESAchievements: () => _esService.getAllESAchievements(),
+    // ES Unit Analysis Service
+    getESUnitAnalysisService: () => _esUnitAnalysisService
+  };
+}
+</script>

@@ -1,0 +1,436 @@
+<script type="text/babel">
+// Recursive prerequisite tree component
+// Displays the hierarchical structure of prerequisite qualifications
+const PrereqTreeView = ({ node, memberQuals, member, dataService, depth, showSelf = true }) => {
+  if (!node) return null;
+
+  // Check if prerequisite is completed
+  let hasPrereq = false;
+  let displayName = node.name;
+
+  // Special handling for Achievement 1 (Curry - ID '95') vs Level 1 (ID '96')
+  // Seniors need Level 1, Cadets need Achievement 1
+  const memberType = String(member?.Type || member?.TYPE || '').toUpperCase();
+  const isCadet = memberType === 'CADET';
+  const isSenior = !isCadet;
+
+  if (node.achvID === '95' || node.achvID === '96') {
+    // '95' = Achievement 1 (Curry) for cadets
+    // '96' = Level 1 for seniors
+
+    if (isSenior) {
+      // For senior members, check Level 1 completion and display "Level 1"
+      hasPrereq = member?.levelsProgress?.L1?.status === 'completed';
+      displayName = 'Level 1';
+    } else {
+      // For cadets, check Achievement 1 and display "Achievement 1 (Curry)"
+      if (dataService) {
+        const rawData = dataService.rawData();
+        hasPrereq = (rawData.esMbrAchievements || []).some(a =>
+          a.CAPID === member?.CAPID &&
+          a.AchvID === '95' &&
+          String(a.Status || '').toUpperCase() === 'ACTIVE'
+        );
+      } else {
+        hasPrereq = memberQuals?.some(q =>
+          q.achvID === '95' && q.status === 'Active'
+        );
+      }
+      displayName = 'Achievement 1 (Curry)';
+    }
+  } else {
+    // Regular ES qualification check - use raw data from dataService if available
+    // This ensures IS courses and other filtered achievements are still checked
+    if (dataService) {
+      const rawData = dataService.rawData();
+      hasPrereq = (rawData.esMbrAchievements || []).some(a =>
+        a.CAPID === member?.CAPID &&
+        a.AchvID === node.achvID &&
+        String(a.Status || '').toUpperCase() === 'ACTIVE'
+      );
+    } else {
+      // Fallback to filtered qualifications if no dataService
+      hasPrereq = memberQuals?.some(q =>
+        q.achvID === node.achvID && q.status === 'Active'
+      );
+    }
+  }
+
+  const indentClass = depth > 0 ? 'ml-4 pl-3 border-l-2 border-slate-200' : '';
+
+  // If showSelf is false, only render the prerequisites (skip the root node itself)
+  if (!showSelf && depth === 0) {
+    // Filter out duplicate Achievement 1/Level 1 entries (IDs '95' and '96' are equivalent)
+    let filteredPrereqs = node.prerequisites || [];
+    const hasAchv95 = filteredPrereqs.some(p => p.achvID === '95');
+    const hasAchv96 = filteredPrereqs.some(p => p.achvID === '96');
+
+    if (hasAchv95 && hasAchv96) {
+      // Remove '96' (Level 1) and keep '95' (Achievement 1) - the display logic will handle member type
+      filteredPrereqs = filteredPrereqs.filter(p => p.achvID !== '96');
+    }
+
+    return (
+      <div>
+        {filteredPrereqs.length > 0 ? (
+          filteredPrereqs.map((prereq, idx) => (
+            <PrereqTreeView
+              key={idx}
+              node={prereq}
+              memberQuals={memberQuals}
+              member={member}
+              dataService={dataService}
+              depth={0}
+              showSelf={true}
+            />
+          ))
+        ) : (
+          <div className="text-sm text-slate-500 italic">
+            No prerequisite qualifications required
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={indentClass}>
+      <div className={`flex items-start gap-2 py-1 ${depth > 0 ? 'text-xs' : 'text-sm'}`}>
+        <div className="mt-0.5">
+          {hasPrereq ? (
+            <Icon name="CheckCircle2" className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <Icon name="Circle" className="w-4 h-4 text-slate-300" />
+          )}
+        </div>
+        <span className={hasPrereq ? 'text-emerald-700 font-medium' : 'text-slate-600'}>
+          {displayName}
+        </span>
+      </div>
+
+      {node.prerequisites && node.prerequisites.length > 0 && (() => {
+        // Filter out duplicate Achievement 1/Level 1 entries (IDs '95' and '96' are equivalent)
+        let filteredPrereqs = node.prerequisites;
+        const hasAchv95 = filteredPrereqs.some(p => p.achvID === '95');
+        const hasAchv96 = filteredPrereqs.some(p => p.achvID === '96');
+
+        if (hasAchv95 && hasAchv96) {
+          // Remove '96' (Level 1) and keep '95' (Achievement 1) - the display logic will handle member type
+          filteredPrereqs = filteredPrereqs.filter(p => p.achvID !== '96');
+        }
+
+        return (
+          <div className="mt-1">
+            {filteredPrereqs.map((prereq, idx) => (
+              <PrereqTreeView
+                key={idx}
+                node={prereq}
+                memberQuals={memberQuals}
+                member={member}
+                dataService={dataService}
+                depth={depth + 1}
+                showSelf={true}
+              />
+            ))}
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
+// ES Qualification Detail Modal
+// Shows detailed information about a specific qualification including tasks grouped by step/phase
+const ESQualificationDetailModal = ({ isOpen, onClose, qualification, member, dataService }) => {
+  if (!isOpen || !qualification) return null;
+
+  const [tasksByStep, setTasksByStep] = React.useState([]);
+  const [eligibilityInfo, setEligibilityInfo] = React.useState(null);
+  const [prereqTree, setPrereqTree] = React.useState(null);
+
+  React.useEffect(() => {
+    if (qualification && member && dataService) {
+      const tasks = dataService.getESAchievementTasks(qualification.achvID, member.CAPID);
+      setTasksByStep(tasks);
+
+      // Get eligibility information including prerequisites
+      const eligibility = dataService.checkESQualificationEligibility(qualification.achvID, member);
+      setEligibilityInfo(eligibility);
+
+      // ALWAYS build the prerequisite tree directly, regardless of eligibility
+      // This ensures we show the full tree even when special prerequisites (age, tasks) are not met
+      const tree = dataService.buildESPrerequisiteTree(qualification.achvID);
+      setPrereqTree(tree);
+    }
+  }, [qualification, member]);
+
+  // Calculate completion stats
+  const totalTasks = tasksByStep.reduce((sum, step) => sum + step.tasks.length, 0);
+  const completedTasks = tasksByStep.reduce((sum, step) =>
+    sum + step.tasks.filter(t => t.completed).length, 0);
+  const completionPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Status color
+  const statusColors = {
+    'Active': 'text-emerald-700 bg-emerald-50 border border-emerald-200',
+    'Training': 'text-amber-700 bg-amber-50 border border-amber-200',
+    'Expired': 'text-rose-700 bg-rose-50 border border-rose-200',
+    'Not Approved': 'text-slate-700 bg-slate-50 border border-slate-200'
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={qualification.name} maxWidthClass="max-w-4xl">
+      {/* Header Info */}
+      <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Status</div>
+            <div className={`text-sm font-semibold px-3 py-1 rounded inline-block ${statusColors[qualification.status]}`}>
+              {qualification.status}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Completed</div>
+            <div className="text-sm text-slate-800">
+              {qualification.completed && qualification.completed !== '01/01/1900'
+                ? qualification.completed
+                : 'N/A'}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Expiration</div>
+            <div className="text-sm text-slate-800">
+              {qualification.expiration && qualification.expiration !== '01/01/1900'
+                ? qualification.expiration
+                : 'None'}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-bold text-slate-500 uppercase mb-1">Completion</div>
+            <div className="text-sm font-semibold text-slate-800">
+              {completedTasks} / {totalTasks} ({completionPercent}%)
+            </div>
+          </div>
+        </div>
+
+        {qualification.isSkillsEvaluator && (
+          <div className="mt-3 pt-3 border-t border-slate-200">
+            <div className="flex items-center gap-2 text-amber-700">
+              <Icon name="Star" className="w-4 h-4 fill-current" />
+              <span className="text-sm font-semibold">Skills Evaluator Qualified</span>
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Held for 1+ year with active SET achievement
+              {qualification.achvID === '217' && (
+                <span className="block mt-1 text-blue-700 font-medium">
+                  + Communications staff position required for ICUT
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Age Requirement (if applicable) */}
+      {(() => {
+        const requiredAge = ES_AGE_REQUIREMENTS[qualification.achvID];
+        if (!requiredAge) return null;
+
+        const memberAge = member?.DOB ? Math.floor((new Date() - new Date(member.DOB)) / (1000 * 60 * 60 * 24 * 365.25)) : null;
+        const meetsAge = memberAge !== null && memberAge >= requiredAge;
+
+        return (
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Age Requirement</h3>
+            <div className={`border rounded-lg p-4 ${meetsAge ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-center gap-2">
+                {meetsAge ? (
+                  <Icon name="CheckCircle2" className="w-5 h-5 text-emerald-600" />
+                ) : (
+                  <Icon name="AlertCircle" className="w-5 h-5 text-amber-600" />
+                )}
+                <div>
+                  <div className={`text-sm font-semibold ${meetsAge ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    Minimum Age: {requiredAge} years
+                  </div>
+                  {memberAge !== null && (
+                    <div className="text-xs text-slate-600 mt-1">
+                      {meetsAge
+                        ? `Member meets requirement (${memberAge} years old)`
+                        : `Member does not meet requirement (${memberAge} years old)`
+                      }
+                    </div>
+                  )}
+                  {memberAge === null && (
+                    <div className="text-xs text-slate-600 mt-1">
+                      Date of birth required for verification
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Prerequisites Section - ALWAYS SHOW if there are ANY prerequisites */}
+      {(() => {
+        // Check if there are achievement prerequisites
+        const hasAchievementPrereqs = prereqTree?.prerequisites?.length > 0;
+
+        // Check if there are special prerequisites (tasks, age, etc.)
+        const hasSpecialPrereqs = eligibilityInfo?.reasons && eligibilityInfo.reasons.length > 0;
+
+        // Only show section if there are either achievement or special prerequisites
+        if (!hasAchievementPrereqs && !hasSpecialPrereqs) return null;
+
+        return (
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Prerequisites</h3>
+            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+
+              {/* Achievement Prerequisites Tree */}
+              {hasAchievementPrereqs && (
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Prerequisite Qualifications</div>
+                  <PrereqTreeView
+                    node={prereqTree}
+                    memberQuals={member.esQualificationsAll || member.esQualifications}
+                    member={member}
+                    dataService={dataService}
+                    depth={0}
+                    showSelf={false}
+                  />
+                </div>
+              )}
+
+              {/* Special Prerequisites (Tasks, etc.) from eligibility check */}
+              {hasSpecialPrereqs && (
+                <div className={hasAchievementPrereqs ? "mt-3 pt-3 border-t border-slate-300" : ""}>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Additional Requirements</div>
+                  <div className="space-y-2">
+                    {eligibilityInfo.reasons.map((reason, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-sm">
+                        <Icon name="AlertCircle" className="w-4 h-4 text-rose-600 mt-0.5 flex-shrink-0" />
+                        <span className="text-rose-700">{reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All prerequisites met message */}
+              {eligibilityInfo?.eligible && (hasAchievementPrereqs || hasSpecialPrereqs) && (
+                <div className="mt-3 pt-3 border-t border-slate-300">
+                  <div className="flex items-center gap-2 text-emerald-700">
+                    <Icon name="CheckCircle2" className="w-5 h-5" />
+                    <span className="text-sm font-semibold">All prerequisites are met</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Tasks by Step/Phase */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-slate-800 mb-3">
+          {tasksByStep.length === 0 ? 'Requirements' : 'Task Requirements by Category'}
+        </h3>
+
+        {tasksByStep.length === 0 && (
+          <div className="text-sm text-slate-500 italic text-center py-8 border border-slate-200 rounded-lg bg-slate-50">
+            <p>No specific tasks are required for this qualification.</p>
+            <p className="mt-2 text-xs">Check the prerequisite qualifications above to see what must be completed first.</p>
+          </div>
+        )}
+
+        {tasksByStep.map((step, idx) => {
+          const stepCompleted = step.tasks.filter(t => t.completed).length;
+          const stepTotal = step.tasks.length;
+          const stepPercent = Math.round((stepCompleted / stepTotal) * 100);
+
+          return (
+            <div key={idx} className="border border-slate-200 rounded-lg overflow-hidden">
+              {/* Step Header */}
+              <div className="bg-slate-100 px-4 py-2 border-b border-slate-200">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-semibold text-slate-800">{step.stepName}</h4>
+                  <span className="text-xs text-slate-600">
+                    {stepCompleted} / {stepTotal} tasks ({stepPercent}%)
+                  </span>
+                </div>
+              </div>
+
+              {/* Tasks */}
+              <div className="divide-y divide-slate-100">
+                {step.tasks.map((task, taskIdx) => (
+                  <div
+                    key={taskIdx}
+                    className={`px-4 py-3 flex items-start gap-3 ${
+                      task.completed ? 'bg-emerald-50/50' : 'bg-white'
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <div className="mt-0.5">
+                      {task.completed ? (
+                        <CheckCircleFilled />
+                      ) : (
+                        <CircleEmpty />
+                      )}
+                    </div>
+
+                    {/* Task Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-slate-800">
+                        {task.taskName}
+                      </div>
+                      {task.functionalArea && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {ES_FUNCTIONAL_AREAS[task.functionalArea] || task.functionalArea}
+                        </div>
+                      )}
+                      {task.completed && (
+                        <div className="text-xs text-emerald-700 mt-1 flex items-center gap-2">
+                          <span>Completed: {task.completedDate}</span>
+                          {task.expiration && task.expiration !== '01/01/1900' && (
+                            <span className="text-amber-600">
+                              Expires: {task.expiration}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Metadata Footer */}
+      {(qualification.originallyAccomplished || qualification.source) && (
+        <div className="mt-6 pt-4 border-t border-slate-200 text-xs text-slate-500">
+          <div className="grid grid-cols-2 gap-2">
+            {qualification.originallyAccomplished && (
+              <div>
+                <span className="font-semibold">Originally Accomplished:</span> {qualification.originallyAccomplished}
+              </div>
+            )}
+            {qualification.source && (
+              <div>
+                <span className="font-semibold">Source:</span> {qualification.source}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+};
+</script>

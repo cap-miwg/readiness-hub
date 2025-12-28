@@ -1,0 +1,112 @@
+<script type="text/babel">
+// Drill Down Position Modal
+// Shows all members holding a specific duty position across all sub-units
+const DrillDownPositionModal = ({
+  isOpen,
+  onClose,
+  position,
+  // Helper functions
+  getDescendantOrgIds,
+  buildMemberProfileData,
+  // Data
+  unitFilter,
+  dataFiles,
+  processedData,
+  // State setters
+  setSelectedMemberProfile,
+  setDrillDownPosition
+}) => {
+  if (!isOpen || !position) return null;
+
+  const validOrgIds = getDescendantOrgIds(unitFilter);
+  const allDuties = dataFiles.duty.filter(d => validOrgIds.includes(d.ORGID));
+  const allCadetDuties = dataFiles.cadetDuty ? dataFiles.cadetDuty.filter(d => validOrgIds.includes(d.ORGID)) : [];
+
+  // Find all members with this duty position across all descendant units
+  const positionTitle = position.title.toUpperCase();
+  const isCadet = position.type === 'cadet';
+  const dataSource = isCadet ? allCadetDuties : allDuties;
+
+  const holdersWithUnits = dataSource
+    .filter(d => d.Duty.toUpperCase().includes(positionTitle) || positionTitle.includes(d.Duty.toUpperCase()))
+    .map(d => {
+      const member = dataFiles.members.find(m => m.CAPID === d.CAPID);
+      if (!member) return null;
+      const org = dataFiles.organization.find(o => o.ORGID === d.ORGID);
+      const orgString = org ? `${org.Region}-${org.Wing}-${org.Unit} ${org.Name}` : "Unknown Unit";
+      return {
+        ...member,
+        dutyDate: d.DateMod,
+        isAsst: d.Asst === "1",
+        orgString,
+        orgId: d.ORGID
+      };
+    })
+    .filter(Boolean);
+
+  // Group by unit
+  const byUnit = {};
+  holdersWithUnits.forEach(h => {
+    if (!byUnit[h.orgString]) byUnit[h.orgString] = [];
+    byUnit[h.orgString].push(h);
+  });
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`${position.title} - All Sub-Units`}>
+      <div className="space-y-4">
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <p className="text-sm text-blue-900">
+            <strong>Showing all members holding "{position.title}" across {Object.keys(byUnit).length} unit(s)</strong>
+          </p>
+          <p className="text-xs text-blue-700 mt-1">Total: {holdersWithUnits.length} member(s)</p>
+        </div>
+
+        {Object.keys(byUnit).length === 0 ? (
+          <div className="text-center py-8 text-slate-400">
+            <Icon name="Users" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+            <p className="font-medium">No members found in this position across subordinate units</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {Object.entries(byUnit).sort((a, b) => a[0].localeCompare(b[0])).map(([unit, members]) => (
+              <div key={unit} className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="bg-slate-100 px-4 py-2 font-bold text-sm text-slate-800 border-b border-slate-200">
+                  {unit}
+                </div>
+                <div className="p-3 space-y-2">
+                  {members.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 bg-white border border-slate-100 rounded hover:bg-blue-50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        const foundMember = processedData.find(pm => pm.CAPID === m.CAPID);
+                        const fallbackMember = buildMemberProfileData(dataFiles.members.find(mem => mem.CAPID === m.CAPID));
+                        const finalMember = foundMember || fallbackMember;
+                        if (finalMember) {
+                          setSelectedMemberProfile(finalMember);
+                          setDrillDownPosition(null);
+                        }
+                      }}
+                    >
+                      <div>
+                        <div className="font-medium text-sm text-slate-800">
+                          {m.Rank} {m.NameLast}, {m.NameFirst}
+                          {m.isAsst && <span className="text-xs text-amber-600 ml-2">(Assistant)</span>}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          CAPID: {m.CAPID} - Assigned: {m.dutyDate}
+                        </div>
+                      </div>
+                      <Icon name="ChevronRight" className="w-4 h-4 text-slate-400" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
+</script>

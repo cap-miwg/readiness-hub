@@ -1,0 +1,2133 @@
+<script type="text/babel">
+/**
+ * UnitOverviewSection - Redesigned Unit Overview Dashboard
+ *
+ * Features:
+ * - Accordion-style expandable sections
+ * - Key data visible in collapsed state
+ * - Deep dive modals for detailed insights
+ * - Modular architecture for future sections
+ */
+const { useRef: useRefLocal } = React;
+
+/**
+ * HelpTooltip - Shows help information on hover
+ * Used to explain metrics and provide actionable advice
+ */
+const HelpTooltip = ({ title, children, position = 'top' }) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  const positionClasses = {
+    top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
+    bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
+    left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+    right: 'left-full top-1/2 -translate-y-1/2 ml-2'
+  };
+
+  return (
+    <span
+      className="relative inline-flex items-center cursor-help"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      <Icon name="HelpCircle" className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+      {isVisible && (
+        <div className={`absolute z-50 ${positionClasses[position]} w-64 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-lg`}>
+          {title && <div className="font-bold mb-1">{title}</div>}
+          <div>{children}</div>
+        </div>
+      )}
+    </span>
+  );
+};
+
+/**
+ * MetricWithHelp - Displays a metric value with hover help text
+ */
+const MetricWithHelp = ({ label, value, subValue, explanation, color = 'blue', trend, trendDirection }) => {
+  const colorStyles = {
+    blue: 'bg-blue-50 border-blue-100',
+    green: 'bg-emerald-50 border-emerald-100',
+    amber: 'bg-amber-50 border-amber-100',
+    red: 'bg-rose-50 border-rose-100',
+    slate: 'bg-slate-50 border-slate-100'
+  };
+
+  const trendColors = {
+    up: 'text-emerald-600',
+    down: 'text-rose-600',
+    stable: 'text-slate-500'
+  };
+
+  return (
+    <div className={`px-3 py-2.5 rounded-lg border ${colorStyles[color] || colorStyles.blue} relative group`}>
+      <div className="flex items-center justify-between gap-1">
+        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wide">{label}</div>
+        {explanation && (
+          <HelpTooltip title={explanation.label} position="top">
+            <p className="mb-1">{explanation.shortDesc}</p>
+            <p className="text-slate-300">{explanation.howToImprove}</p>
+            {explanation.goodValue && (
+              <p className="mt-1 text-emerald-300">Target: {explanation.goodValue}</p>
+            )}
+          </HelpTooltip>
+        )}
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-xl font-bold text-slate-800">{value}</span>
+        {trend && (
+          <span className={`text-xs font-medium ${trendColors[trendDirection] || trendColors.stable}`}>
+            {trendDirection === 'up' && '+'}
+            {trend}
+          </span>
+        )}
+      </div>
+      {subValue && <div className="text-xs text-slate-500">{subValue}</div>}
+    </div>
+  );
+};
+
+/**
+ * UnitComparisonTable - Shows recruiting/retention metrics for all subordinate units
+ * Used in Mode C (Command + Sub-Units view)
+ */
+const UnitComparisonTable = ({ unitMetrics, getUnitName, onUnitClick, sortConfig, onSort }) => {
+  const getSustainabilityColor = (rating) => {
+    switch (rating) {
+      case 'excellent': return 'text-emerald-700 bg-emerald-100';
+      case 'good': return 'text-blue-700 bg-blue-100';
+      case 'fair': return 'text-amber-700 bg-amber-100';
+      case 'needs-attention': return 'text-rose-700 bg-rose-100';
+      default: return 'text-slate-500 bg-slate-100';
+    }
+  };
+
+  const getGrowthIcon = (status) => {
+    switch (status) {
+      case 'growing': return { icon: 'TrendingUp', color: 'text-emerald-600' };
+      case 'declining': return { icon: 'TrendingDown', color: 'text-rose-600' };
+      default: return { icon: 'Minus', color: 'text-slate-400' };
+    }
+  };
+
+  // Sortable column header
+  const SortableHeader = ({ field, label, className = '' }) => (
+    <th
+      className={`px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wide cursor-pointer hover:bg-slate-100 transition-colors ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {sortConfig.field === field && (
+          <Icon
+            name={sortConfig.direction === 'asc' ? 'ChevronUp' : 'ChevronDown'}
+            className="w-3 h-3"
+          />
+        )}
+      </div>
+    </th>
+  );
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <SortableHeader field="name" label="Unit" className="min-w-[180px]" />
+              <SortableHeader field="currentTotal" label="Members" />
+              <SortableHeader field="sustainabilityScore" label="Score" />
+              <SortableHeader field="retentionRate" label="Retention" />
+              <SortableHeader field="recruitingRate" label="Recruiting" />
+              <SortableHeader field="netChange" label="Growth" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {unitMetrics.map((unit, idx) => {
+              const growth = getGrowthIcon(unit.growthStatus);
+              const unitName = getUnitName(unit.orgId);
+              return (
+                <tr
+                  key={unit.orgId}
+                  className={`hover:bg-slate-50 cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-25'}`}
+                  onClick={() => onUnitClick(unit.orgId)}
+                >
+                  <td className="px-3 py-2.5">
+                    <div className="font-medium text-slate-800 text-sm">{unitName}</div>
+                    <div className="text-xs text-slate-500">
+                      {unit.memberBreakdown && `${unit.memberBreakdown.senior} Sr / ${unit.memberBreakdown.cadet} Cdt`}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-sm font-semibold text-slate-800">
+                    {unit.currentTotal}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold ${getSustainabilityColor(unit.sustainabilityRating)}`}>
+                      {unit.sustainabilityScore ?? '--'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-sm">
+                    {unit.retentionRate !== null ? (
+                      <span className={unit.retentionRate >= 80 ? 'text-emerald-600' : unit.retentionRate >= 60 ? 'text-amber-600' : 'text-rose-600'}>
+                        {unit.retentionRate}%
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">--</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-sm text-slate-700">
+                    {unit.recruitingRate !== null ? `${unit.recruitingRate}/mo` : '--'}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <Icon name={growth.icon} className={`w-4 h-4 ${growth.color}`} />
+                      <span className={`text-sm font-medium ${growth.color}`}>
+                        {unit.netChange !== null ? (unit.netChange > 0 ? '+' : '') + unit.netChange : '--'}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * HQStaffInsights - Recruiting & Retention section for command HQ units
+ * Shows staff-focused metrics: tenure, experience, turnover, upcoming expirations
+ */
+const HQStaffInsights = ({
+  unitType,
+  staffMembers,
+  isExpanded,
+  onToggle,
+  onDeepDive,
+  getHQLabel
+}) => {
+  const [timeRange, setTimeRange] = useState(12);
+
+  // Calculate staff metrics
+  const staffMetrics = useMemo(() => {
+    if (!staffMembers || staffMembers.length === 0) {
+      return null;
+    }
+
+    const today = new Date();
+    const parseDateSafe = (dateStr) => {
+      if (!dateStr) return null;
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    // Calculate tenure (time at CAP) for each staff member
+    const staffWithTenure = staffMembers.map(m => {
+      const joinDate = parseDateSafe(m.Joined);
+      let tenureYears = null;
+      if (joinDate && joinDate < today) {
+        tenureYears = Math.round((today - joinDate) / (1000 * 60 * 60 * 24 * 365.25) * 10) / 10;
+      }
+      return { ...m, tenureYears, joinDate };
+    }).filter(m => m.tenureYears !== null);
+
+    // Average tenure
+    const avgTenure = staffWithTenure.length > 0
+      ? Math.round(staffWithTenure.reduce((sum, m) => sum + m.tenureYears, 0) / staffWithTenure.length * 10) / 10
+      : null;
+
+    // Tenure distribution
+    const tenureDistribution = {
+      under2: staffWithTenure.filter(m => m.tenureYears < 2).length,
+      twoToFive: staffWithTenure.filter(m => m.tenureYears >= 2 && m.tenureYears < 5).length,
+      fiveToTen: staffWithTenure.filter(m => m.tenureYears >= 5 && m.tenureYears < 10).length,
+      tenPlus: staffWithTenure.filter(m => m.tenureYears >= 10).length
+    };
+
+    // Experience level (based on tenure)
+    const experienceScore = avgTenure !== null
+      ? (avgTenure >= 10 ? 100 : avgTenure >= 5 ? 80 : avgTenure >= 3 ? 60 : avgTenure >= 1 ? 40 : 20)
+      : null;
+
+    const experienceRating = experienceScore >= 80 ? 'excellent' :
+                             experienceScore >= 60 ? 'good' :
+                             experienceScore >= 40 ? 'fair' : 'developing';
+
+    // Members expiring soon (within 90 days)
+    const membersExpiringSoon = staffMembers.filter(m => {
+      if (!m.Expiration || m.Expiration === '12/31/9998' || m.Expiration === '12/31/9999') return false;
+      const expDate = parseDateSafe(m.Expiration);
+      if (!expDate) return false;
+      const daysUntil = Math.floor((expDate - today) / (1000 * 60 * 60 * 24));
+      return daysUntil >= 0 && daysUntil <= 90;
+    }).map(m => {
+      const expDate = parseDateSafe(m.Expiration);
+      const daysUntil = Math.floor((expDate - today) / (1000 * 60 * 60 * 24));
+      return {
+        ...m,
+        daysUntil,
+        urgency: daysUntil <= 30 ? 'critical' : daysUntil <= 60 ? 'warning' : 'notice'
+      };
+    }).sort((a, b) => a.daysUntil - b.daysUntil);
+
+    // New staff (joined within selected time range)
+    const timeRangeDate = new Date();
+    timeRangeDate.setMonth(timeRangeDate.getMonth() - timeRange);
+    const newStaff = staffWithTenure.filter(m => m.joinDate && m.joinDate >= timeRangeDate);
+
+    // Rank distribution for experience indicator
+    const rankDistribution = {};
+    staffMembers.forEach(m => {
+      const rank = m.Rank || 'Unknown';
+      rankDistribution[rank] = (rankDistribution[rank] || 0) + 1;
+    });
+
+    // Count field-grade officers (Lt Col+) and senior NCOs (CMSgt, SMSgt)
+    const fieldGradeCount = staffMembers.filter(m => {
+      const rank = (m.Rank || '').toUpperCase();
+      return rank.includes('COL') || rank.includes('GEN') || rank.includes('BRIG');
+    }).length;
+
+    const seniorNCOCount = staffMembers.filter(m => {
+      const rank = (m.Rank || '').toUpperCase();
+      return rank.includes('CMSGT') || rank.includes('SMSGT') || rank.includes('CHIEF');
+    }).length;
+
+    // Staff stability score (composite)
+    const stabilityComponents = {
+      tenure: experienceScore || 50,
+      retention: membersExpiringSoon.length === 0 ? 100 :
+                 membersExpiringSoon.length <= 2 ? 80 :
+                 membersExpiringSoon.length <= 4 ? 60 : 40,
+      depth: staffMembers.length >= 10 ? 100 :
+             staffMembers.length >= 5 ? 80 :
+             staffMembers.length >= 3 ? 60 : 40
+    };
+
+    const stabilityScore = Math.round(
+      stabilityComponents.tenure * 0.4 +
+      stabilityComponents.retention * 0.35 +
+      stabilityComponents.depth * 0.25
+    );
+
+    const stabilityRating = stabilityScore >= 80 ? 'excellent' :
+                            stabilityScore >= 65 ? 'good' :
+                            stabilityScore >= 50 ? 'fair' : 'needs-attention';
+
+    return {
+      totalStaff: staffMembers.length,
+      avgTenure,
+      tenureDistribution,
+      experienceScore,
+      experienceRating,
+      membersExpiringSoon,
+      newStaff,
+      fieldGradeCount,
+      seniorNCOCount,
+      stabilityScore,
+      stabilityRating,
+      stabilityComponents
+    };
+  }, [staffMembers, timeRange]);
+
+  // Time range options
+  const timeRangeOptions = [
+    { value: 6, label: '6 mo' },
+    { value: 12, label: '12 mo' },
+    { value: 24, label: '2 yr' }
+  ];
+
+  if (!staffMetrics) {
+    return (
+      <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 text-center">
+        <Icon name="Users" className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+        <p className="text-sm text-slate-500">No staff data available for analysis.</p>
+      </div>
+    );
+  }
+
+  const keyData = (
+    <div className="flex items-center gap-4 flex-wrap">
+      <span className="font-semibold">{staffMetrics.totalStaff} staff assigned</span>
+      {staffMetrics.avgTenure !== null && (
+        <>
+          <span className="text-slate-400">|</span>
+          <span>{staffMetrics.avgTenure} yr avg tenure</span>
+        </>
+      )}
+      {staffMetrics.membersExpiringSoon.length > 0 && (
+        <>
+          <span className="text-slate-400">|</span>
+          <span className="text-amber-600">{staffMetrics.membersExpiringSoon.length} expiring soon</span>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <DashboardSection
+      id="hq-staff"
+      title={`${getHQLabel()} Staff Insights`}
+      icon="Building2"
+      isExpanded={isExpanded}
+      onToggle={() => onToggle('hq-staff')}
+      onDeepDive={onDeepDive}
+      accentColor={staffMetrics.stabilityRating === 'excellent' ? 'green' :
+                   staffMetrics.stabilityRating === 'good' ? 'blue' :
+                   staffMetrics.stabilityRating === 'fair' ? 'amber' : 'rose'}
+      keyData={keyData}
+    >
+      <div className="space-y-4 pt-4">
+        {/* Time Range Selector */}
+        <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-600">Analysis Period:</span>
+            <HelpTooltip position="bottom">
+              <p>Select time period to analyze staff changes and new assignments.</p>
+            </HelpTooltip>
+          </div>
+          <div className="flex gap-1">
+            {timeRangeOptions.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setTimeRange(opt.value)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  timeRange === opt.value
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Staff Stability Score */}
+        <div className="bg-slate-50 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold text-slate-800">Staff Stability Score</h4>
+              <HelpTooltip title="What is this?" position="right">
+                <p className="mb-2">A composite score (0-100) measuring your HQ's staff continuity and experience.</p>
+                <p className="text-slate-300 mb-1">Components:</p>
+                <ul className="text-slate-300 text-[10px] space-y-0.5">
+                  <li>• 40% Staff Experience (tenure)</li>
+                  <li>• 35% Retention Risk (expirations)</li>
+                  <li>• 25% Staff Depth (headcount)</li>
+                </ul>
+                <p className="mt-2 text-emerald-300">80+ Excellent | 65+ Good | 50+ Fair</p>
+              </HelpTooltip>
+            </div>
+            <span className="text-2xl font-bold text-slate-900">
+              {staffMetrics.stabilityScore}
+            </span>
+          </div>
+          <SustainabilityGauge
+            score={staffMetrics.stabilityScore}
+            rating={staffMetrics.stabilityRating}
+          />
+          <p className="text-sm text-slate-600 mt-2">
+            {staffMetrics.stabilityRating === 'excellent' ? 'HQ staff is highly experienced and stable.' :
+             staffMetrics.stabilityRating === 'good' ? 'HQ staff has solid experience with good continuity.' :
+             staffMetrics.stabilityRating === 'fair' ? 'Consider focusing on staff retention and development.' :
+             'HQ may benefit from additional experienced staff or improved retention.'}
+          </p>
+        </div>
+
+        {/* Key Metrics Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MetricWithHelp
+            label="Staff Assigned"
+            value={staffMetrics.totalStaff}
+            subValue="HQ personnel"
+            color="blue"
+            explanation={{
+              label: 'HQ Staff Count',
+              shortDesc: 'Total personnel assigned to headquarters',
+              howToImprove: 'Request additional staff through proper channels as mission requirements grow.',
+              goodValue: 'Varies by HQ level and mission'
+            }}
+          />
+          <MetricWithHelp
+            label="Avg Tenure"
+            value={staffMetrics.avgTenure !== null ? `${staffMetrics.avgTenure} yr` : '--'}
+            subValue={staffMetrics.experienceRating ? staffMetrics.experienceRating.charAt(0).toUpperCase() + staffMetrics.experienceRating.slice(1) : ''}
+            color={staffMetrics.experienceRating === 'excellent' ? 'green' :
+                   staffMetrics.experienceRating === 'good' ? 'blue' :
+                   staffMetrics.experienceRating === 'fair' ? 'amber' : 'slate'}
+            explanation={{
+              label: 'Average Tenure',
+              shortDesc: 'Mean years of CAP service across HQ staff',
+              howToImprove: 'Balance recruiting new talent with retaining experienced members.',
+              goodValue: '5+ years indicates deep institutional knowledge'
+            }}
+          />
+          <MetricWithHelp
+            label="New Staff"
+            value={staffMetrics.newStaff.length}
+            subValue={`joined in ${timeRange} mo`}
+            color="indigo"
+            explanation={{
+              label: 'New Staff Members',
+              shortDesc: `Staff who joined within the selected ${timeRange}-month period`,
+              howToImprove: 'Ensure proper onboarding and mentorship for new HQ staff.',
+              goodValue: 'Some turnover is healthy; too much can affect continuity'
+            }}
+          />
+          <MetricWithHelp
+            label="Expiring Soon"
+            value={staffMetrics.membersExpiringSoon.length}
+            subValue="within 90 days"
+            color={staffMetrics.membersExpiringSoon.length === 0 ? 'green' :
+                   staffMetrics.membersExpiringSoon.length <= 2 ? 'amber' : 'red'}
+            explanation={{
+              label: 'Memberships Expiring',
+              shortDesc: 'Staff with memberships expiring within 90 days',
+              howToImprove: 'Proactively reach out to staff approaching expiration to encourage renewal.',
+              goodValue: '0 - all staff actively renewed'
+            }}
+          />
+        </div>
+
+        {/* Tenure Distribution */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Staff Experience Distribution</h4>
+            <HelpTooltip position="right">
+              <p>Shows how staff tenure is distributed across experience levels.</p>
+              <p className="mt-1 text-slate-300">A healthy mix includes both experienced mentors and developing leaders.</p>
+            </HelpTooltip>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <div className="text-center p-2 bg-rose-50 rounded-lg">
+              <div className="text-lg font-bold text-rose-700">{staffMetrics.tenureDistribution.under2}</div>
+              <div className="text-xs text-slate-600">&lt; 2 years</div>
+              <div className="text-[10px] text-slate-400">Developing</div>
+            </div>
+            <div className="text-center p-2 bg-amber-50 rounded-lg">
+              <div className="text-lg font-bold text-amber-700">{staffMetrics.tenureDistribution.twoToFive}</div>
+              <div className="text-xs text-slate-600">2-5 years</div>
+              <div className="text-[10px] text-slate-400">Established</div>
+            </div>
+            <div className="text-center p-2 bg-blue-50 rounded-lg">
+              <div className="text-lg font-bold text-blue-700">{staffMetrics.tenureDistribution.fiveToTen}</div>
+              <div className="text-xs text-slate-600">5-10 years</div>
+              <div className="text-[10px] text-slate-400">Experienced</div>
+            </div>
+            <div className="text-center p-2 bg-emerald-50 rounded-lg">
+              <div className="text-lg font-bold text-emerald-700">{staffMetrics.tenureDistribution.tenPlus}</div>
+              <div className="text-xs text-slate-600">10+ years</div>
+              <div className="text-[10px] text-slate-400">Veteran</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Leadership Depth */}
+        {(staffMetrics.fieldGradeCount > 0 || staffMetrics.seniorNCOCount > 0) && (
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <h4 className="text-sm font-semibold text-slate-700">Leadership Depth</h4>
+              <HelpTooltip position="right">
+                <p>Senior leaders (field-grade officers and senior NCOs) provide mentorship and strategic guidance.</p>
+              </HelpTooltip>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 rounded-lg">
+                <span className="text-sm text-slate-600">Field Grade Officers</span>
+                <span className="font-bold text-indigo-700">{staffMetrics.fieldGradeCount}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 bg-slate-100 rounded-lg">
+                <span className="text-sm text-slate-600">Senior NCOs</span>
+                <span className="font-bold text-slate-700">{staffMetrics.seniorNCOCount}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Expiring Memberships Alert */}
+        {staffMetrics.membersExpiringSoon.length > 0 && (
+          <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Icon name="AlertTriangle" className="w-5 h-5 text-amber-600" />
+              <h4 className="text-sm font-semibold text-amber-800">Staff Memberships Expiring Soon</h4>
+            </div>
+            <div className="space-y-2">
+              {staffMetrics.membersExpiringSoon.slice(0, 5).map((m, idx) => (
+                <div
+                  key={m.CAPID || idx}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg ${
+                    m.urgency === 'critical' ? 'bg-rose-100 border border-rose-200' :
+                    m.urgency === 'warning' ? 'bg-amber-100 border border-amber-200' :
+                    'bg-yellow-50 border border-yellow-200'
+                  }`}
+                >
+                  <div>
+                    <span className="font-medium text-slate-800">
+                      {m.Rank} {m.NameFirst} {m.NameLast}
+                    </span>
+                    <span className="text-xs text-slate-500 ml-2">({m.CAPID})</span>
+                  </div>
+                  <div className={`text-sm font-semibold ${
+                    m.urgency === 'critical' ? 'text-rose-700' :
+                    m.urgency === 'warning' ? 'text-amber-700' : 'text-yellow-700'
+                  }`}>
+                    {m.daysUntil} days
+                  </div>
+                </div>
+              ))}
+              {staffMetrics.membersExpiringSoon.length > 5 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  + {staffMetrics.membersExpiringSoon.length - 5} more expiring within 90 days
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </DashboardSection>
+  );
+};
+
+/**
+ * ESTeamStatusIcon - Mini status icon for a team type
+ */
+const ESTeamStatusIcon = ({ shortName, color, tooltip }) => {
+  const colorStyles = {
+    green: 'bg-emerald-500',
+    blue: 'bg-blue-500',
+    amber: 'bg-amber-500',
+    red: 'bg-rose-400'
+  };
+
+  return (
+    <div className="flex items-center gap-1 group relative">
+      <span className="text-xs font-medium text-slate-600">{shortName}</span>
+      <span className={`w-2.5 h-2.5 rounded-full ${colorStyles[color] || 'bg-slate-300'}`} />
+      {tooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50">
+          <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+            {tooltip}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * ESTeamCapabilityCard - Card showing capability for a specific team type
+ * Handles both team-based (fieldOps, aircrew, suas) and staffing-based (missionBase, command)
+ */
+const ESTeamCapabilityCard = ({ team }) => {
+  const colorStyles = {
+    green: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', icon: 'text-emerald-600' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', icon: 'text-blue-600' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', icon: 'text-amber-600' },
+    red: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', icon: 'text-rose-600' }
+  };
+
+  const style = colorStyles[team.color] || colorStyles.red;
+
+  // Staffing-based display (Mission Base, Command)
+  if (team.isStaffing) {
+    return (
+      <div className={`${style.bg} ${style.border} border rounded-lg p-3 transition-all hover:shadow-md`}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Icon name={team.icon || 'Users'} className={`w-4 h-4 ${style.icon}`} />
+            <h5 className={`font-semibold text-sm ${style.text}`}>{team.name}</h5>
+          </div>
+          {team.hasIC || team.positionsCovered >= 4 ? (
+            <Icon name="CheckCircle" className={`w-5 h-5 ${style.icon}`} />
+          ) : (
+            <Icon name="AlertCircle" className="w-5 h-5 text-slate-400" />
+          )}
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-2xl font-bold text-slate-800">{team.qualifiedCount || 0}</span>
+          <span className="text-xs text-slate-500">qualified</span>
+        </div>
+        <div className="text-xs text-slate-500 mt-1">
+          {team.positionsCovered}/{team.totalPositionTypes} position types
+        </div>
+        {team.gaps && team.gaps.length > 0 && (
+          <div className="mt-2 text-xs text-slate-600">
+            {team.gaps.slice(0, 2).map((gap, i) => (
+              <div key={i} className="flex items-center gap-1">
+                <Icon name="AlertTriangle" className="w-3 h-3 text-amber-500" />
+                <span>{gap}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Team-based display (standard)
+  return (
+    <div className={`${style.bg} ${style.border} border rounded-lg p-3 transition-all hover:shadow-md`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon name={team.icon || 'Users'} className={`w-4 h-4 ${style.icon}`} />
+          <h5 className={`font-semibold text-sm ${style.text}`}>{team.name}</h5>
+        </div>
+        {team.canField ? (
+          <Icon name="CheckCircle" className={`w-5 h-5 ${style.icon}`} />
+        ) : (
+          <Icon name="AlertCircle" className="w-5 h-5 text-slate-400" />
+        )}
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-2xl font-bold text-slate-800">
+          {team.teamsFieldable !== undefined ? team.teamsFieldable : 0}
+        </span>
+        <span className="text-xs text-slate-500">
+          {team.canField ? 'teams' : 'available'}
+        </span>
+      </div>
+      {team.gaps && team.gaps.length > 0 && (
+        <div className="mt-2 text-xs text-slate-600">
+          {team.gaps.slice(0, 2).map((gap, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <Icon name="AlertTriangle" className="w-3 h-3 text-amber-500" />
+              <span>{gap}</span>
+            </div>
+          ))}
+          {team.gaps.length > 2 && (
+            <span className="text-slate-400">+{team.gaps.length - 2} more</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * FieldOpsCapabilityCard - Special card for combined Field Operations (Ground + UDF)
+ */
+const FieldOpsCapabilityCard = ({ fieldOps }) => {
+  const colorStyles = {
+    green: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', icon: 'text-emerald-600' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', icon: 'text-blue-600' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', icon: 'text-amber-600' },
+    red: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', icon: 'text-rose-600' }
+  };
+
+  const style = colorStyles[fieldOps.color] || colorStyles.red;
+  const totalTeams = (fieldOps.groundTeamsFieldable || 0) + (fieldOps.udfTeamsFieldable || 0);
+
+  return (
+    <div className={`${style.bg} ${style.border} border rounded-lg p-3 transition-all hover:shadow-md`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon name={fieldOps.icon || 'Users'} className={`w-4 h-4 ${style.icon}`} />
+          <h5 className={`font-semibold text-sm ${style.text}`}>{fieldOps.name}</h5>
+        </div>
+        {fieldOps.canField ? (
+          <Icon name="CheckCircle" className={`w-5 h-5 ${style.icon}`} />
+        ) : (
+          <Icon name="AlertCircle" className="w-5 h-5 text-slate-400" />
+        )}
+      </div>
+      {/* Show breakdown of GT and UDF teams */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-600">Ground Teams:</span>
+          <span className={`text-sm font-bold ${fieldOps.canFieldGround ? style.text : 'text-slate-400'}`}>
+            {fieldOps.groundTeamsFieldable || 0}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-600">UDF Teams:</span>
+          <span className={`text-sm font-bold ${fieldOps.canFieldUDF ? style.text : 'text-slate-400'}`}>
+            {fieldOps.udfTeamsFieldable || 0}
+          </span>
+        </div>
+      </div>
+      {/* Personnel breakdown */}
+      <div className="mt-2 pt-2 border-t border-slate-200/50 text-xs text-slate-500">
+        {fieldOps.positionCounts.GTL || 0} GTL • {fieldOps.positionCounts.GTM || 0} GTM • {fieldOps.positionCounts.UDF || 0} UDF
+      </div>
+      {fieldOps.gaps && fieldOps.gaps.length > 0 && (
+        <div className="mt-2 text-xs text-slate-600">
+          {fieldOps.gaps.slice(0, 2).map((gap, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <Icon name="AlertTriangle" className="w-3 h-3 text-amber-500" />
+              <span>{gap}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * ESReadinessScoreCard - Displays the overall ES readiness score with gauge
+ */
+const ESReadinessScoreCard = ({ score, rating, components }) => {
+  const [showScoreDetails, setShowScoreDetails] = useState(false);
+
+  return (
+    <div className="bg-slate-50 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <h4 className="font-semibold text-slate-800">ES Readiness Score</h4>
+          <HelpTooltip title="What is this?" position="right">
+            <p className="mb-2">A composite score (0-100) measuring your unit's Emergency Services readiness.</p>
+            <p className="text-slate-300 mb-1">Click "How is this calculated?" below for details.</p>
+            <p className="mt-2 text-emerald-300">80+ Excellent | 65+ Good | 50+ Fair</p>
+          </HelpTooltip>
+        </div>
+        <span className="text-2xl font-bold text-slate-900">{score}</span>
+      </div>
+      <SustainabilityGauge score={score} rating={rating} />
+      <p className="text-sm text-slate-600 mt-2">
+        {rating === 'excellent' ? 'Unit is well-positioned for operational missions.' :
+         rating === 'good' ? 'Unit has solid ES capability with room for growth.' :
+         rating === 'fair' ? 'Unit can participate in missions but has capability gaps.' :
+         'Unit needs focused training and qualification efforts.'}
+      </p>
+      {components && (
+        <div className="mt-3 grid grid-cols-5 gap-1 text-xs">
+          <div className="text-center">
+            <div className="font-bold text-slate-700">{components.teamScore}</div>
+            <div className="text-slate-400">Teams</div>
+          </div>
+          <div className="text-center">
+            <div className="font-bold text-slate-700">{components.qualScore}</div>
+            <div className="text-slate-400">Quals</div>
+          </div>
+          <div className="text-center">
+            <div className="font-bold text-slate-700">{components.evaluatorScore}</div>
+            <div className="text-slate-400">SET</div>
+          </div>
+          <div className="text-center">
+            <div className="font-bold text-slate-700">{components.riskScore}</div>
+            <div className="text-slate-400">Risk</div>
+          </div>
+          <div className="text-center">
+            <div className="font-bold text-slate-700">{components.pipelineScore}</div>
+            <div className="text-slate-400">Pipeline</div>
+          </div>
+        </div>
+      )}
+
+      {/* Expandable calculation details */}
+      <button
+        onClick={() => setShowScoreDetails(!showScoreDetails)}
+        className="mt-3 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+      >
+        <Icon name={showScoreDetails ? 'ChevronUp' : 'ChevronDown'} className="w-3 h-3" />
+        <span>How is this calculated?</span>
+      </button>
+
+      {showScoreDetails && (
+        <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200 text-xs space-y-3">
+          <p className="text-slate-600">
+            The readiness score is a weighted average of five components, each measuring a different aspect of ES capability:
+          </p>
+
+          <div className="space-y-2">
+            <div className="p-2 bg-blue-50 rounded">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-blue-800">Team Capability (35%)</span>
+                <span className="font-bold text-blue-800">{components?.teamScore || 0}</span>
+              </div>
+              <p className="text-slate-600">
+                Can your unit field operational teams? Measures field ops (30%), aircrew (30%), sUAS (10%), mission base (15%), and command (15%).
+                Full points for 2+ teams, partial for 1 team, lower if missing key positions.
+              </p>
+            </div>
+
+            <div className="p-2 bg-emerald-50 rounded">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-emerald-800">Qualification Health (25%)</span>
+                <span className="font-bold text-emerald-800">{components?.qualScore || 0}</span>
+              </div>
+              <p className="text-slate-600">
+                Ratio of active vs expired qualifications. Score = (Active ÷ (Active + Expired)) × 100.
+                Higher is better - expired quals pull down the score.
+              </p>
+            </div>
+
+            <div className="p-2 bg-indigo-50 rounded">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-indigo-800">Potential Evaluator Coverage (15%)</span>
+                <span className="font-bold text-indigo-800">{components?.evaluatorScore || 0}</span>
+              </div>
+              <p className="text-slate-600">
+                Estimates potential internal evaluation capability based on SET qualification + 1yr tenure.
+                Low coverage suggests may need external evaluators. <em>Verify actual status in eServices.</em>
+              </p>
+            </div>
+
+            <div className="p-2 bg-amber-50 rounded">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-amber-800">Risk Mitigation (15%)</span>
+                <span className="font-bold text-amber-800">{components?.riskScore || 0}</span>
+              </div>
+              <p className="text-slate-600">
+                Do you have backup personnel? Starts at 100, subtracts 25 per single point of failure (SPOF).
+                SPOFs include: single GTL, single pilot, single scanner, single IC.
+              </p>
+            </div>
+
+            <div className="p-2 bg-purple-50 rounded">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-purple-800">Pipeline Strength (10%)</span>
+                <span className="font-bold text-purple-800">{components?.pipelineScore || 0}</span>
+              </div>
+              <p className="text-slate-600">
+                Is the unit actively training new ES members? Base of 30 if no active training, +10 per trainee up to 100.
+                More trainees = stronger future capability.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-2 bg-slate-100 rounded">
+            <p className="text-slate-700 font-medium">Score Thresholds:</p>
+            <ul className="mt-1 space-y-0.5 text-slate-600">
+              <li>• <span className="font-bold text-emerald-700">80+</span> Excellent - Ready for operational missions</li>
+              <li>• <span className="font-bold text-blue-700">65-79</span> Good - Solid capability with room to grow</li>
+              <li>• <span className="font-bold text-amber-700">50-64</span> Fair - Can participate but has gaps</li>
+              <li>• <span className="font-bold text-rose-700">&lt;50</span> Needs Attention - Focus on training</li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * ESQualificationHealthCard - Shows qualification status breakdown
+ */
+const ESQualificationHealthCard = ({ qualifications }) => {
+  const total = qualifications.byStatus.active + qualifications.byStatus.training + qualifications.byStatus.expired;
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <h4 className="text-sm font-semibold text-slate-700">Qualification Health</h4>
+        <HelpTooltip position="right">
+          <p>Distribution of ES qualifications across your unit members.</p>
+          <p className="mt-1 text-slate-300">Active qualifications are current and valid for operations.</p>
+        </HelpTooltip>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="text-center p-2 bg-emerald-50 rounded-lg">
+          <div className="text-xl font-bold text-emerald-700">{qualifications.byStatus.active}</div>
+          <div className="text-xs text-slate-600">Active</div>
+        </div>
+        <div className="text-center p-2 bg-amber-50 rounded-lg">
+          <div className="text-xl font-bold text-amber-700">{qualifications.byStatus.training}</div>
+          <div className="text-xs text-slate-600">Training</div>
+        </div>
+        <div className="text-center p-2 bg-rose-50 rounded-lg">
+          <div className="text-xl font-bold text-rose-700">{qualifications.byStatus.expired}</div>
+          <div className="text-xs text-slate-600">Expired</div>
+        </div>
+      </div>
+      {qualifications.missingGES && qualifications.missingGES.length > 0 && (
+        <div className="mt-3 p-2 bg-rose-50 border border-rose-200 rounded-lg">
+          <div className="flex items-center gap-1 text-xs text-rose-700">
+            <Icon name="AlertTriangle" className="w-3 h-3" />
+            <span className="font-medium">{qualifications.missingGES.length} member(s) without GES</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * ESAlertsCard - Shows expiring qualifications and SPOF warnings
+ */
+const ESAlertsCard = ({ risks, expiring }) => {
+  if ((!expiring || expiring.length === 0) && (!risks?.singlePointsOfFailure || risks.singlePointsOfFailure.length === 0)) {
+    return null;
+  }
+
+  return (
+    <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon name="AlertTriangle" className="w-5 h-5 text-amber-600" />
+        <h4 className="text-sm font-semibold text-amber-800">Attention Required</h4>
+      </div>
+
+      {/* Expiring Qualifications */}
+      {expiring && expiring.length > 0 && (
+        <div className="mb-3">
+          <div className="text-xs font-medium text-amber-700 mb-2">Qualifications Expiring Within 90 Days</div>
+          <div className="space-y-1">
+            {expiring.slice(0, 4).map((e, idx) => (
+              <div
+                key={`${e.capid}-${e.achvID}-${idx}`}
+                className={`flex items-center justify-between px-2 py-1.5 rounded text-xs ${
+                  e.urgency === 'critical' ? 'bg-rose-100 text-rose-800' :
+                  e.urgency === 'warning' ? 'bg-amber-100 text-amber-800' :
+                  'bg-yellow-50 text-yellow-800'
+                }`}
+              >
+                <span className="font-medium">{e.rank} {e.name}</span>
+                <span>{e.qualification} - {e.daysUntil}d</span>
+              </div>
+            ))}
+            {expiring.length > 4 && (
+              <div className="text-xs text-amber-600 mt-1">+{expiring.length - 4} more</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Single Points of Failure */}
+      {risks?.singlePointsOfFailure && risks.singlePointsOfFailure.length > 0 && (
+        <div>
+          <div className="text-xs font-medium text-amber-700 mb-2">Single Points of Failure</div>
+          <div className="space-y-1">
+            {risks.singlePointsOfFailure.map((spof, idx) => (
+              <div
+                key={`${spof.capid}-${idx}`}
+                className="flex items-center justify-between px-2 py-1.5 bg-orange-100 text-orange-800 rounded text-xs"
+              >
+                <span className="font-medium">{spof.positionName}</span>
+                <span>{spof.member}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * ESEvaluatorCard - Shows potential Skills Evaluator availability
+ * Note: These are estimates based on SET qual + 1yr holding requirement - actual evaluator status must be verified in eServices
+ */
+const ESEvaluatorCard = ({ evaluators }) => {
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-semibold text-slate-700">Potential Evaluators</h4>
+          <HelpTooltip position="right">
+            <p>Members who may be eligible to evaluate ES qualifications.</p>
+            <p className="mt-1 text-slate-300">Based on SET qualification + holding a qual for 1+ year.</p>
+            <p className="mt-1 text-amber-300">⚠️ This is an estimate only. Verify actual evaluator status in eServices.</p>
+          </HelpTooltip>
+        </div>
+        <span className={`text-sm font-bold ${
+          evaluators.coverage >= 80 ? 'text-emerald-600' :
+          evaluators.coverage >= 50 ? 'text-amber-600' : 'text-rose-600'
+        }`}>
+          {evaluators.coverage}% coverage
+        </span>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-slate-800">{evaluators.evaluatorCount || evaluators.available?.length || 0}</div>
+          <div className="text-xs text-slate-500">Potential</div>
+        </div>
+        <div className="flex-1">
+          <div className="w-full bg-slate-100 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full ${
+                evaluators.coverage >= 80 ? 'bg-emerald-500' :
+                evaluators.coverage >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+              }`}
+              style={{ width: `${evaluators.coverage}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      {evaluators.gaps && evaluators.gaps.length > 0 && (
+        <div className="mt-3 text-xs text-slate-500">
+          <span className="font-medium">Gaps:</span> {evaluators.gaps.slice(0, 3).join(', ')}
+          {evaluators.gaps.length > 3 && ` +${evaluators.gaps.length - 3} more`}
+        </div>
+      )}
+      <div className="mt-2 text-[10px] text-slate-400">
+        *Verify evaluator status in eServices
+      </div>
+    </div>
+  );
+};
+
+/**
+ * ESReadinessSection - Emergency Services readiness dashboard section
+ */
+const ESReadinessSection = ({ esAnalysis, isExpanded, onToggle, onDeepDive }) => {
+  if (!esAnalysis) return null;
+
+  // Build field ops tooltip
+  const fieldOpsTooltip = (() => {
+    const parts = [];
+    if (esAnalysis.teams.fieldOps.canFieldGround) {
+      parts.push(`${esAnalysis.teams.fieldOps.groundTeamsFieldable} GT`);
+    }
+    if (esAnalysis.teams.fieldOps.canFieldUDF) {
+      parts.push(`${esAnalysis.teams.fieldOps.udfTeamsFieldable} UDF`);
+    }
+    return parts.length > 0 ? parts.join(', ') : 'Cannot field';
+  })();
+
+  // Key data for collapsed state with mini team icons
+  const keyData = (
+    <div className="flex items-center gap-4 flex-wrap">
+      {/* Mini team status icons */}
+      <div className="flex items-center gap-3">
+        <ESTeamStatusIcon
+          shortName="Field"
+          color={esAnalysis.teams.fieldOps.color}
+          tooltip={fieldOpsTooltip}
+        />
+        <ESTeamStatusIcon
+          shortName="Air"
+          color={esAnalysis.teams.aircrew.color}
+          tooltip={esAnalysis.teams.aircrew.canField ? `${esAnalysis.teams.aircrew.teamsFieldable} crew(s)` : 'Cannot field'}
+        />
+        <ESTeamStatusIcon
+          shortName="sUAS"
+          color={esAnalysis.teams.suas.color}
+          tooltip={esAnalysis.teams.suas.canField ? 'Available' : 'Not available'}
+        />
+        <ESTeamStatusIcon
+          shortName="Base"
+          color={esAnalysis.teams.missionBase.color}
+          tooltip={`${esAnalysis.teams.missionBase.qualifiedCount} qualified`}
+        />
+        <ESTeamStatusIcon
+          shortName="Cmd"
+          color={esAnalysis.teams.command.color}
+          tooltip={esAnalysis.teams.command.hasIC ? `${esAnalysis.teams.command.qualifiedCount} qualified, IC available` : `${esAnalysis.teams.command.qualifiedCount} qualified, no IC`}
+        />
+      </div>
+      {/* Score badge */}
+      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+        esAnalysis.readinessRating === 'excellent' ? 'bg-emerald-100 text-emerald-700' :
+        esAnalysis.readinessRating === 'good' ? 'bg-blue-100 text-blue-700' :
+        esAnalysis.readinessRating === 'fair' ? 'bg-amber-100 text-amber-700' :
+        'bg-rose-100 text-rose-700'
+      }`}>
+        {esAnalysis.readinessScore}
+      </span>
+      {/* Expiring count */}
+      {esAnalysis.qualifications.expiringWithin90Days.length > 0 && (
+        <>
+          <span className="text-slate-400">|</span>
+          <span className="text-amber-600 text-sm">
+            {esAnalysis.qualifications.expiringWithin90Days.length} expiring
+          </span>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <DashboardSection
+      id="emergency-services"
+      title="Emergency Services Readiness"
+      icon="Activity"
+      isExpanded={isExpanded}
+      onToggle={() => onToggle('emergency-services')}
+      onDeepDive={onDeepDive}
+      accentColor={esAnalysis.readinessRating === 'excellent' ? 'green' :
+                   esAnalysis.readinessRating === 'good' ? 'blue' :
+                   esAnalysis.readinessRating === 'fair' ? 'amber' : 'rose'}
+      keyData={keyData}
+    >
+      <div className="space-y-4 pt-4">
+        {/* ES Readiness Score */}
+        <ESReadinessScoreCard
+          score={esAnalysis.readinessScore}
+          rating={esAnalysis.readinessRating}
+          components={esAnalysis.readinessComponents}
+        />
+
+        {/* Team Capability Cards Grid */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Team Capabilities</h4>
+            <HelpTooltip position="right">
+              <p>Shows what operational teams your unit can field based on CAPR 60-3 requirements.</p>
+              <p className="mt-1 text-slate-300">Green = fully capable, Amber = partial, Red = cannot field</p>
+            </HelpTooltip>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <FieldOpsCapabilityCard fieldOps={esAnalysis.teams.fieldOps} />
+            <ESTeamCapabilityCard team={esAnalysis.teams.aircrew} />
+            <ESTeamCapabilityCard team={esAnalysis.teams.suas} />
+            <ESTeamCapabilityCard team={esAnalysis.teams.missionBase} />
+            <ESTeamCapabilityCard team={esAnalysis.teams.command} />
+          </div>
+        </div>
+
+        {/* Qualification Health Summary */}
+        <ESQualificationHealthCard qualifications={esAnalysis.qualifications} />
+
+        {/* Alerts for expirations/gaps */}
+        <ESAlertsCard
+          risks={esAnalysis.risks}
+          expiring={esAnalysis.qualifications.expiringWithin90Days}
+        />
+
+        {/* Evaluator availability */}
+        <ESEvaluatorCard evaluators={esAnalysis.evaluators} />
+
+        {/* Training Pipeline Summary */}
+        {esAnalysis.pipeline.activeTraining.length > 0 && (
+          <div className="bg-indigo-50 rounded-lg border border-indigo-200 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon name="TrendingUp" className="w-5 h-5 text-indigo-600" />
+              <h4 className="text-sm font-semibold text-indigo-800">Training Pipeline</h4>
+            </div>
+            <p className="text-sm text-indigo-700">
+              {esAnalysis.pipeline.activeTraining.length} member(s) actively training for ES qualifications
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {[...new Set(esAnalysis.pipeline.activeTraining.map(t => t.position))].map(pos => (
+                <span key={pos} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">
+                  {pos}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recommendations Preview */}
+        {esAnalysis.risks.recommendations && esAnalysis.risks.recommendations.length > 0 && (
+          <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon name="Lightbulb" className="w-5 h-5 text-slate-600" />
+              <h4 className="text-sm font-semibold text-slate-700">Top Recommendation</h4>
+            </div>
+            <p className="text-sm text-slate-600">
+              {esAnalysis.risks.recommendations[0].recommendation}
+            </p>
+            {esAnalysis.risks.recommendations.length > 1 && (
+              <p className="text-xs text-slate-400 mt-1">
+                +{esAnalysis.risks.recommendations.length - 1} more recommendations in detailed view
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </DashboardSection>
+  );
+};
+
+/**
+ * ESUnitComparisonTable - Shows ES readiness for subordinate units (aggregate view)
+ */
+const ESUnitComparisonTable = ({ unitMetrics, getUnitName, sortConfig, onSort }) => {
+  const TeamDot = ({ color }) => {
+    const colorStyles = {
+      green: 'bg-emerald-500',
+      blue: 'bg-blue-500',
+      amber: 'bg-amber-500',
+      red: 'bg-rose-400'
+    };
+    return <span className={`w-2.5 h-2.5 rounded-full inline-block ${colorStyles[color] || 'bg-slate-300'}`} />;
+  };
+
+  const SortableHeader = ({ field, label, className = '' }) => (
+    <th
+      className={`px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wide cursor-pointer hover:bg-slate-100 transition-colors ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {sortConfig.field === field && (
+          <Icon
+            name={sortConfig.direction === 'asc' ? 'ChevronUp' : 'ChevronDown'}
+            className="w-3 h-3"
+          />
+        )}
+      </div>
+    </th>
+  );
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <SortableHeader field="name" label="Unit" className="min-w-[140px]" />
+              <SortableHeader field="readinessScore" label="Score" />
+              <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Field</th>
+              <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Air</th>
+              <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">sUAS</th>
+              <SortableHeader field="expiringCount" label="Expiring" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {unitMetrics.map((unit, idx) => {
+              const unitName = getUnitName(unit.orgId);
+              return (
+                <tr
+                  key={unit.orgId}
+                  className={`hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-25'}`}
+                >
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-slate-800 text-sm">{unitName}</div>
+                    <div className="text-xs text-slate-500">{unit.memberCount} members</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold ${
+                      unit.readinessRating === 'excellent' ? 'bg-emerald-100 text-emerald-700' :
+                      unit.readinessRating === 'good' ? 'bg-blue-100 text-blue-700' :
+                      unit.readinessRating === 'fair' ? 'bg-amber-100 text-amber-700' :
+                      'bg-rose-100 text-rose-700'
+                    }`}>
+                      {unit.readinessScore}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <TeamDot color={unit.teamStatus?.fieldOps} />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <TeamDot color={unit.teamStatus?.aircrew} />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <TeamDot color={unit.teamStatus?.suas} />
+                  </td>
+                  <td className="px-3 py-2 text-sm">
+                    {unit.expiringCount > 0 ? (
+                      <span className="text-amber-600 font-medium">{unit.expiringCount}</span>
+                    ) : (
+                      <span className="text-slate-400">0</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * AggregateStatsHeader - Summary header for Mode C (aggregate view)
+ */
+const AggregateStatsHeader = ({ aggregateMetrics, unitCount, rrMetrics }) => {
+  // Calculate averages and aggregates
+  const avgSustainability = aggregateMetrics.length > 0
+    ? Math.round(aggregateMetrics.reduce((sum, u) => sum + (u.sustainabilityScore || 0), 0) / aggregateMetrics.filter(u => u.sustainabilityScore).length)
+    : null;
+
+  const avgRetention = aggregateMetrics.length > 0
+    ? Math.round(aggregateMetrics.reduce((sum, u) => sum + (u.retentionRate || 0), 0) / aggregateMetrics.filter(u => u.retentionRate).length * 10) / 10
+    : null;
+
+  const growingUnits = aggregateMetrics.filter(u => u.growthStatus === 'growing').length;
+  const decliningUnits = aggregateMetrics.filter(u => u.growthStatus === 'declining').length;
+
+  const totalMembers = rrMetrics?.summary?.currentTotal || 0;
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+        <div className="text-[10px] uppercase text-blue-700 font-bold">Total Members</div>
+        <div className="text-2xl font-bold text-blue-900">{totalMembers}</div>
+      </div>
+      <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-100">
+        <div className="text-[10px] uppercase text-indigo-700 font-bold">Subordinate Units</div>
+        <div className="text-2xl font-bold text-indigo-900">{unitCount}</div>
+      </div>
+      <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+        <div className="text-[10px] uppercase text-emerald-700 font-bold">Avg Sustainability</div>
+        <div className="text-xl font-bold text-emerald-900">{avgSustainability ?? '--'}</div>
+      </div>
+      <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
+        <div className="text-[10px] uppercase text-amber-700 font-bold">Avg Retention</div>
+        <div className="text-xl font-bold text-amber-900">{avgRetention !== null ? `${avgRetention}%` : '--'}</div>
+      </div>
+      <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+        <div className="text-[10px] uppercase text-slate-600 font-bold">Growth Trend</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-emerald-600">{growingUnits} ↑</span>
+          <span className="text-sm font-bold text-rose-600">{decliningUnits} ↓</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function UnitOverviewSection({
+  baseUnitStats,
+  showAllDescendants,
+  processedData,
+  cadetData,
+  orgChartData,
+  setActiveTab,
+  // New props
+  unitFilter,
+  descendantOrgIds,
+  orgStatsService,
+  esUnitAnalysisService,
+  dataFiles,
+  // Modal handlers
+  setRecruitingRetentionModal,
+  setESReadinessModal
+}) {
+  const [expandedSection, setExpandedSection] = useState(null);
+  const [timeRange, setTimeRange] = useState(12); // Default 12 months
+  const chartRef = useRefLocal(null);
+  const chartInstanceRef = useRefLocal(null);
+  const [tableSortConfig, setTableSortConfig] = useState({ field: 'sustainabilityScore', direction: 'desc' });
+
+  // === UNIT TYPE DETECTION ===
+  const unitType = useMemo(() => {
+    const org = (dataFiles.organization || []).find(o =>
+      String(o.ORGID || '').trim() === String(unitFilter || '').trim()
+    );
+    return String(org?.Type || '').toUpperCase();
+  }, [dataFiles.organization, unitFilter]);
+
+  // Check if this is a command/admin HQ unit
+  const isCommandHQ = useMemo(() => {
+    return unitType.includes('GROUP') || unitType.includes('WING') ||
+           unitType.includes('REGION') || unitType.includes('NATIONAL');
+  }, [unitType]);
+
+  // === VIEW MODE DETERMINATION ===
+  // Mode A: Operational Unit (squadron/flight) - standard metrics view
+  // Mode B: Command Unit Only (HQ without sub-units) - prompt to enable sub-units
+  // Mode C: Command + Sub-Units (aggregate view) - unit comparison table
+  const viewMode = useMemo(() => {
+    if (!isCommandHQ) return 'operational'; // Mode A
+    if (!showAllDescendants) return 'command-only'; // Mode B
+    return 'aggregate'; // Mode C
+  }, [isCommandHQ, showAllDescendants]);
+
+  // === UNIT NAME LOOKUP ===
+  const getUnitName = useCallback((orgId) => {
+    const org = (dataFiles.organization || []).find(o =>
+      String(o.ORGID || '').trim() === String(orgId || '').trim()
+    );
+    if (!org) return `Unit ${orgId}`;
+    const cleanUnit = org.Unit ? org.Unit.replace(/^0+/, '').padStart(3, '0') : '000';
+    return `${org.Region || ''}-${org.Wing || ''}-${cleanUnit}`;
+  }, [dataFiles.organization]);
+
+  // === UNIT METRICS FOR COMPARISON TABLE (Mode C) ===
+  const subordinateUnitMetrics = useMemo(() => {
+    if (viewMode !== 'aggregate' || !orgStatsService || !descendantOrgIds) return [];
+
+    // Filter to only operational units (exclude command HQs from the comparison)
+    const operationalUnits = descendantOrgIds.filter(orgId => {
+      const org = (dataFiles.organization || []).find(o =>
+        String(o.ORGID || '').trim() === String(orgId || '').trim()
+      );
+      const type = String(org?.Type || '').toUpperCase();
+      // Include squadrons and flights, exclude groups/wings/regions
+      const isHQ = type.includes('GROUP') || type.includes('WING') ||
+                   type.includes('REGION') || type.includes('NATIONAL');
+      return !isHQ;
+    });
+
+    return orgStatsService.getMetricsForMultipleUnits(operationalUnits, {
+      timeRangeMonths: timeRange
+    });
+  }, [viewMode, orgStatsService, descendantOrgIds, dataFiles.organization, timeRange]);
+
+  // Sort unit metrics for table
+  const sortedUnitMetrics = useMemo(() => {
+    if (!subordinateUnitMetrics.length) return [];
+
+    return [...subordinateUnitMetrics].sort((a, b) => {
+      let aVal, bVal;
+
+      if (tableSortConfig.field === 'name') {
+        aVal = getUnitName(a.orgId);
+        bVal = getUnitName(b.orgId);
+      } else {
+        aVal = a[tableSortConfig.field] ?? -Infinity;
+        bVal = b[tableSortConfig.field] ?? -Infinity;
+      }
+
+      if (typeof aVal === 'string') {
+        return tableSortConfig.direction === 'asc'
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      return tableSortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+  }, [subordinateUnitMetrics, tableSortConfig, getUnitName]);
+
+  const handleTableSort = (field) => {
+    setTableSortConfig(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const handleUnitClick = (orgId) => {
+    // Placeholder for future functionality: navigate to unit detail or open modal
+    // Currently a no-op - the click handler is wired up for future use
+  };
+
+  // Get recruiting/retention metrics
+  const rrMetrics = useMemo(() => {
+    if (!orgStatsService || !unitFilter) return null;
+
+    return orgStatsService.getMetricsForUnit(unitFilter, {
+      includeDescendants: showAllDescendants,
+      descendantOrgIds: descendantOrgIds || [],
+      timeRangeMonths: timeRange
+    });
+  }, [orgStatsService, unitFilter, showAllDescendants, descendantOrgIds, timeRange]);
+
+  const rrKeyData = useMemo(() => {
+    if (!orgStatsService || !unitFilter) return null;
+
+    return orgStatsService.getKeyDataForUnit(unitFilter, {
+      includeDescendants: showAllDescendants,
+      descendantOrgIds: descendantOrgIds || []
+    });
+  }, [orgStatsService, unitFilter, showAllDescendants, descendantOrgIds]);
+
+  // === EMERGENCY SERVICES ANALYSIS ===
+  const esAnalysis = useMemo(() => {
+    if (!esUnitAnalysisService || !unitFilter) return null;
+
+    return esUnitAnalysisService.analyzeUnit(unitFilter, {
+      includeDescendants: showAllDescendants,
+      descendantOrgIds: descendantOrgIds || []
+    });
+  }, [esUnitAnalysisService, unitFilter, showAllDescendants, descendantOrgIds]);
+
+  // ES metrics for aggregate view (subordinate units)
+  const esSubordinateMetrics = useMemo(() => {
+    if (viewMode !== 'aggregate' || !esUnitAnalysisService || !descendantOrgIds) return [];
+
+    const operationalUnits = descendantOrgIds.filter(orgId => {
+      const org = (dataFiles.organization || []).find(o =>
+        String(o.ORGID || '').trim() === String(orgId || '').trim()
+      );
+      const type = String(org?.Type || '').toUpperCase();
+      const isHQ = type.includes('GROUP') || type.includes('WING') ||
+                   type.includes('REGION') || type.includes('NATIONAL');
+      return !isHQ;
+    });
+
+    return esUnitAnalysisService.getMetricsForMultipleUnits(operationalUnits);
+  }, [viewMode, esUnitAnalysisService, descendantOrgIds, dataFiles.organization]);
+
+  // Sort ES metrics for table
+  const [esTableSortConfig, setESTableSortConfig] = useState({ field: 'readinessScore', direction: 'desc' });
+
+  const sortedESMetrics = useMemo(() => {
+    if (!esSubordinateMetrics.length) return [];
+
+    return [...esSubordinateMetrics].sort((a, b) => {
+      let aVal, bVal;
+
+      if (esTableSortConfig.field === 'name') {
+        aVal = getUnitName(a.orgId);
+        bVal = getUnitName(b.orgId);
+      } else {
+        aVal = a[esTableSortConfig.field] ?? -Infinity;
+        bVal = b[esTableSortConfig.field] ?? -Infinity;
+      }
+
+      if (typeof aVal === 'string') {
+        return esTableSortConfig.direction === 'asc'
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      return esTableSortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+  }, [esSubordinateMetrics, esTableSortConfig, getUnitName]);
+
+  const handleESTableSort = (field) => {
+    setESTableSortConfig(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  // Initialize mini chart when section expands
+  useEffect(() => {
+    if (expandedSection !== 'recruiting' || !rrMetrics?.monthlyData?.length) return;
+
+    // Cleanup previous chart
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.destroy();
+      chartInstanceRef.current = null;
+    }
+
+    // Wait for DOM
+    const timer = setTimeout(() => {
+      const canvas = document.getElementById('chart-recruiting-mini');
+      if (!canvas || !window.Chart) return;
+
+      const ctx = canvas.getContext('2d');
+      const data = rrMetrics.monthlyData;
+
+      chartInstanceRef.current = new window.Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => d.label || d.date),
+          datasets: [
+            {
+              label: 'Total Members',
+              data: data.map(d => d.combined?.total || 0),
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              fill: true,
+              tension: 0.3,
+              pointRadius: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                afterBody: (context) => {
+                  const idx = context[0].dataIndex;
+                  const d = data[idx];
+                  return [
+                    `New: ${d.combined?.new || 0}`,
+                    `Renewed: ${d.combined?.renew || 0}`,
+                    `Rejoined: ${d.combined?.rejoin || 0}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            y: { beginAtZero: false },
+            x: {
+              ticks: {
+                maxRotation: 45,
+                minRotation: 45,
+                font: { size: 10 }
+              }
+            }
+          }
+        }
+      });
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, [expandedSection, rrMetrics]);
+
+  // Toggle section expansion (accordion behavior - one at a time)
+  const handleToggleSection = (sectionId) => {
+    setExpandedSection(prev => prev === sectionId ? null : sectionId);
+  };
+
+  // Open deep dive modal
+  const handleDeepDive = (sectionId) => {
+    if (sectionId === 'recruiting') {
+      setRecruitingRetentionModal({
+        isOpen: true,
+        metrics: rrMetrics,
+        unitFilter,
+        showAllDescendants,
+        timeRange
+      });
+    }
+  };
+
+  // Time range options
+  const timeRangeOptions = [
+    { value: 6, label: '6 mo' },
+    { value: 12, label: '12 mo' },
+    { value: 24, label: '2 yr' },
+    { value: 60, label: '5 yr' },
+    { value: 0, label: 'All' }
+  ];
+
+  // Check if org stats data is available
+  const hasOrgStatsData = orgStatsService && orgStatsService.hasDataForUnit(
+    unitFilter,
+    showAllDescendants,
+    descendantOrgIds || []
+  );
+
+  // Get HQ unit label
+  const getHQLabel = () => {
+    return unitType.includes('WING') ? 'Wing' :
+           unitType.includes('GROUP') ? 'Group' :
+           unitType.includes('REGION') ? 'Region' : 'Headquarters';
+  };
+
+  // Get HQ staff members for command-only view (Mode B)
+  const hqStaffMembers = useMemo(() => {
+    if (viewMode !== 'command-only' || !dataFiles.members || !unitFilter) return [];
+
+    // Filter to active members assigned to this HQ unit
+    return dataFiles.members.filter(m => {
+      const status = String(m.MbrStatus || '').toUpperCase();
+      const memberOrgId = String(m.ORGID || '').trim();
+      const targetOrgId = String(unitFilter || '').trim();
+      return status === 'ACTIVE' && memberOrgId === targetOrgId;
+    });
+  }, [viewMode, dataFiles.members, unitFilter]);
+
+  // Dynamic header text based on view mode
+  const getHeaderInfo = () => {
+    if (viewMode === 'aggregate') {
+      return {
+        label: `${getHQLabel()} Dashboard`,
+        description: `Aggregate view of membership health across ${sortedUnitMetrics.length} subordinate units.`
+      };
+    }
+    if (viewMode === 'command-only') {
+      return {
+        label: 'Headquarters View',
+        description: 'Command/administrative unit staff overview.'
+      };
+    }
+    return {
+      label: 'Unit Overview',
+      description: `Combined view of membership health and readiness for ${showAllDescendants ? 'unit + subordinates' : 'selected unit'}.`
+    };
+  };
+
+  const headerInfo = getHeaderInfo();
+
+  return (
+    <div className="space-y-4">
+      {/* Header Card - adapts to view mode */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-xs uppercase text-slate-500 font-bold tracking-wide">Commander Snapshot</p>
+              {viewMode === 'aggregate' && (
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-indigo-100 text-indigo-700 rounded-full">
+                  Aggregate View
+                </span>
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">{headerInfo.label}</h2>
+            <p className="text-sm text-slate-600 mt-1">{headerInfo.description}</p>
+            {/* Include Sub-Units instruction for command HQ units */}
+            {viewMode === 'command-only' && (
+              <p className="text-sm text-indigo-600 mt-2 flex items-center gap-1">
+                <Icon name="Info" className="w-4 h-4" />
+                Use the <strong className="mx-1">"Include Sub-Units"</strong> toggle in the header to view aggregate data for all subordinate squadrons.
+              </p>
+            )}
+          </div>
+          {/* Stats cards - different for aggregate view */}
+          {viewMode === 'aggregate' ? (
+            <AggregateStatsHeader
+              aggregateMetrics={sortedUnitMetrics}
+              unitCount={sortedUnitMetrics.length}
+              rrMetrics={rrMetrics}
+            />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[240px]">
+              <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                <div className="text-[10px] uppercase text-blue-700 font-bold">Total Members</div>
+                <div className="text-2xl font-bold text-blue-900">{baseUnitStats ? baseUnitStats.total : 0}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                <div className="text-[10px] uppercase text-emerald-700 font-bold">Senior</div>
+                <div className="text-xl font-bold text-emerald-900">{processedData.length}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
+                <div className="text-[10px] uppercase text-amber-700 font-bold">Cadets</div>
+                <div className="text-xl font-bold text-amber-900">{cadetData.length}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-100">
+                <div className="text-[10px] uppercase text-indigo-700 font-bold">View</div>
+                <div className="text-sm font-bold text-indigo-900">{showAllDescendants ? 'Unit + Sub' : 'This Unit'}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dashboard Sections */}
+      <div className="space-y-3">
+
+        {/* MODE B: Command Unit Only - Show HQ Staff Insights section */}
+        {viewMode === 'command-only' && (
+          <HQStaffInsights
+            unitType={unitType}
+            staffMembers={hqStaffMembers}
+            isExpanded={expandedSection === 'hq-staff'}
+            onToggle={handleToggleSection}
+            onDeepDive={handleDeepDive}
+            getHQLabel={getHQLabel}
+          />
+        )}
+
+        {/* MODE A & C: Show recruiting/retention section for operational units and aggregate view */}
+        {(viewMode === 'operational' || viewMode === 'aggregate') && hasOrgStatsData && (
+          <DashboardSection
+            id="recruiting"
+            title={viewMode === 'aggregate' ? 'Aggregate Recruiting & Retention' : 'Recruiting & Retention'}
+            icon="UserPlus"
+            isExpanded={expandedSection === 'recruiting'}
+            onToggle={handleToggleSection}
+            onDeepDive={handleDeepDive}
+            accentColor={rrKeyData?.sustainabilityRating === 'excellent' ? 'green' :
+                         rrKeyData?.sustainabilityRating === 'good' ? 'blue' :
+                         rrKeyData?.sustainabilityRating === 'fair' ? 'amber' : 'rose'}
+            keyData={rrKeyData && (
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="font-semibold">
+                  {rrKeyData.currentTotal} members
+                  {rrKeyData.yearOverYearChange !== null && (
+                    <span className={`ml-2 ${
+                      rrKeyData.yearOverYearChange > 0 ? 'text-emerald-600' :
+                      rrKeyData.yearOverYearChange < 0 ? 'text-rose-600' : 'text-slate-500'
+                    }`}>
+                      ({rrKeyData.yearOverYearChange > 0 ? '+' : ''}{rrKeyData.yearOverYearChange} YoY)
+                    </span>
+                  )}
+                </span>
+                {rrKeyData.retentionRate !== null && (
+                  <>
+                    <span className="text-slate-400">|</span>
+                    <span>{rrKeyData.retentionRate}% retention</span>
+                  </>
+                )}
+              </div>
+            )}
+          >
+            {/* Expanded Content */}
+            {rrMetrics && (
+              <div className="space-y-4 pt-4">
+                {/* Time Range Selector - scoped to R&R section */}
+                <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-600">Analysis Time Range:</span>
+                    <HelpTooltip position="bottom">
+                      <p>Choose how far back to analyze membership trends.</p>
+                      <p className="mt-1 text-slate-300">Shorter ranges show recent changes. Longer ranges reveal patterns and seasonality.</p>
+                    </HelpTooltip>
+                  </div>
+                  <div className="flex gap-1">
+                    {timeRangeOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setTimeRange(opt.value)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          timeRange === opt.value
+                            ? 'bg-slate-800 text-white'
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Subordinate Units Table - only for aggregate view */}
+                {viewMode === 'aggregate' && sortedUnitMetrics.length > 0 && (
+                  <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                    <div className="p-3 border-b border-slate-200 bg-indigo-50">
+                      <div className="flex items-center gap-2">
+                        <Icon name="LayoutList" className="w-4 h-4 text-indigo-600" />
+                        <h4 className="font-semibold text-sm text-indigo-800">Subordinate Units Performance</h4>
+                        <span className="text-xs text-indigo-600 ml-auto">{sortedUnitMetrics.length} units</span>
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <UnitComparisonTable
+                        unitMetrics={sortedUnitMetrics}
+                        getUnitName={getUnitName}
+                        onUnitClick={handleUnitClick}
+                        sortConfig={tableSortConfig}
+                        onSort={handleTableSort}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Sustainability Score - with explanation */}
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-slate-800">Sustainability Score</h4>
+                      <HelpTooltip title="What is this?" position="right">
+                        <p className="mb-2">A composite score (0-100) measuring your unit's overall membership health.</p>
+                        <p className="text-slate-300 mb-1">Components:</p>
+                        <ul className="text-slate-300 text-[10px] space-y-0.5">
+                          <li>• 25% Recruiting Rate</li>
+                          <li>• 35% Retention Rate</li>
+                          <li>• 25% Net Growth</li>
+                          <li>• 15% Stability</li>
+                        </ul>
+                        <p className="mt-2 text-emerald-300">80+ Excellent | 65+ Good | 50+ Fair</p>
+                      </HelpTooltip>
+                    </div>
+                    {rrMetrics.metrics.sustainability && (
+                      <span className="text-2xl font-bold text-slate-900">
+                        {rrMetrics.metrics.sustainability.overallScore}
+                      </span>
+                    )}
+                  </div>
+                  <SustainabilityGauge
+                    score={rrMetrics.metrics.sustainability?.overallScore}
+                    rating={rrMetrics.metrics.sustainability?.rating}
+                  />
+                  {rrMetrics.metrics.sustainability?.summary && (
+                    <p className="text-sm text-slate-600 mt-2">
+                      {rrMetrics.metrics.sustainability.summary}
+                    </p>
+                  )}
+                  {/* Focus Area Recommendation */}
+                  {rrMetrics.metrics.sustainability?.focusArea && rrMetrics.metrics.sustainability.focusArea.score < 70 && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Icon name="Lightbulb" className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-800">
+                            Focus Area: {rrMetrics.metrics.sustainability.focusArea.label}
+                          </p>
+                          <p className="text-xs text-amber-700 mt-1">
+                            Your {rrMetrics.metrics.sustainability.focusArea.label.toLowerCase()} score ({rrMetrics.metrics.sustainability.focusArea.score}) is your lowest component. Improving this will have the biggest impact on your overall score.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Key Metrics Grid - with help tooltips */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <MetricWithHelp
+                    label="Recruiting Rate"
+                    value={rrMetrics.metrics.recruiting?.monthlyAverage || '--'}
+                    subValue="avg new members/month"
+                    trend={rrMetrics.metrics.recruiting?.trendPercent
+                      ? `${rrMetrics.metrics.recruiting.trendPercent}%`
+                      : null}
+                    trendDirection={rrMetrics.metrics.recruiting?.trend === 'increasing' ? 'up' :
+                                    rrMetrics.metrics.recruiting?.trend === 'decreasing' ? 'down' : 'stable'}
+                    color="blue"
+                    explanation={rrMetrics.metrics.recruiting?.explanation}
+                  />
+                  <MetricWithHelp
+                    label="Retention Rate"
+                    value={rrMetrics.metrics.retention?.retentionRate !== null
+                      ? `${rrMetrics.metrics.retention.retentionRate}%`
+                      : '--'}
+                    subValue={rrMetrics.metrics.retention?.healthIndicator === 'healthy' ? 'Healthy' :
+                              rrMetrics.metrics.retention?.healthIndicator === 'moderate' ? 'Moderate' :
+                              rrMetrics.metrics.retention?.healthIndicator === 'at-risk' ? 'Needs Attention' : ''}
+                    color={rrMetrics.metrics.retention?.healthIndicator === 'healthy' ? 'green' :
+                           rrMetrics.metrics.retention?.healthIndicator === 'moderate' ? 'amber' : 'red'}
+                    explanation={rrMetrics.metrics.retention?.explanation}
+                  />
+                  <MetricWithHelp
+                    label="Net Growth"
+                    value={rrMetrics.metrics.growth?.netChangeInPeriod !== undefined
+                      ? (rrMetrics.metrics.growth.netChangeInPeriod > 0 ? '+' : '') + rrMetrics.metrics.growth.netChangeInPeriod
+                      : '--'}
+                    subValue={`${timeRange === 0 ? 'All-time' : timeRange + '-month'} change`}
+                    trendDirection={rrMetrics.metrics.growth?.status === 'growing' ? 'up' :
+                                    rrMetrics.metrics.growth?.status === 'declining' ? 'down' : 'stable'}
+                    color={rrMetrics.metrics.growth?.status === 'growing' ? 'green' :
+                           rrMetrics.metrics.growth?.status === 'declining' ? 'red' : 'slate'}
+                    explanation={rrMetrics.metrics.growth?.explanation}
+                  />
+                  <MetricWithHelp
+                    label="Stability"
+                    value={rrMetrics.metrics.volatility?.stabilityRating
+                      ? rrMetrics.metrics.volatility.stabilityRating.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+                      : '--'}
+                    subValue={rrMetrics.metrics.volatility?.coefficientOfVariation !== undefined
+                      ? `${rrMetrics.metrics.volatility.coefficientOfVariation}% variation`
+                      : ''}
+                    color={rrMetrics.metrics.volatility?.stabilityRating === 'very-stable' ? 'green' :
+                           rrMetrics.metrics.volatility?.stabilityRating === 'stable' ? 'blue' :
+                           rrMetrics.metrics.volatility?.stabilityRating === 'moderate' ? 'amber' : 'red'}
+                    explanation={rrMetrics.metrics.volatility?.explanation}
+                  />
+                </div>
+
+                {/* Member Type Breakdown */}
+                {rrMetrics.summary?.memberBreakdown && (
+                  <div className="bg-white rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <h4 className="text-sm font-semibold text-slate-700">Member Breakdown</h4>
+                      <HelpTooltip position="right">
+                        <p className="mb-1">How members are categorized:</p>
+                        <ul className="text-[10px] text-slate-300 space-y-0.5">
+                          <li>• <strong>Senior:</strong> SENIOR, FIFTY YEAR, LIFE members</li>
+                          <li>• <strong>Cadet:</strong> Youth members 12-18</li>
+                          <li>• <strong>Cadet Sponsor:</strong> Adults supporting cadet program only</li>
+                        </ul>
+                        <p className="mt-1 text-slate-300">Operational Total = Senior + Cadet</p>
+                      </HelpTooltip>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      <div className="flex justify-between items-center px-2 py-1 bg-emerald-50 rounded">
+                        <span className="text-slate-600">Senior Program</span>
+                        <span className="font-bold text-emerald-700">{rrMetrics.summary.memberBreakdown.senior}</span>
+                      </div>
+                      <div className="flex justify-between items-center px-2 py-1 bg-amber-50 rounded">
+                        <span className="text-slate-600">Cadets</span>
+                        <span className="font-bold text-amber-700">{rrMetrics.summary.memberBreakdown.cadet}</span>
+                      </div>
+                      {rrMetrics.summary.memberBreakdown.cadetSponsor > 0 && (
+                        <div className="flex justify-between items-center px-2 py-1 bg-blue-50 rounded">
+                          <span className="text-slate-600">Cadet Sponsors</span>
+                          <span className="font-bold text-blue-700">{rrMetrics.summary.memberBreakdown.cadetSponsor}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mini Trend Chart */}
+                <div className="bg-white rounded-lg border border-slate-200 p-4">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Membership Trend</h4>
+                  <div className="h-48">
+                    <canvas id="chart-recruiting-mini"></canvas>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!rrMetrics && (
+              <div className="text-center py-8 text-slate-500">
+                <Icon name="BarChart3" className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <p>Loading recruiting and retention data...</p>
+              </div>
+            )}
+          </DashboardSection>
+        )}
+
+        {/* No Org Stats Data Message */}
+        {!hasOrgStatsData && orgStatsService && (
+          <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 text-center">
+            <Icon name="FileQuestion" className="w-10 h-10 mx-auto mb-3 text-slate-400" />
+            <h3 className="font-semibold text-slate-700 mb-1">No Historical Data Available</h3>
+            <p className="text-sm text-slate-500">
+              Organization statistics data is not available for the selected unit.
+            </p>
+          </div>
+        )}
+
+        {/* Emergency Services Section - Show for all view modes
+            For command-only mode, shows ES qualifications of staff assigned to the HQ unit */}
+        {esAnalysis && (
+          <ESReadinessSection
+            esAnalysis={esAnalysis}
+            isExpanded={expandedSection === 'emergency-services'}
+            onToggle={handleToggleSection}
+            onDeepDive={() => setESReadinessModal && setESReadinessModal({ isOpen: true, analysis: esAnalysis })}
+          />
+        )}
+
+        {/* ES Unit Comparison Table (Aggregate View) */}
+        {viewMode === 'aggregate' && sortedESMetrics.length > 0 && expandedSection === 'emergency-services' && (
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden mt-3">
+            <div className="p-3 border-b border-slate-200 bg-emerald-50">
+              <div className="flex items-center gap-2">
+                <Icon name="Activity" className="w-4 h-4 text-emerald-600" />
+                <h4 className="font-semibold text-sm text-emerald-800">ES Readiness by Unit</h4>
+                <span className="text-xs text-emerald-600 ml-auto">{sortedESMetrics.length} units</span>
+              </div>
+            </div>
+            <div className="p-3">
+              <ESUnitComparisonTable
+                unitMetrics={sortedESMetrics}
+                getUnitName={getUnitName}
+                sortConfig={esTableSortConfig}
+                onSort={handleESTableSort}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Quick Navigation Cards (for non-accordion dashboards) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                <Icon name="Users" className="w-4 h-4" />
+              </div>
+              <div className="text-xs uppercase text-slate-500 font-bold">Senior Members</div>
+            </div>
+            <div className="text-3xl font-bold text-slate-900">{processedData.length}</div>
+            <p className="text-sm text-slate-600 mt-1">Promotion-ready, training, and duty coverage.</p>
+            <button
+              onClick={() => setActiveTab('senior')}
+              className="mt-3 text-blue-600 text-sm font-semibold hover:underline"
+            >
+              Open Senior Dashboard
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                <Icon name="GraduationCap" className="w-4 h-4" />
+              </div>
+              <div className="text-xs uppercase text-slate-500 font-bold">Cadets</div>
+            </div>
+            <div className="text-3xl font-bold text-slate-900">{cadetData.length}</div>
+            <p className="text-sm text-slate-600 mt-1">Leadership billets, milestones, participation.</p>
+            <button
+              onClick={() => setActiveTab('cadet')}
+              className="mt-3 text-blue-600 text-sm font-semibold hover:underline"
+            >
+              Open Cadet Dashboard
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                <Icon name="Network" className="w-4 h-4" />
+              </div>
+              <div className="text-xs uppercase text-slate-500 font-bold">Organization</div>
+            </div>
+            <div className="text-3xl font-bold text-slate-900">
+              {orgChartData ? orgChartData.children.length + 1 : '-'}
+            </div>
+            <p className="text-sm text-slate-600 mt-1">Visualize the org chart and key billets.</p>
+            <button
+              onClick={() => setActiveTab('org')}
+              className="mt-3 text-blue-600 text-sm font-semibold hover:underline"
+            >
+              View Org Chart
+            </button>
+          </div>
+        </div>
+
+        {/* Future Sections Placeholder */}
+        <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+          <div className="flex items-center gap-2 text-slate-500">
+            <Icon name="Construction" className="w-5 h-5" />
+            <span className="text-sm font-medium">Coming Soon: Training Progress, Upcoming Due Dates</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+</script>

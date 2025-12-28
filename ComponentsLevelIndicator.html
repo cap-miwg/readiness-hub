@@ -1,0 +1,48 @@
+<script type="text/babel">
+const LevelIndicator = ({ level, label, name, progress = {}, onClick }) => {
+  const pct = progress.percent || 0;
+  const status = progress.status || 'not-started';
+  const approvalStatus = progress.approvalStatus;
+  const isComplete = status === 'completed';
+  const isReady = status === 'ready';
+  const isPending = status === 'pending';
+  const isInProgress = status === 'in-progress';
+  const isStarted = pct > 0;
+
+  let circleClass = "border-slate-200 bg-white";
+  let textClass = "text-slate-400";
+  if (isComplete) { circleClass = "border-blue-600 bg-blue-600"; textClass = "text-white"; }
+  else if (isReady) { circleClass = "border-amber-500 bg-amber-50"; textClass = "text-amber-700"; }
+  else if (isPending) { circleClass = "border-amber-600 bg-white"; textClass = "text-amber-700"; }
+  else if (isInProgress || isStarted) { circleClass = "border-blue-400 bg-white"; textClass = "text-blue-600"; }
+
+  const statusLine = (() => {
+    if (isComplete) return `Completed${progress.date ? `: ${progress.date}` : ""}`;
+    if (isPending) return approvalStatus === 'disapproved' ? "Submitted - needs update" : "Submitted - awaiting approval";
+    if (isReady) return "All modules done - submit for approval";
+    if (isInProgress) return "In progress";
+    if (isStarted) return "Started";
+    return "Not started";
+  })();
+
+  return (
+    <div className="flex flex-col items-center group cursor-pointer relative" onClick={onClick}>
+      <div className={`relative w-8 h-8 flex items-center justify-center rounded-full border-2 ${circleClass}`}>
+        {!isComplete && isStarted && !isReady && !isPending && (
+          <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
+            <path className="text-blue-500" strokeDasharray={`${pct}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+          </svg>
+        )}
+        {(isReady || isPending) && (
+          <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${isPending ? 'bg-amber-600 animate-pulse' : 'bg-amber-500'}`} />
+        )}
+        <span className={`text-xs font-bold ${textClass}`}>{label || level}</span>
+      </div>
+      <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1 px-2 shadow-lg">
+          {name || `Level ${label || level}`}: {pct}%
+          <div className="text-[10px] text-slate-300 mt-1">{statusLine}</div>
+      </div>
+    </div>
+  );
+};
+</script>

@@ -1,0 +1,42 @@
+<script type="text/babel">
+const determinePhaseFromAchievement = (achievementID) => {
+  const achvId = parseInt(achievementID);
+  if (!achvId) return 0;
+  const phaseEntries = Object.entries(CADET_PHASES || {});
+  for (const [phaseId, phase] of phaseEntries) {
+    const list = [...(phase.achievements || []), phase.milestoneAchv].filter(Boolean);
+    if (list.includes(achvId)) return parseInt(phaseId);
+  }
+  return 0;
+};
+
+const isMilestoneAchievement = (achievementID) => {
+  return CADET_MILESTONE_ACHIEVEMENTS.includes(parseInt(achievementID));
+};
+
+// Get the display name for an achievement (includes special award names and pioneer names)
+const getAchievementDisplayName = (achievementID) => {
+  const id = achievementID?.toString();
+  const baseName = CADET_ACHIEVEMENT_NAMES[id] || `Achievement ${achievementID}`;
+
+  // Add pioneer name in parentheses for non-milestone achievements
+  const pioneerName = CADET_ACHIEVEMENT_PIONEERS[id];
+  if (pioneerName) {
+    return `${baseName} (${pioneerName})`;
+  }
+
+  return baseName;
+};
+
+// Get the public-facing achievement number (maps CadetAchvID to public achievement numbering)
+const getPublicAchievementNumber = (achievementID) => {
+  const id = achievementID?.toString();
+  return CADET_PUBLIC_ACHIEVEMENT_NUMBERS[id] || parseInt(achievementID) || null;
+};
+
+// Get the rank insignia URL for an achievement
+const getRankInsigniaUrl = (achievementID) => {
+  const id = achievementID?.toString();
+  return CADET_RANK_INSIGNIA[id] || null;
+};
+</script>

@@ -1,0 +1,885 @@
+<script type="text/babel">
+/**
+ * ModalESReadiness.html
+ *
+ * Deep-dive modal for Emergency Services readiness analysis.
+ * Provides 6 tabs: Overview, Roster, Qualifications, Expirations, Pipeline, Insights
+ */
+
+/**
+ * ESReadinessModal - Main modal component for ES deep dive
+ */
+const ESReadinessModal = ({
+  isOpen,
+  onClose,
+  esAnalysis,
+  dataFiles,
+  unitFilter
+}) => {
+  const [activeTab, setActiveTab] = useState('overview');
+
+  if (!isOpen || !esAnalysis) return null;
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: 'LayoutDashboard' },
+    { id: 'roster', label: 'ES Roster', icon: 'Users' },
+    { id: 'qualifications', label: 'Qualifications', icon: 'Award' },
+    { id: 'expirations', label: 'Expirations', icon: 'Calendar' },
+    { id: 'pipeline', label: 'Pipeline', icon: 'TrendingUp' },
+    { id: 'insights', label: 'Insights', icon: 'Lightbulb' }
+  ];
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Emergency Services Readiness" maxWidthClass="max-w-6xl">
+      {/* Tab Navigation */}
+      <div className="flex gap-1 mb-4 overflow-x-auto pb-1 border-b border-slate-200">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Icon name={tab.icon} className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div className="min-h-[500px]">
+        {activeTab === 'overview' && (
+          <ESModalOverviewTab esAnalysis={esAnalysis} />
+        )}
+        {activeTab === 'roster' && (
+          <ESModalRosterTab esAnalysis={esAnalysis} />
+        )}
+        {activeTab === 'qualifications' && (
+          <ESModalQualificationsTab esAnalysis={esAnalysis} />
+        )}
+        {activeTab === 'expirations' && (
+          <ESModalExpirationsTab esAnalysis={esAnalysis} />
+        )}
+        {activeTab === 'pipeline' && (
+          <ESModalPipelineTab esAnalysis={esAnalysis} />
+        )}
+        {activeTab === 'insights' && (
+          <ESModalInsightsTab esAnalysis={esAnalysis} />
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+/**
+ * Overview Tab - Summary dashboard
+ */
+const ESModalOverviewTab = ({ esAnalysis }) => {
+  const getColorClass = (rating) => {
+    switch (rating) {
+      case 'excellent': return 'text-emerald-700 bg-emerald-50 border-emerald-200';
+      case 'good': return 'text-blue-700 bg-blue-50 border-blue-200';
+      case 'fair': return 'text-amber-700 bg-amber-50 border-amber-200';
+      default: return 'text-rose-700 bg-rose-50 border-rose-200';
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Readiness Score Hero */}
+      <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-6 border border-slate-200">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Overall ES Readiness</h3>
+            <p className="text-sm text-slate-600 mt-1">{esAnalysis.quickSummary}</p>
+          </div>
+          <div className={`text-center px-6 py-4 rounded-xl border ${getColorClass(esAnalysis.readinessRating)}`}>
+            <div className="text-4xl font-bold">{esAnalysis.readinessScore}</div>
+            <div className="text-sm font-medium capitalize">{esAnalysis.readinessRating}</div>
+          </div>
+        </div>
+
+        {/* Score Components */}
+        {esAnalysis.readinessComponents && (
+          <div className="grid grid-cols-5 gap-4 mt-6">
+            <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+              <div className="text-2xl font-bold text-slate-800">{esAnalysis.readinessComponents.teamScore}</div>
+              <div className="text-xs text-slate-500">Team Capability</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+              <div className="text-2xl font-bold text-slate-800">{esAnalysis.readinessComponents.qualScore}</div>
+              <div className="text-xs text-slate-500">Qual Health</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+              <div className="text-2xl font-bold text-slate-800">{esAnalysis.readinessComponents.evaluatorScore}</div>
+              <div className="text-xs text-slate-500">Evaluator Coverage</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+              <div className="text-2xl font-bold text-slate-800">{esAnalysis.readinessComponents.riskScore}</div>
+              <div className="text-xs text-slate-500">Risk Mitigation</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+              <div className="text-2xl font-bold text-slate-800">{esAnalysis.readinessComponents.pipelineScore}</div>
+              <div className="text-xs text-slate-500">Pipeline</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Team Capabilities Summary */}
+      <div>
+        <h4 className="text-sm font-semibold text-slate-700 mb-3">Team Capabilities</h4>
+        <div className="grid grid-cols-5 gap-4">
+          {Object.entries(esAnalysis.teams).map(([key, team]) => {
+            const colorStyles = {
+              green: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+              blue: 'bg-blue-50 border-blue-200 text-blue-700',
+              amber: 'bg-amber-50 border-amber-200 text-amber-700',
+              red: 'bg-rose-50 border-rose-200 text-rose-700'
+            };
+
+            // Determine display values based on team type
+            let mainValue, subText;
+            if (key === 'fieldOps') {
+              // Field Ops shows combined ground + UDF teams
+              const groundTeams = team.groundTeamsFieldable || 0;
+              const udfTeams = team.udfTeamsFieldable || 0;
+              mainValue = groundTeams + udfTeams;
+              subText = `${groundTeams} ground, ${udfTeams} UDF`;
+            } else if (team.isStaffing) {
+              // Staffing positions (Mission Base, Command)
+              mainValue = team.qualifiedCount || 0;
+              subText = `${team.positionsCovered || 0}/${team.totalPositionTypes || 0} position types`;
+            } else if (team.teamsFieldable !== undefined) {
+              // Standard team-based (Aircrew, sUAS)
+              mainValue = team.teamsFieldable;
+              subText = 'teams';
+            } else {
+              mainValue = 0;
+              subText = 'teams';
+            }
+
+            return (
+              <div key={key} className={`p-4 rounded-lg border ${colorStyles[team.color] || colorStyles.red}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <Icon name={team.icon || 'Users'} className="w-5 h-5" />
+                  {(team.canField || (team.isStaffing && team.qualifiedCount > 0)) && <Icon name="CheckCircle" className="w-5 h-5" />}
+                </div>
+                <div className="font-semibold">{team.name}</div>
+                <div className="text-2xl font-bold mt-1">{mainValue}</div>
+                <div className="text-xs opacity-75">{subText}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+          <div className="text-3xl font-bold text-emerald-700">{esAnalysis.qualifications.byStatus.active}</div>
+          <div className="text-sm text-emerald-600">Active Operational Quals</div>
+        </div>
+        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <div className="text-3xl font-bold text-amber-700">{esAnalysis.qualifications.byStatus.training}</div>
+          <div className="text-sm text-amber-600">In Training</div>
+        </div>
+        <div className="p-4 bg-rose-50 rounded-lg border border-rose-200">
+          <div className="text-3xl font-bold text-rose-700">{esAnalysis.qualifications.expiringWithin90Days.length}</div>
+          <div className="text-sm text-rose-600">Expiring in 90 Days</div>
+        </div>
+        <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+          <div className="text-3xl font-bold text-indigo-700">{esAnalysis.evaluators.evaluatorCount || esAnalysis.evaluators.available?.length || 0}</div>
+          <div className="text-sm text-indigo-600">Potential Evaluators*</div>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 mt-2">
+        *Potential evaluators are identified based on SET qualification and 1+ year holding a qual. Verify actual evaluator status in eServices.
+      </p>
+    </div>
+  );
+};
+
+/**
+ * Roster Tab - Member-by-member ES qualification table
+ * Shows Skills Evaluator status with green border on qualifications they can evaluate
+ */
+const ESModalRosterTab = ({ esAnalysis }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterPosition, setFilterPosition] = useState('all');
+
+  // Build lookup of which qualifications each member can evaluate
+  const evaluatorLookup = useMemo(() => {
+    const lookup = new Map();
+    (esAnalysis.evaluators?.available || []).forEach(evaluator => {
+      // Get position codes for qualifications they can evaluate
+      const canEvaluatePositions = (evaluator.canEvaluate || []).map(qual => {
+        // Convert achvID to position code
+        return ES_ACHV_TO_POSITION[qual.achvID] || qual.name;
+      });
+      lookup.set(evaluator.capid, new Set(canEvaluatePositions));
+    });
+    return lookup;
+  }, [esAnalysis.evaluators]);
+
+  // Collect all qualified members from all teams
+  const allMembers = useMemo(() => {
+    const memberMap = new Map();
+
+    Object.entries(esAnalysis.teams).forEach(([teamKey, team]) => {
+      (team.qualifiedMembers || []).forEach(member => {
+        if (!memberMap.has(member.capid)) {
+          memberMap.set(member.capid, {
+            ...member,
+            positions: [...member.positions],
+            isEvaluator: evaluatorLookup.has(member.capid),
+            canEvaluate: evaluatorLookup.get(member.capid) || new Set()
+          });
+        } else {
+          const existing = memberMap.get(member.capid);
+          member.positions.forEach(pos => {
+            if (!existing.positions.includes(pos)) {
+              existing.positions.push(pos);
+            }
+          });
+        }
+      });
+    });
+
+    return Array.from(memberMap.values());
+  }, [esAnalysis.teams, evaluatorLookup]);
+
+  // Get unique positions for filter
+  const allPositions = useMemo(() => {
+    const positions = new Set();
+    allMembers.forEach(m => m.positions.forEach(p => positions.add(p)));
+    return Array.from(positions).sort();
+  }, [allMembers]);
+
+  // Filter members
+  const filteredMembers = useMemo(() => {
+    return allMembers.filter(m => {
+      const matchesSearch = searchTerm === '' ||
+        m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.capid.includes(searchTerm);
+      const matchesPosition = filterPosition === 'all' ||
+        m.positions.includes(filterPosition);
+      return matchesSearch && matchesPosition;
+    });
+  }, [allMembers, searchTerm, filterPosition]);
+
+  return (
+    <div className="space-y-4">
+      {/* Legend and Disclaimer */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-4 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg">
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 font-medium rounded-full">GTL</span>
+            <span>= Active qualification</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 font-medium rounded-full ring-2 ring-emerald-500 ring-offset-1">GTL</span>
+            <span>= Potential evaluator for this qualification</span>
+          </div>
+        </div>
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg">
+          <Icon name="AlertTriangle" className="w-3 h-3 inline mr-1" />
+          <strong>Note:</strong> Potential evaluators are identified based on having SET qualification and holding a qualification for 1+ year.
+          This is an estimate only — verify actual evaluator status in eServices, as members must be keyed in as evaluators for specific qualifications.
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4 items-center">
+        <div className="flex-1">
+          <input
+            type="text"
+            placeholder="Search by name or CAPID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <select
+          value={filterPosition}
+          onChange={(e) => setFilterPosition(e.target.value)}
+          className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Positions</option>
+          {allPositions.map(pos => (
+            <option key={pos} value={pos}>{pos}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Member count */}
+      <div className="text-sm text-slate-500">
+        Showing {filteredMembers.length} of {allMembers.length} ES-qualified members
+        {esAnalysis.evaluators?.available?.length > 0 && (
+          <span className="ml-2">• {esAnalysis.evaluators.available.length} Potential Evaluator{esAnalysis.evaluators.available.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Member</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">CAPID</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">ES Qualifications</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredMembers.map((member, idx) => (
+              <tr key={member.capid} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-25'}>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-800">{member.rank} {member.name}</span>
+                    {member.isEvaluator && (
+                      <span className="px-1.5 py-0.5 bg-emerald-600 text-white text-[10px] font-bold rounded" title="Has SET qualification - potential evaluator (verify in eServices)">SET</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600">{member.capid}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {member.positions.map(pos => {
+                      const canEvaluateThis = member.canEvaluate.has(pos);
+                      return (
+                        <span
+                          key={pos}
+                          className={`px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full ${
+                            canEvaluateThis ? 'ring-2 ring-emerald-500 ring-offset-1' : ''
+                          }`}
+                          title={canEvaluateThis ? `Potential evaluator for ${pos} (verify in eServices)` : pos}
+                        >
+                          {pos}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filteredMembers.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                  No members match the current filters
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Qualifications Tab - Status breakdown by functional area
+ */
+const ESModalQualificationsTab = ({ esAnalysis }) => {
+  const qualStats = esAnalysis.qualifications;
+
+  // Group by team type - using the correct keys that match positionCounts
+  // Note: positionCounts counts MEMBERS with each qual, not total qual records
+  const teamQuals = [
+    {
+      name: 'Field Operations',
+      // Map display name to positionCounts key - individual GTM levels
+      positions: [
+        { display: 'GTL', key: 'GTL' },
+        { display: 'GTM1', key: 'GTM1' },
+        { display: 'GTM2', key: 'GTM2' },
+        { display: 'GTM3', key: 'GTM3' },
+        { display: 'UDF', key: 'UDF' },
+        { display: 'GBD', key: 'GBD' }
+      ],
+      teamKey: 'fieldOps',
+      color: 'emerald'
+    },
+    {
+      name: 'Air Operations',
+      // Individual aircrew positions: MP, TMP, MS, MO, AP, AOBD
+      positions: [
+        { display: 'MP', key: 'MP' },
+        { display: 'TMP', key: 'TMP' },
+        { display: 'MS', key: 'MS' },
+        { display: 'MO', key: 'MO' },
+        { display: 'AP', key: 'AP' },
+        { display: 'AOBD', key: 'AOBD' }
+      ],
+      teamKey: 'aircrew',
+      color: 'blue'
+    },
+    {
+      name: 'sUAS Operations',
+      positions: [
+        { display: 'sUASMP', key: 'UASMP' },
+        { display: 'sUAST', key: 'UAST' }
+      ],
+      teamKey: 'suas',
+      color: 'indigo'
+    },
+    {
+      name: 'Mission Base',
+      positions: [
+        { display: 'MSA', key: 'MSA' },
+        { display: 'MRO', key: 'MRO' },
+        { display: 'CUL', key: 'CUL' },
+        { display: 'FLM', key: 'FLM' },
+        { display: 'FLS', key: 'FLS' },
+        { display: 'PIO', key: 'PIO' },
+        { display: 'LO', key: 'LO' },
+        { display: 'MSO', key: 'MSO' }
+      ],
+      teamKey: 'missionBase',
+      color: 'amber'
+    },
+    {
+      name: 'Command Staff',
+      positions: [
+        { display: 'IC3', key: 'IC3' },
+        { display: 'IC2', key: 'IC2' },
+        { display: 'IC1', key: 'IC1' },
+        { display: 'OSC', key: 'OSC' },
+        { display: 'PSC', key: 'PSC' },
+        { display: 'LSC', key: 'LSC' },
+        { display: 'FASC', key: 'FASC' }
+      ],
+      teamKey: 'command',
+      color: 'purple'
+    }
+  ];
+
+  // Get position count from the specific team's positionCounts
+  const getPositionCount = (teamKey, positionKey) => {
+    const team = esAnalysis.teams[teamKey];
+    if (team && team.positionCounts && team.positionCounts[positionKey] !== undefined) {
+      return team.positionCounts[positionKey];
+    }
+    return 0;
+  };
+
+  // Calculate total members shown in breakdown
+  const totalMembersInBreakdown = useMemo(() => {
+    let total = 0;
+    teamQuals.forEach(category => {
+      category.positions.forEach(pos => {
+        total += getPositionCount(category.teamKey, pos.key);
+      });
+    });
+    return total;
+  }, [esAnalysis.teams]);
+
+  return (
+    <div className="space-y-6">
+      {/* Overall Status - Total operational qualification records across all members */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon name="CheckCircle" className="w-5 h-5 text-emerald-600" />
+            <span className="font-semibold text-emerald-700">Active</span>
+          </div>
+          <div className="text-3xl font-bold text-emerald-800">{qualStats.byStatus.active}</div>
+          <div className="text-sm text-emerald-600">Operational qualifications</div>
+        </div>
+        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon name="Clock" className="w-5 h-5 text-amber-600" />
+            <span className="font-semibold text-amber-700">Training</span>
+          </div>
+          <div className="text-3xl font-bold text-amber-800">{qualStats.byStatus.training}</div>
+          <div className="text-sm text-amber-600">In progress</div>
+        </div>
+        <div className="p-4 bg-rose-50 rounded-lg border border-rose-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon name="XCircle" className="w-5 h-5 text-rose-600" />
+            <span className="font-semibold text-rose-700">Expired</span>
+          </div>
+          <div className="text-3xl font-bold text-rose-800">{qualStats.byStatus.expired}</div>
+          <div className="text-sm text-rose-600">Expired records</div>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        Note: Counts include operational qualifications only (team positions, not GES/SET).
+        One member can hold multiple qualifications.
+      </p>
+
+      {/* By Team Type - Shows MEMBERS per position (not total qual records) */}
+      <div className="space-y-4">
+        <h4 className="text-sm font-semibold text-slate-700">Members by Position Type</h4>
+        {teamQuals.map(category => {
+          const colorStyles = {
+            emerald: 'bg-emerald-50 border-emerald-200',
+            blue: 'bg-blue-50 border-blue-200',
+            indigo: 'bg-indigo-50 border-indigo-200',
+            amber: 'bg-amber-50 border-amber-200',
+            purple: 'bg-purple-50 border-purple-200'
+          };
+
+          return (
+            <div key={category.name} className={`p-4 rounded-lg border ${colorStyles[category.color]}`}>
+              <h5 className="font-semibold text-slate-700 mb-3">{category.name}</h5>
+              <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                {category.positions.map(pos => {
+                  const count = getPositionCount(category.teamKey, pos.key);
+                  return (
+                    <div key={pos.key} className="text-center p-2 bg-white rounded border border-slate-200">
+                      <div className="text-lg font-bold text-slate-800">{count}</div>
+                      <div className="text-xs text-slate-500">{pos.display}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Missing GES Warning */}
+      {qualStats.missingGES && qualStats.missingGES.length > 0 && (
+        <div className="p-4 bg-rose-50 rounded-lg border border-rose-200">
+          <div className="flex items-center gap-2 mb-3">
+            <Icon name="AlertTriangle" className="w-5 h-5 text-rose-600" />
+            <h5 className="font-semibold text-rose-700">Members Without GES</h5>
+          </div>
+          <p className="text-sm text-rose-600 mb-3">
+            These members cannot participate in ES operations without General Emergency Services (GES) qualification.
+          </p>
+          <div className="space-y-1">
+            {qualStats.missingGES.slice(0, 10).map(m => (
+              <div key={m.capid} className="text-sm text-rose-800">
+                {m.rank} {m.name}
+              </div>
+            ))}
+            {qualStats.missingGES.length > 10 && (
+              <div className="text-sm text-rose-600">+{qualStats.missingGES.length - 10} more</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Expirations Tab - Calendar/timeline view of upcoming expirations
+ */
+const ESModalExpirationsTab = ({ esAnalysis }) => {
+  const expiring = esAnalysis.qualifications.expiringWithin90Days;
+
+  // Group by urgency
+  const critical = expiring.filter(e => e.urgency === 'critical');
+  const warning = expiring.filter(e => e.urgency === 'warning');
+  const notice = expiring.filter(e => e.urgency === 'notice');
+
+  const ExpirationList = ({ items, urgencyLabel, bgColor, textColor, borderColor }) => (
+    <div className={`p-4 rounded-lg border ${bgColor} ${borderColor}`}>
+      <div className="flex items-center justify-between mb-3">
+        <h5 className={`font-semibold ${textColor}`}>{urgencyLabel}</h5>
+        <span className={`text-sm font-bold ${textColor}`}>{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">None</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((e, idx) => (
+            <div key={`${e.capid}-${e.achvID}-${idx}`} className="flex items-center justify-between p-2 bg-white rounded border border-slate-200">
+              <div>
+                <div className="font-medium text-slate-800">{e.rank} {e.name}</div>
+                <div className="text-xs text-slate-500">{e.qualification}</div>
+              </div>
+              <div className="text-right">
+                <div className={`font-bold ${textColor}`}>{e.daysUntil} days</div>
+                <div className="text-xs text-slate-500">{e.expiration}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
+        <Icon name="Calendar" className="w-8 h-8 text-slate-400" />
+        <div>
+          <div className="text-lg font-bold text-slate-800">
+            {expiring.length} Qualification{expiring.length !== 1 ? 's' : ''} Expiring
+          </div>
+          <div className="text-sm text-slate-600">Within the next 90 days</div>
+        </div>
+      </div>
+
+      {/* By Urgency */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <ExpirationList
+          items={critical}
+          urgencyLabel="Critical (0-30 days)"
+          bgColor="bg-rose-50"
+          textColor="text-rose-700"
+          borderColor="border-rose-200"
+        />
+        <ExpirationList
+          items={warning}
+          urgencyLabel="Warning (31-60 days)"
+          bgColor="bg-amber-50"
+          textColor="text-amber-700"
+          borderColor="border-amber-200"
+        />
+        <ExpirationList
+          items={notice}
+          urgencyLabel="Notice (61-90 days)"
+          bgColor="bg-yellow-50"
+          textColor="text-yellow-700"
+          borderColor="border-yellow-200"
+        />
+      </div>
+
+      {/* No Expirations */}
+      {expiring.length === 0 && (
+        <div className="text-center py-8">
+          <Icon name="CheckCircle" className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
+          <h4 className="text-lg font-semibold text-slate-800">All Clear</h4>
+          <p className="text-sm text-slate-600">No qualifications expiring in the next 90 days</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Pipeline Tab - Members in training, near qualification
+ */
+const ESModalPipelineTab = ({ esAnalysis }) => {
+  const pipeline = esAnalysis.pipeline;
+
+  // Group training by position
+  const trainingByPosition = useMemo(() => {
+    const byPos = {};
+    (pipeline.activeTraining || []).forEach(t => {
+      if (!byPos[t.position]) {
+        byPos[t.position] = [];
+      }
+      byPos[t.position].push(t);
+    });
+    return byPos;
+  }, [pipeline.activeTraining]);
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="flex items-center gap-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+        <Icon name="TrendingUp" className="w-8 h-8 text-indigo-600" />
+        <div>
+          <div className="text-lg font-bold text-indigo-800">
+            {pipeline.activeTraining?.length || 0} Member{(pipeline.activeTraining?.length || 0) !== 1 ? 's' : ''} in Training
+          </div>
+          <div className="text-sm text-indigo-600">Actively working toward ES qualifications</div>
+        </div>
+      </div>
+
+      {/* By Position */}
+      {Object.keys(trainingByPosition).length > 0 ? (
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-slate-700">Training by Qualification</h4>
+          {Object.entries(trainingByPosition).map(([position, members]) => (
+            <div key={position} className="p-4 bg-white rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="font-semibold text-slate-700">{position}</h5>
+                <span className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                  {members.length} training
+                </span>
+              </div>
+              <div className="space-y-2">
+                {members.map((m, idx) => (
+                  <div key={`${m.capid}-${idx}`} className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                    <div>
+                      <span className="font-medium text-slate-800">{m.rank} {m.name}</span>
+                      <span className="text-xs text-slate-500 ml-2">({m.capid})</span>
+                    </div>
+                    <span className="text-xs text-indigo-600">Training for: {m.qualification}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-8">
+          <Icon name="BookOpen" className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+          <h4 className="text-lg font-semibold text-slate-800">No Active Training</h4>
+          <p className="text-sm text-slate-600">No members are currently training for ES qualifications</p>
+          <p className="text-sm text-slate-500 mt-2">Consider starting training for positions with gaps</p>
+        </div>
+      )}
+
+      {/* Training Recommendations */}
+      <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div className="flex items-center gap-2 mb-3">
+          <Icon name="Lightbulb" className="w-5 h-5 text-slate-600" />
+          <h5 className="font-semibold text-slate-700">Training Priorities</h5>
+        </div>
+        <div className="space-y-2 text-sm text-slate-600">
+          {esAnalysis.teams.fieldOps?.gaps?.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Icon name="ArrowRight" className="w-4 h-4 text-slate-400" />
+              <span>Field Ops: {esAnalysis.teams.fieldOps.gaps.join(', ')}</span>
+            </div>
+          )}
+          {esAnalysis.teams.aircrew?.gaps?.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Icon name="ArrowRight" className="w-4 h-4 text-slate-400" />
+              <span>Aircrew: {esAnalysis.teams.aircrew.gaps.join(', ')}</span>
+            </div>
+          )}
+          {esAnalysis.teams.suas?.gaps?.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Icon name="ArrowRight" className="w-4 h-4 text-slate-400" />
+              <span>sUAS: {esAnalysis.teams.suas.gaps.join(', ')}</span>
+            </div>
+          )}
+          {esAnalysis.evaluators.gaps.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Icon name="ArrowRight" className="w-4 h-4 text-slate-400" />
+              <span>Need evaluators for: {esAnalysis.evaluators.gaps.slice(0, 3).join(', ')}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Insights Tab - SAREX planning recommendations, training priorities
+ */
+const ESModalInsightsTab = ({ esAnalysis }) => {
+  const recommendations = esAnalysis.risks.recommendations || [];
+
+  // Priority color mapping
+  const priorityStyles = {
+    critical: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', badge: 'bg-rose-100 text-rose-800' },
+    high: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800' },
+    medium: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
+    low: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', badge: 'bg-slate-100 text-slate-800' }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Key Insights */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+          <Icon name="ThumbsUp" className="w-6 h-6 text-emerald-600 mb-2" />
+          <h5 className="font-semibold text-emerald-700 mb-2">Strengths</h5>
+          <ul className="space-y-1 text-sm text-emerald-600">
+            {esAnalysis.teams.fieldOps?.canFieldGround && <li>✓ Can field ground team</li>}
+            {esAnalysis.teams.fieldOps?.canFieldUDF && <li>✓ Can field UDF team</li>}
+            {esAnalysis.teams.aircrew?.canField && <li>✓ Can field aircrew</li>}
+            {esAnalysis.teams.suas?.canField && <li>✓ sUAS capability</li>}
+            {esAnalysis.teams.command?.hasIC && <li>✓ IC available</li>}
+            {esAnalysis.evaluators?.coverage >= 50 && <li>✓ Good potential evaluator coverage</li>}
+            {esAnalysis.qualifications?.expiringWithin90Days?.length === 0 && <li>✓ No expiring qualifications</li>}
+          </ul>
+        </div>
+        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <Icon name="AlertTriangle" className="w-6 h-6 text-amber-600 mb-2" />
+          <h5 className="font-semibold text-amber-700 mb-2">Areas for Improvement</h5>
+          <ul className="space-y-1 text-sm text-amber-600">
+            {!esAnalysis.teams.fieldOps?.canField && <li>• Cannot field ground/UDF team</li>}
+            {!esAnalysis.teams.aircrew?.canField && <li>• Cannot field aircrew</li>}
+            {!esAnalysis.teams.suas?.canField && <li>• No sUAS capability</li>}
+            {esAnalysis.risks?.singlePointsOfFailure?.length > 0 && <li>• Single points of failure</li>}
+            {esAnalysis.evaluators?.coverage < 50 && <li>• Limited potential evaluator coverage</li>}
+            {esAnalysis.qualifications?.missingGES?.length > 0 && <li>• Members without GES</li>}
+          </ul>
+        </div>
+      </div>
+
+      {/* Recommendations */}
+      <div>
+        <h4 className="text-sm font-semibold text-slate-700 mb-3">Recommendations</h4>
+        {recommendations.length > 0 ? (
+          <div className="space-y-3">
+            {recommendations.map((rec, idx) => {
+              const style = priorityStyles[rec.priority] || priorityStyles.medium;
+              return (
+                <div key={idx} className={`p-4 rounded-lg border ${style.bg} ${style.border}`}>
+                  <div className="flex items-start gap-3">
+                    <span className={`px-2 py-0.5 text-xs font-bold rounded ${style.badge}`}>
+                      {rec.priority.toUpperCase()}
+                    </span>
+                    <div className="flex-1">
+                      <div className={`font-medium ${style.text}`}>{rec.recommendation}</div>
+                      {rec.impact && (
+                        <div className="text-sm text-slate-500 mt-1">
+                          <span className="font-medium">Impact:</span> {rec.impact}
+                        </div>
+                      )}
+                      {rec.area && (
+                        <div className="text-xs text-slate-400 mt-1">Area: {rec.area}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Icon name="CheckCircle" className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
+            <h4 className="text-lg font-semibold text-slate-800">Looking Good!</h4>
+            <p className="text-sm text-slate-600">No critical recommendations at this time</p>
+          </div>
+        )}
+      </div>
+
+      {/* SAREX Planning */}
+      <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+        <div className="flex items-center gap-2 mb-3">
+          <Icon name="Target" className="w-5 h-5 text-indigo-600" />
+          <h5 className="font-semibold text-indigo-700">SAREX Planning Suggestions</h5>
+        </div>
+        <div className="space-y-2 text-sm text-indigo-600">
+          {esAnalysis.pipeline.activeTraining.length > 0 && (
+            <div className="flex items-start gap-2">
+              <Icon name="CheckSquare" className="w-4 h-4 mt-0.5" />
+              <span>Include training scenarios for {esAnalysis.pipeline.activeTraining.length} member(s) in training</span>
+            </div>
+          )}
+          {esAnalysis.evaluators.gaps.length > 0 && (
+            <div className="flex items-start gap-2">
+              <Icon name="CheckSquare" className="w-4 h-4 mt-0.5" />
+              <span>Request external evaluators for: {esAnalysis.evaluators.gaps.slice(0, 2).join(', ')}</span>
+            </div>
+          )}
+          {esAnalysis.risks.singlePointsOfFailure.length > 0 && (
+            <div className="flex items-start gap-2">
+              <Icon name="CheckSquare" className="w-4 h-4 mt-0.5" />
+              <span>Cross-train backup personnel for SPOF positions</span>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <Icon name="CheckSquare" className="w-4 h-4 mt-0.5" />
+            <span>Focus exercises on team types unit can field: {
+              [
+                esAnalysis.teams.fieldOps?.canFieldGround && 'Ground',
+                esAnalysis.teams.fieldOps?.canFieldUDF && 'UDF',
+                esAnalysis.teams.aircrew?.canField && 'Air',
+                esAnalysis.teams.suas?.canField && 'sUAS'
+              ].filter(Boolean).join(', ') || 'None currently'
+            }</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+</script>

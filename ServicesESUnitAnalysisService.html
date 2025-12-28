@@ -1,0 +1,1075 @@
+<script type="text/babel">
+/**
+ * ServicesESUnitAnalysisService.html
+ *
+ * Unit-level Emergency Services analysis service.
+ * Analyzes ES readiness, team composition, qualification health, and risks.
+ *
+ * Dependencies:
+ * - ConfigConstants.html (ES_TEAM_REQUIREMENTS, ES_READINESS_WEIGHTS, etc.)
+ * - ServicesESDataService.html (buildESQualifications, etc.)
+ */
+
+function createESUnitAnalysisService(rawConfig, rawData, esDataService) {
+  const _rawConfig = rawConfig;
+  const _rawData = rawData;
+  const _esDataService = esDataService;
+
+  // Helper: Get active members for an org (or multiple orgs)
+  // Includes seniors and cadets with ES qualifications, excludes Patrons and Cadet Sponsors
+  const getMembersForOrg = (orgId, options = {}) => {
+    const { includeDescendants = false, descendantOrgIds = [] } = options;
+
+    const targetOrgIds = new Set([String(orgId || '').trim()]);
+    if (includeDescendants && descendantOrgIds.length > 0) {
+      descendantOrgIds.forEach(id => targetOrgIds.add(String(id || '').trim()));
+    }
+
+    // Excluded member types - Patrons and Cadet Sponsors cannot participate in ES
+    const excludedMemberTypes = new Set(['PATRON', 'CADET SPONSOR']);
+
+    return (_rawData.members || []).filter(m => {
+      const status = String(m.MbrStatus || '').toUpperCase();
+      const memberOrgId = String(m.ORGID || '').trim();
+      const memberType = String(m.Type || '').toUpperCase();
+
+      // Must be active, in target org, and not a Patron or Cadet Sponsor
+      // Cadets are now included - they can hold ES qualifications and participate
+      return status === 'ACTIVE' &&
+             targetOrgIds.has(memberOrgId) &&
+             !excludedMemberTypes.has(memberType);
+    });
+  };
+
+  // Helper: Get all ES qualifications for a member (active only)
+  const getMemberActiveQuals = (capid) => {
+    return (_rawData.esMbrAchievements || []).filter(a =>
+      a.CAPID === capid &&
+      String(a.Status || '').toUpperCase() === 'ACTIVE' &&
+      !ES_EXCLUDED_ACHIEVEMENT_IDS.has(a.AchvID) &&
+      !ES_EXCLUDED_FUNCTIONAL_AREAS.has(
+        (_rawConfig.esAchievements || []).find(def => def.AchvID === a.AchvID)?.FunctionalArea
+      )
+    );
+  };
+
+  // Helper: Get all ES qualifications for a member (any status)
+  // Deduplicates so each AchvID appears only once with the most relevant status
+  const getMemberAllQuals = (capid) => {
+    const rawQuals = (_rawData.esMbrAchievements || []).filter(a =>
+      a.CAPID === capid &&
+      !ES_EXCLUDED_ACHIEVEMENT_IDS.has(a.AchvID) &&
+      !ES_EXCLUDED_FUNCTIONAL_AREAS.has(
+        (_rawConfig.esAchievements || []).find(def => def.AchvID === a.AchvID)?.FunctionalArea
+      )
+    );
+
+    // Deduplicate: Keep only one record per AchvID, preferring Active > Training > Expired
+    const qualMap = new Map();
+    const statusPriority = { 'ACTIVE': 1, 'TRAINING': 2, 'NOT APPROVED': 3, 'EXPIRED': 4 };
+
+    rawQuals.forEach(q => {
+      const existing = qualMap.get(q.AchvID);
+      const currentStatus = String(q.Status || '').toUpperCase();
+      const currentPriority = statusPriority[currentStatus] || 999;
+
+      if (!existing) {
+        qualMap.set(q.AchvID, q);
+      } else {
+        const existingStatus = String(existing.Status || '').toUpperCase();
+        const existingPriority = statusPriority[existingStatus] || 999;
+
+        // Keep higher priority status (lower number = higher priority)
+        if (currentPriority < existingPriority) {
+          qualMap.set(q.AchvID, q);
+        }
+      }
+    });
+
+    return Array.from(qualMap.values());
+  };
+
+  // Calculate Field Operations capacity (Ground Teams + UDF combined)
+  const calculateFieldOpsCapacity = (members) => {
+    const fieldReq = ES_TEAM_REQUIREMENTS.fieldOps;
+    let gtlCount = 0;
+    let gtm1Count = 0;
+    let gtm2Count = 0;
+    let gtm3Count = 0;
+    let udfCount = 0;
+    let gbdCount = 0;
+    const qualifiedMembers = [];
+
+    members.forEach(m => {
+      const quals = getMemberActiveQuals(m.CAPID);
+      const positions = [];
+
+      quals.forEach(q => {
+        if (q.AchvID === fieldReq.achvIDs.GTL) {
+          gtlCount++;
+          positions.push('GTL');
+        }
+        // Track individual GTM levels
+        if (q.AchvID === fieldReq.achvIDs.GTM1) {
+          gtm1Count++;
+          positions.push('GTM1');
+        }
+        if (q.AchvID === fieldReq.achvIDs.GTM2) {
+          gtm2Count++;
+          positions.push('GTM2');
+        }
+        if (q.AchvID === fieldReq.achvIDs.GTM3) {
+          gtm3Count++;
+          positions.push('GTM3');
+        }
+        if (q.AchvID === fieldReq.achvIDs.UDF) {
+          udfCount++;
+          positions.push('UDF');
+        }
+        if (q.AchvID === fieldReq.achvIDs.GBD) {
+          gbdCount++;
+          positions.push('GBD');
+        }
+      });
+
+      if (positions.length > 0) {
+        qualifiedMembers.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank,
+          positions
+        });
+      }
+    });
+
+    // Total GTM count for team calculation (any GTM level counts)
+    const gtmTotal = gtm1Count + gtm2Count + gtm3Count;
+
+    // Calculate ground teams fieldable
+    // Per CAPR 60-3: Each team needs 1 GTL and 3 GTMs for a 4-person minimum team
+    const groundTeamsFieldable = Math.min(gtlCount, Math.floor(gtmTotal / 3));
+    const canFieldGround = gtlCount >= 1 && gtmTotal >= 3;
+
+    // Calculate UDF teams fieldable (2 UDF members per team)
+    const udfTeamsFieldable = Math.floor(udfCount / 2);
+    const canFieldUDF = udfCount >= 2;
+
+    // Overall field capability
+    const canField = canFieldGround || canFieldUDF;
+
+    const gaps = [];
+    // Ground team gaps
+    if (gtlCount < 1) gaps.push('Need 1 GTL for ground team');
+    else if (gtlCount === 1 && canFieldGround) gaps.push('Single GTL (SPOF)');
+    if (gtmTotal < 3) gaps.push(`Need ${3 - gtmTotal} more GTM`);
+    // UDF gaps
+    if (udfCount < 2) gaps.push(`Need ${2 - udfCount} more UDF`);
+
+    // Determine color based on both capabilities
+    let color = 'red';
+    if (canFieldGround && canFieldUDF) {
+      color = (groundTeamsFieldable >= 2 || udfTeamsFieldable >= 2) ? 'green' : 'blue';
+    } else if (canFieldGround || canFieldUDF) {
+      color = 'blue';
+    } else if (gtlCount > 0 || gtmTotal > 0 || udfCount > 0) {
+      color = 'amber';
+    }
+
+    return {
+      name: fieldReq.name,
+      shortName: fieldReq.shortName,
+      icon: fieldReq.icon,
+      canField,
+      canFieldGround,
+      canFieldUDF,
+      groundTeamsFieldable,
+      udfTeamsFieldable,
+      positionCounts: { GTL: gtlCount, GTM1: gtm1Count, GTM2: gtm2Count, GTM3: gtm3Count, UDF: udfCount, GBD: gbdCount },
+      gaps,
+      qualifiedMembers,
+      color
+    };
+  };
+
+  // Calculate Aircrew capacity
+  const calculateAircrewCapacity = (members) => {
+    const airReq = ES_TEAM_REQUIREMENTS.aircrew;
+    let mpCount = 0;   // SAR/DR Mission Pilot
+    let tmpCount = 0;  // Transport Mission Pilot
+    let msCount = 0;   // Mission Scanner
+    let moCount = 0;   // Mission Observer
+    let apCount = 0;   // Airborne Photographer
+    let aobdCount = 0; // Air Operations Branch Director
+    const qualifiedMembers = [];
+
+    members.forEach(m => {
+      const quals = getMemberActiveQuals(m.CAPID);
+      const positions = [];
+
+      quals.forEach(q => {
+        // Track individual pilot types
+        if (q.AchvID === airReq.achvIDs.MP) {
+          mpCount++;
+          positions.push('MP');
+        }
+        if (q.AchvID === airReq.achvIDs.TMP) {
+          tmpCount++;
+          positions.push('TMP');
+        }
+        // Track individual scanner types
+        if (q.AchvID === airReq.achvIDs.MS) {
+          msCount++;
+          positions.push('MS');
+        }
+        if (q.AchvID === airReq.achvIDs.MO) {
+          moCount++;
+          positions.push('MO');
+        }
+        if (q.AchvID === airReq.achvIDs.AP) {
+          apCount++;
+          positions.push('AP');
+        }
+        if (q.AchvID === airReq.achvIDs.AOBD) {
+          aobdCount++;
+          positions.push('AOBD');
+        }
+      });
+
+      if (positions.length > 0) {
+        qualifiedMembers.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank,
+          positions
+        });
+      }
+    });
+
+    // Total pilots and scanners for team calculation
+    const pilotTotal = mpCount + tmpCount;
+    const scannerTotal = msCount + moCount;
+
+    // Each aircrew needs 1 pilot and 1 scanner/observer
+    const teamsFieldable = Math.min(pilotTotal, scannerTotal);
+    const canField = pilotTotal >= 1 && scannerTotal >= 1;
+
+    const gaps = [];
+    if (pilotTotal < 1) gaps.push('Need 1 pilot (MP/TMP)');
+    else if (pilotTotal === 1) gaps.push('Single pilot (SPOF risk)');
+    if (scannerTotal < 1) gaps.push('Need 1 scanner (MS/MO)');
+
+    return {
+      name: airReq.name,
+      shortName: airReq.shortName,
+      icon: airReq.icon,
+      canField,
+      teamsFieldable,
+      positionCounts: { MP: mpCount, TMP: tmpCount, MS: msCount, MO: moCount, AP: apCount, AOBD: aobdCount },
+      gaps,
+      qualifiedMembers,
+      color: canField ? (teamsFieldable >= 2 ? 'green' : 'blue') : (pilotTotal > 0 || scannerTotal > 0 ? 'amber' : 'red')
+    };
+  };
+
+  // Calculate sUAS capacity
+  const calculateSUASCapacity = (members) => {
+    const suasReq = ES_TEAM_REQUIREMENTS.suas;
+    let uasmpCount = 0;
+    let uastCount = 0;
+    const qualifiedMembers = [];
+
+    members.forEach(m => {
+      const quals = getMemberActiveQuals(m.CAPID);
+      const positions = [];
+
+      quals.forEach(q => {
+        if (q.AchvID === suasReq.achvIDs.UASMP) {
+          uasmpCount++;
+          positions.push('UASMP');
+        }
+        if (q.AchvID === suasReq.achvIDs.UAST) {
+          uastCount++;
+          positions.push('UAST');
+        }
+      });
+
+      if (positions.length > 0) {
+        qualifiedMembers.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank,
+          positions
+        });
+      }
+    });
+
+    const teamsFieldable = Math.min(uasmpCount, uastCount);
+    const canField = uasmpCount >= 1 && uastCount >= 1;
+
+    const gaps = [];
+    if (uasmpCount < 1) gaps.push('Need 1 UASMP');
+    if (uastCount < 1) gaps.push('Need 1 UAST');
+
+    return {
+      name: suasReq.name,
+      shortName: suasReq.shortName,
+      icon: suasReq.icon,
+      canField,
+      teamsFieldable,
+      positionCounts: { UASMP: uasmpCount, UAST: uastCount },
+      gaps,
+      qualifiedMembers,
+      color: canField ? 'green' : (uasmpCount > 0 || uastCount > 0 ? 'amber' : 'red')
+    };
+  };
+
+  // Calculate Mission Base staffing (qualified personnel, not teams)
+  const calculateMissionBaseCapacity = (members) => {
+    const baseReq = ES_TEAM_REQUIREMENTS.missionBase;
+    const positionCounts = {};
+    const qualifiedMembers = [];
+
+    baseReq.positions.forEach(pos => {
+      positionCounts[pos.code] = 0;
+    });
+
+    members.forEach(m => {
+      const quals = getMemberActiveQuals(m.CAPID);
+      const positions = [];
+
+      quals.forEach(q => {
+        const posInfo = baseReq.positions.find(p => p.achvID === q.AchvID);
+        if (posInfo) {
+          positionCounts[posInfo.code]++;
+          positions.push(posInfo.code);
+        }
+      });
+
+      if (positions.length > 0) {
+        qualifiedMembers.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank,
+          positions
+        });
+      }
+    });
+
+    // Count total qualified personnel (unique members with base quals)
+    const qualifiedCount = qualifiedMembers.length;
+    // Count how many different position types are covered
+    const positionsCovered = Object.values(positionCounts).filter(c => c > 0).length;
+    const totalPositionTypes = baseReq.positions.length;
+
+    // Check if minimum required positions are covered
+    const hasMinimum = baseReq.minimumPositions.every(code => positionCounts[code] >= 1);
+
+    const gaps = [];
+    baseReq.minimumPositions.forEach(code => {
+      if (positionCounts[code] < 1) {
+        gaps.push(`Need ${code}`);
+      }
+    });
+
+    return {
+      name: baseReq.name,
+      shortName: baseReq.shortName,
+      icon: baseReq.icon,
+      isStaffing: true,  // Indicates this is staffing, not team-based
+      qualifiedCount,
+      positionsCovered,
+      totalPositionTypes,
+      hasMinimum,
+      positionCounts,
+      gaps,
+      qualifiedMembers,
+      color: positionsCovered >= 6 ? 'green' : positionsCovered >= 4 ? 'blue' : positionsCovered >= 2 ? 'amber' : 'red'
+    };
+  };
+
+  // Calculate Command Staff staffing (qualified personnel, not teams)
+  const calculateCommandCapacity = (members) => {
+    const cmdReq = ES_TEAM_REQUIREMENTS.command;
+    const positionCounts = {};
+    const qualifiedMembers = [];
+    let hasIC = false;
+    let sectionChiefCount = 0;
+
+    cmdReq.positions.forEach(pos => {
+      positionCounts[pos.code] = 0;
+    });
+
+    members.forEach(m => {
+      const quals = getMemberActiveQuals(m.CAPID);
+      const positions = [];
+
+      quals.forEach(q => {
+        const posInfo = cmdReq.positions.find(p => p.achvID === q.AchvID);
+        if (posInfo) {
+          positionCounts[posInfo.code]++;
+          positions.push(posInfo.code);
+
+          if (cmdReq.icAchvIDs.includes(q.AchvID)) hasIC = true;
+          if (cmdReq.sectionChiefAchvIDs.includes(q.AchvID)) sectionChiefCount++;
+        }
+      });
+
+      if (positions.length > 0) {
+        qualifiedMembers.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank,
+          positions
+        });
+      }
+    });
+
+    // Count total qualified personnel and positions covered
+    const qualifiedCount = qualifiedMembers.length;
+    const positionsCovered = Object.values(positionCounts).filter(c => c > 0).length;
+    const totalPositionTypes = cmdReq.positions.length;
+
+    const gaps = [];
+    if (!hasIC) gaps.push('Need IC');
+    if (sectionChiefCount < 2) gaps.push('Limited section chiefs');
+
+    return {
+      name: cmdReq.name,
+      shortName: cmdReq.shortName,
+      icon: cmdReq.icon,
+      isStaffing: true,  // Indicates this is staffing, not team-based
+      qualifiedCount,
+      positionsCovered,
+      totalPositionTypes,
+      hasIC,
+      sectionChiefCount,
+      positionCounts,
+      gaps,
+      qualifiedMembers,
+      color: hasIC && sectionChiefCount >= 3 ? 'green' :
+             hasIC && sectionChiefCount >= 1 ? 'blue' :
+             hasIC || sectionChiefCount > 0 ? 'amber' : 'red'
+    };
+  };
+
+  // Build set of displayed Achievement IDs from ES_TEAM_REQUIREMENTS
+  // Only OPERATIONAL qualifications are counted in the summary
+  // GES and SET are foundational/administrative and not counted here
+  const getDisplayedAchievementIDs = () => {
+    const displayed = new Set();
+
+    // Field Operations
+    Object.values(ES_TEAM_REQUIREMENTS.fieldOps.achvIDs).forEach(id => displayed.add(id));
+
+    // Aircrew
+    Object.values(ES_TEAM_REQUIREMENTS.aircrew.achvIDs).forEach(id => displayed.add(id));
+
+    // sUAS
+    Object.values(ES_TEAM_REQUIREMENTS.suas.achvIDs).forEach(id => displayed.add(id));
+
+    // Mission Base
+    ES_TEAM_REQUIREMENTS.missionBase.positions.forEach(pos => displayed.add(pos.achvID));
+
+    // Command
+    ES_TEAM_REQUIREMENTS.command.positions.forEach(pos => displayed.add(pos.achvID));
+
+    // NOTE: GES and SET are NOT included in active count - they are foundational/administrative
+    // GES is tracked separately in missingGES array
+    // SET is tracked in evaluator availability section
+
+    return displayed;
+  };
+
+  // Calculate qualification summary across all members
+  // Only counts qualifications that are displayed in the ES team capability sections
+  const calculateQualificationSummary = (members) => {
+    const today = new Date();
+    const in90Days = new Date();
+    in90Days.setDate(in90Days.getDate() + 90);
+
+    const displayedAchvIDs = getDisplayedAchievementIDs();
+
+    let activeCount = 0;
+    let trainingCount = 0;
+    let expiredCount = 0;
+    const expiringWithin90Days = [];
+    const missingGES = [];
+    const byFunctionalArea = {};
+
+    members.forEach(m => {
+      const allQuals = getMemberAllQuals(m.CAPID);
+      const hasGES = allQuals.some(q =>
+        q.AchvID === ES_DASHBOARD_SPECIAL.GES &&
+        String(q.Status || '').toUpperCase() === 'ACTIVE'
+      );
+
+      if (!hasGES) {
+        missingGES.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank
+        });
+      }
+
+      allQuals.forEach(q => {
+        // Only count qualifications that are displayed in the team capability sections
+        if (!displayedAchvIDs.has(q.AchvID)) return;
+
+        const status = String(q.Status || '').toUpperCase();
+        const achvDef = (_rawConfig.esAchievements || []).find(def => def.AchvID === q.AchvID);
+        const functionalArea = achvDef?.FunctionalArea || 'Unknown';
+
+        if (!byFunctionalArea[functionalArea]) {
+          byFunctionalArea[functionalArea] = { active: 0, training: 0, expired: 0 };
+        }
+
+        if (status === 'ACTIVE') {
+          activeCount++;
+          byFunctionalArea[functionalArea].active++;
+
+          // Check if expiring soon
+          if (q.Expiration && q.Expiration !== '01/01/1900') {
+            const expDate = new Date(q.Expiration);
+            if (expDate >= today && expDate <= in90Days) {
+              const daysUntil = Math.floor((expDate - today) / (1000 * 60 * 60 * 24));
+              expiringWithin90Days.push({
+                capid: m.CAPID,
+                name: `${m.NameFirst} ${m.NameLast}`,
+                rank: m.Rank,
+                qualification: achvDef?.Achv || q.AchvID,
+                achvID: q.AchvID,
+                expiration: q.Expiration,
+                daysUntil,
+                urgency: daysUntil <= 30 ? 'critical' : daysUntil <= 60 ? 'warning' : 'notice'
+              });
+            }
+          }
+        } else if (status === 'TRAINING') {
+          trainingCount++;
+          byFunctionalArea[functionalArea].training++;
+        } else if (status === 'EXPIRED') {
+          expiredCount++;
+          byFunctionalArea[functionalArea].expired++;
+        }
+      });
+    });
+
+    // Sort expiring by urgency
+    expiringWithin90Days.sort((a, b) => a.daysUntil - b.daysUntil);
+
+    return {
+      byStatus: { active: activeCount, training: trainingCount, expired: expiredCount },
+      byFunctionalArea,
+      expiringWithin90Days,
+      missingGES,
+      healthRatio: activeCount > 0 ? Math.round((activeCount / (activeCount + expiredCount)) * 100) : 0
+    };
+  };
+
+  // Calculate evaluator availability
+  const calculateEvaluatorAvailability = (members) => {
+    const evaluators = [];
+    const qualsCovered = new Set();
+
+    members.forEach(m => {
+      const quals = getMemberActiveQuals(m.CAPID);
+      const hasSET = quals.some(q => q.AchvID === ES_ACHIEVEMENT_IDS.SET_ACTUAL);
+
+      if (!hasSET) return;
+
+      // Check which qualifications they can evaluate
+      const canEvaluate = [];
+      quals.forEach(q => {
+        // Must have held qual for 1+ year
+        if (q.Completed && q.Completed !== '01/01/1900') {
+          const completedDate = new Date(q.Completed);
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+          if (completedDate <= oneYearAgo &&
+              !ES_NO_SKILLS_EVALUATOR_IDS.has(q.AchvID) &&
+              ES_SKILLS_EVALUATOR_ALLOWED_FUNCTIONAL_AREAS.has(
+                (_rawConfig.esAchievements || []).find(def => def.AchvID === q.AchvID)?.FunctionalArea
+              )) {
+            const achvDef = (_rawConfig.esAchievements || []).find(def => def.AchvID === q.AchvID);
+            canEvaluate.push({
+              achvID: q.AchvID,
+              name: achvDef?.Achv || q.AchvID
+            });
+            qualsCovered.add(q.AchvID);
+          }
+        }
+      });
+
+      if (canEvaluate.length > 0) {
+        evaluators.push({
+          capid: m.CAPID,
+          name: `${m.NameFirst} ${m.NameLast}`,
+          rank: m.Rank,
+          canEvaluate
+        });
+      }
+    });
+
+    // Determine gaps - qualifications with active holders but no evaluators
+    const activeQuals = new Set();
+    members.forEach(m => {
+      getMemberActiveQuals(m.CAPID).forEach(q => {
+        if (!ES_NO_SKILLS_EVALUATOR_IDS.has(q.AchvID) &&
+            ES_SKILLS_EVALUATOR_ALLOWED_FUNCTIONAL_AREAS.has(
+              (_rawConfig.esAchievements || []).find(def => def.AchvID === q.AchvID)?.FunctionalArea
+            )) {
+          activeQuals.add(q.AchvID);
+        }
+      });
+    });
+
+    const gaps = [];
+    activeQuals.forEach(achvID => {
+      if (!qualsCovered.has(achvID)) {
+        const achvDef = (_rawConfig.esAchievements || []).find(def => def.AchvID === achvID);
+        gaps.push(achvDef?.Achv || achvID);
+      }
+    });
+
+    const coverage = activeQuals.size > 0
+      ? Math.round((qualsCovered.size / activeQuals.size) * 100)
+      : 0;
+
+    return {
+      available: evaluators,
+      qualsCovered: Array.from(qualsCovered),
+      gaps,
+      coverage,
+      evaluatorCount: evaluators.length
+    };
+  };
+
+  // Identify single points of failure
+  const identifySinglePointsOfFailure = (members, teamCapacities) => {
+    const spofs = [];
+
+    // Check Field Operations (Ground Team)
+    if (teamCapacities.fieldOps.positionCounts.GTL === 1) {
+      const gtl = teamCapacities.fieldOps.qualifiedMembers.find(m =>
+        m.positions.includes('GTL')
+      );
+      if (gtl) {
+        spofs.push({
+          position: 'GTL',
+          positionName: 'Ground Team Leader',
+          member: gtl.name,
+          capid: gtl.capid,
+          impact: 'Cannot field any ground teams without GTL',
+          severity: 'high'
+        });
+      }
+    }
+
+    // Check Aircrew - use sum of individual pilot positions
+    const pilotTotal = (teamCapacities.aircrew.positionCounts.MP || 0) + (teamCapacities.aircrew.positionCounts.TMP || 0);
+    if (pilotTotal === 1) {
+      const pilot = teamCapacities.aircrew.qualifiedMembers.find(m =>
+        m.positions.includes('MP') || m.positions.includes('TMP')
+      );
+      if (pilot) {
+        spofs.push({
+          position: 'Pilot',
+          positionName: 'Mission Pilot',
+          member: pilot.name,
+          capid: pilot.capid,
+          impact: 'Cannot field any aircrews without pilot',
+          severity: 'high'
+        });
+      }
+    }
+
+    // Check Scanner - use sum of individual scanner positions
+    const scannerTotal = (teamCapacities.aircrew.positionCounts.MS || 0) + (teamCapacities.aircrew.positionCounts.MO || 0);
+    if (scannerTotal === 1) {
+      const scanner = teamCapacities.aircrew.qualifiedMembers.find(m =>
+        m.positions.includes('MS') || m.positions.includes('MO')
+      );
+      if (scanner) {
+        spofs.push({
+          position: 'Scanner',
+          positionName: 'Mission Scanner/Observer',
+          member: scanner.name,
+          capid: scanner.capid,
+          impact: 'Cannot field any aircrews without scanner',
+          severity: 'high'
+        });
+      }
+    }
+
+    // Check Command
+    if (teamCapacities.command.hasIC) {
+      const icCount = (teamCapacities.command.positionCounts.IC3 || 0) +
+                      (teamCapacities.command.positionCounts.IC2 || 0) +
+                      (teamCapacities.command.positionCounts.IC1 || 0);
+      if (icCount === 1) {
+        const ic = teamCapacities.command.qualifiedMembers.find(m =>
+          m.positions.some(p => ['IC3', 'IC2', 'IC1'].includes(p))
+        );
+        if (ic) {
+          spofs.push({
+            position: 'IC',
+            positionName: 'Incident Commander',
+            member: ic.name,
+            capid: ic.capid,
+            impact: 'Limited command flexibility',
+            severity: 'medium'
+          });
+        }
+      }
+    }
+
+    return spofs;
+  };
+
+  // Get training pipeline (members close to qualification)
+  const calculateTrainingPipeline = (members) => {
+    const nearQualification = [];
+    const activeTraining = [];
+
+    members.forEach(m => {
+      const allQuals = getMemberAllQuals(m.CAPID);
+
+      allQuals.forEach(q => {
+        const status = String(q.Status || '').toUpperCase();
+        if (status === 'TRAINING') {
+          const achvDef = (_rawConfig.esAchievements || []).find(def => def.AchvID === q.AchvID);
+          activeTraining.push({
+            capid: m.CAPID,
+            name: `${m.NameFirst} ${m.NameLast}`,
+            rank: m.Rank,
+            qualification: achvDef?.Achv || q.AchvID,
+            achvID: q.AchvID,
+            position: ES_ACHV_TO_POSITION[q.AchvID] || 'Unknown'
+          });
+        }
+      });
+    });
+
+    return {
+      nearQualification,
+      activeTraining
+    };
+  };
+
+  // Generate recommendations based on analysis
+  const generateRecommendations = (analysis) => {
+    const recommendations = [];
+
+    // Critical gaps
+    if (!analysis.teams.fieldOps.canField && !analysis.teams.aircrew.canField) {
+      recommendations.push({
+        priority: 'critical',
+        area: 'Team Capability',
+        recommendation: 'Unit cannot field any operational teams. Prioritize GTL and pilot training.',
+        impact: 'Cannot participate in operational missions'
+      });
+    }
+
+    // SPOFs
+    analysis.risks.singlePointsOfFailure.forEach(spof => {
+      if (spof.severity === 'high') {
+        recommendations.push({
+          priority: 'high',
+          area: 'Resilience',
+          recommendation: `Train backup ${spof.positionName} - ${spof.member} is single point of failure`,
+          impact: spof.impact
+        });
+      }
+    });
+
+    // Expiring qualifications
+    const criticalExpiring = analysis.qualifications.expiringWithin90Days.filter(e => e.urgency === 'critical');
+    if (criticalExpiring.length > 0) {
+      recommendations.push({
+        priority: 'high',
+        area: 'Currency',
+        recommendation: `${criticalExpiring.length} critical qualification(s) expiring within 30 days`,
+        impact: 'May lose team capability if not renewed'
+      });
+    }
+
+    // Missing GES
+    if (analysis.qualifications.missingGES.length > 0) {
+      recommendations.push({
+        priority: 'medium',
+        area: 'Foundation',
+        recommendation: `${analysis.qualifications.missingGES.length} senior member(s) without GES - required for all ES activities`,
+        impact: 'Cannot participate in ES missions'
+      });
+    }
+
+    // Evaluator gaps
+    if (analysis.evaluators.gaps.length > 0) {
+      recommendations.push({
+        priority: 'medium',
+        area: 'Evaluation',
+        recommendation: `No evaluators available for ${analysis.evaluators.gaps.length} qualification(s)`,
+        impact: 'May need external support for qualification sign-offs'
+      });
+    }
+
+    // sUAS opportunity
+    if (!analysis.teams.suas.canField && analysis.teams.fieldOps.canField) {
+      recommendations.push({
+        priority: 'low',
+        area: 'Capability Expansion',
+        recommendation: 'Consider sUAS training to add aerial reconnaissance capability',
+        impact: 'Expands mission options'
+      });
+    }
+
+    return recommendations;
+  };
+
+  // Calculate overall readiness score
+  const calculateReadinessScore = (analysis) => {
+    const weights = ES_READINESS_WEIGHTS;
+
+    // Team Capability Score (35%)
+    // Field Ops: Can field ground team or UDF team
+    const fieldOpsTeams = (analysis.teams.fieldOps.groundTeamsFieldable || 0) + (analysis.teams.fieldOps.udfTeamsFieldable || 0);
+    // Calculate totals from individual position counts
+    const pilotTotal = (analysis.teams.aircrew.positionCounts.MP || 0) + (analysis.teams.aircrew.positionCounts.TMP || 0);
+    const teamScores = {
+      fieldOps: analysis.teams.fieldOps.canField ?
+        (fieldOpsTeams >= 2 ? 100 : 80) :
+        (analysis.teams.fieldOps.positionCounts.GTL > 0 || analysis.teams.fieldOps.positionCounts.UDF > 0 ? 40 : 0),
+      aircrew: analysis.teams.aircrew.canField ?
+        (analysis.teams.aircrew.teamsFieldable >= 2 ? 100 : 80) :
+        (pilotTotal > 0 ? 40 : 0),
+      suas: analysis.teams.suas.canField ? 100 : 0,
+      missionBase: (analysis.teams.missionBase.positionsCovered / analysis.teams.missionBase.totalPositionTypes) * 100,
+      command: analysis.teams.command.hasIC ?
+        (analysis.teams.command.sectionChiefCount >= 3 ? 100 : 70) : 30
+    };
+    const teamScore = (teamScores.fieldOps * 0.3 + teamScores.aircrew * 0.3 +
+                       teamScores.suas * 0.1 + teamScores.missionBase * 0.15 +
+                       teamScores.command * 0.15);
+
+    // Qualification Health Score (25%)
+    const qualScore = analysis.qualifications.healthRatio;
+
+    // Evaluator Coverage Score (15%)
+    const evaluatorScore = analysis.evaluators.coverage;
+
+    // Risk Mitigation Score (15%)
+    const spofCount = analysis.risks.singlePointsOfFailure.length;
+    const riskScore = Math.max(0, 100 - (spofCount * 25));
+
+    // Pipeline Score (10%)
+    const pipelineScore = analysis.pipeline.activeTraining.length > 0 ?
+      Math.min(100, 50 + analysis.pipeline.activeTraining.length * 10) : 30;
+
+    const overallScore = Math.round(
+      teamScore * weights.teamCapability +
+      qualScore * weights.qualificationHealth +
+      evaluatorScore * weights.evaluatorCoverage +
+      riskScore * weights.riskMitigation +
+      pipelineScore * weights.pipelineStrength
+    );
+
+    const score = Math.max(0, Math.min(100, overallScore));
+    const rating = score >= ES_READINESS_THRESHOLDS.excellent ? 'excellent' :
+                   score >= ES_READINESS_THRESHOLDS.good ? 'good' :
+                   score >= ES_READINESS_THRESHOLDS.fair ? 'fair' : 'needs-attention';
+
+    return {
+      score,
+      rating,
+      components: {
+        teamScore: Math.round(teamScore),
+        qualScore,
+        evaluatorScore,
+        riskScore,
+        pipelineScore
+      }
+    };
+  };
+
+  // Generate quick summary text
+  const generateQuickSummary = (teams) => {
+    const summaryParts = [];
+
+    // Field Operations (Ground Team + UDF combined)
+    if (teams.fieldOps.canFieldGround) {
+      summaryParts.push(`${teams.fieldOps.groundTeamsFieldable} ground team${teams.fieldOps.groundTeamsFieldable !== 1 ? 's' : ''}`);
+    }
+    if (teams.fieldOps.canFieldUDF) {
+      summaryParts.push(`${teams.fieldOps.udfTeamsFieldable} UDF team${teams.fieldOps.udfTeamsFieldable !== 1 ? 's' : ''}`);
+    }
+    if (teams.aircrew.canField) {
+      summaryParts.push(`${teams.aircrew.teamsFieldable} aircrew${teams.aircrew.teamsFieldable !== 1 ? 's' : ''}`);
+    }
+    if (teams.suas.canField) {
+      summaryParts.push('sUAS team');
+    }
+
+    if (summaryParts.length === 0) {
+      // Check for partial capability
+      const partialParts = [];
+      const gtmTotal = (teams.fieldOps.positionCounts.GTM1 || 0) +
+                       (teams.fieldOps.positionCounts.GTM2 || 0) +
+                       (teams.fieldOps.positionCounts.GTM3 || 0);
+      if (teams.fieldOps.positionCounts.GTL > 0 || gtmTotal > 0) {
+        partialParts.push('ground');
+      }
+      if (teams.fieldOps.positionCounts.UDF > 0) {
+        partialParts.push('UDF');
+      }
+      const pilotTotal = (teams.aircrew.positionCounts.MP || 0) + (teams.aircrew.positionCounts.TMP || 0);
+      const scannerTotal = (teams.aircrew.positionCounts.MS || 0) + (teams.aircrew.positionCounts.MO || 0);
+      if (pilotTotal > 0 || scannerTotal > 0) {
+        partialParts.push('air');
+      }
+      if (partialParts.length > 0) {
+        return `Partial ${partialParts.join('/')} capability`;
+      }
+      return 'No operational teams available';
+    }
+
+    return `Can field ${summaryParts.join(', ')}`;
+  };
+
+  // Main analysis entry point
+  const analyzeUnit = (orgId, options = {}) => {
+    const members = getMembersForOrg(orgId, options);
+
+    if (members.length === 0) {
+      return {
+        readinessScore: 0,
+        readinessRating: 'needs-attention',
+        quickSummary: 'No active members',
+        memberCount: 0,
+        teams: {
+          fieldOps: { canField: false, canFieldGround: false, canFieldUDF: false, groundTeamsFieldable: 0, udfTeamsFieldable: 0, gaps: [], color: 'red', positionCounts: {} },
+          aircrew: { canField: false, teamsFieldable: 0, gaps: [], color: 'red', positionCounts: {} },
+          suas: { canField: false, teamsFieldable: 0, gaps: [], color: 'red', positionCounts: {} },
+          missionBase: { isStaffing: true, qualifiedCount: 0, positionsCovered: 0, totalPositionTypes: 8, gaps: [], color: 'red', positionCounts: {} },
+          command: { isStaffing: true, qualifiedCount: 0, hasIC: false, sectionChiefCount: 0, gaps: [], color: 'red', positionCounts: {} }
+        },
+        qualifications: {
+          byStatus: { active: 0, training: 0, expired: 0 },
+          expiringWithin90Days: [],
+          missingGES: [],
+          healthRatio: 0
+        },
+        evaluators: { available: [], gaps: [], coverage: 0 },
+        risks: { singlePointsOfFailure: [], criticalGaps: [], recommendations: [] },
+        pipeline: { nearQualification: [], activeTraining: [] }
+      };
+    }
+
+    // Calculate team capacities
+    const teams = {
+      fieldOps: calculateFieldOpsCapacity(members),
+      aircrew: calculateAircrewCapacity(members),
+      suas: calculateSUASCapacity(members),
+      missionBase: calculateMissionBaseCapacity(members),
+      command: calculateCommandCapacity(members)
+    };
+
+    // Calculate other metrics
+    const qualifications = calculateQualificationSummary(members);
+    const evaluators = calculateEvaluatorAvailability(members);
+    const pipeline = calculateTrainingPipeline(members);
+    const singlePointsOfFailure = identifySinglePointsOfFailure(members, teams);
+
+    // Build analysis object
+    const analysis = {
+      teams,
+      qualifications,
+      evaluators,
+      pipeline,
+      risks: {
+        singlePointsOfFailure,
+        criticalGaps: []
+      },
+      memberCount: members.length
+    };
+
+    // Add critical gaps
+    if (!teams.fieldOps.canField) analysis.risks.criticalGaps.push('Cannot field ground/UDF team');
+    if (!teams.aircrew.canField) analysis.risks.criticalGaps.push('Cannot field aircrew');
+
+    // Calculate readiness score
+    const readiness = calculateReadinessScore(analysis);
+
+    // Generate recommendations
+    analysis.risks.recommendations = generateRecommendations(analysis);
+
+    // Generate quick summary
+    const quickSummary = generateQuickSummary(teams);
+
+    return {
+      ...analysis,
+      readinessScore: readiness.score,
+      readinessRating: readiness.rating,
+      readinessComponents: readiness.components,
+      quickSummary
+    };
+  };
+
+  // Get key data for collapsed view
+  const getKeyDataSummary = (orgId, options = {}) => {
+    const analysis = analyzeUnit(orgId, options);
+    return {
+      quickSummary: analysis.quickSummary,
+      readinessScore: analysis.readinessScore,
+      readinessRating: analysis.readinessRating,
+      expiringCount: analysis.qualifications.expiringWithin90Days.length,
+      teamStatus: {
+        fieldOps: analysis.teams.fieldOps.color,
+        aircrew: analysis.teams.aircrew.color,
+        suas: analysis.teams.suas.color,
+        missionBase: analysis.teams.missionBase.color,
+        command: analysis.teams.command.color
+      }
+    };
+  };
+
+  // Get metrics for multiple units (for aggregate view)
+  const getMetricsForMultipleUnits = (orgIds, options = {}) => {
+    return orgIds.map(orgId => {
+      const analysis = analyzeUnit(orgId, { includeDescendants: false });
+      return {
+        orgId,
+        readinessScore: analysis.readinessScore,
+        readinessRating: analysis.readinessRating,
+        canFieldOps: analysis.teams.fieldOps.canField,
+        canFieldAir: analysis.teams.aircrew.canField,
+        canFieldSUAS: analysis.teams.suas.canField,
+        expiringCount: analysis.qualifications.expiringWithin90Days.length,
+        memberCount: analysis.memberCount,
+        teamStatus: {
+          fieldOps: analysis.teams.fieldOps.color,
+          aircrew: analysis.teams.aircrew.color,
+          suas: analysis.teams.suas.color,
+          missionBase: analysis.teams.missionBase.color,
+          command: analysis.teams.command.color
+        }
+      };
+    });
+  };
+
+  // Public API
+  return {
+    analyzeUnit,
+    getKeyDataSummary,
+    getMetricsForMultipleUnits,
+    // Individual calculation functions (for testing/debugging)
+    calculateFieldOpsCapacity,
+    calculateAircrewCapacity,
+    calculateSUASCapacity,
+    calculateMissionBaseCapacity,
+    calculateCommandCapacity,
+    calculateQualificationSummary,
+    calculateEvaluatorAvailability
+  };
+}
+</script>

@@ -1,0 +1,456 @@
+<script type="text/babel">
+function OrgChartSection(props) {
+  const {
+    orgChartData, expandedSections, setExpandedSections, showCommandChainOnly,
+    setShowCommandChainOnly, drillDownPosition, setDrillDownPosition,
+    showAllDescendants, toggleExpandCollapse, getAllNodeIds, hideVacant,
+    setHideVacant, hasCommittees, showCommittees, setShowCommittees,
+    handleDownloadImage, dataFiles, unitFilter, getDescendantOrgIds,
+    processedData, buildMemberProfileData, setSelectedMemberProfile
+  } = props;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between sticky top-20 z-40">
+        <div className="flex items-center gap-2">
+          <Icon name="Network" className="w-5 h-5 text-blue-600" />
+          <h2 className="font-bold text-lg text-slate-800 whitespace-nowrap">Organizational Chart</h2>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:gap-3 md:gap-4 items-center justify-start lg:justify-end w-full">
+           <label className="flex items-center space-x-2 text-xs sm:text-sm text-slate-600 font-medium cursor-pointer select-none">
+             <input type="checkbox" checked={hideVacant} onChange={e => setHideVacant(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
+             <span>Hide Vacant Positions</span>
+           </label>
+           <label className="flex items-center space-x-2 text-xs sm:text-sm text-slate-600 font-medium cursor-pointer select-none">
+             <input type="checkbox" checked={showCommandChainOnly} onChange={e => setShowCommandChainOnly(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
+             <span>Command Chain Only</span>
+           </label>
+           <button
+             onClick={toggleExpandCollapse}
+             className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium transition-colors shadow-sm"
+             title="Toggle expand/collapse"
+           >
+             <Icon name={orgChartData && expandedSections.size === getAllNodeIds(orgChartData).length ? 'ChevronUp' : 'ChevronDown'} className="w-3 h-3 mr-1" />
+             {orgChartData && expandedSections.size === getAllNodeIds(orgChartData).length ? 'Collapse All' : 'Expand All'}
+           </button>
+           {hasCommittees && (
+             <button
+               onClick={() => setShowCommittees(!showCommittees)}
+               className={`flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium transition-colors shadow-sm ${showCommittees ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-white text-purple-600 border border-purple-600 hover:bg-purple-50'}`}
+             >
+               <Icon name="Users" className="w-4 h-4 mr-2" /> Committees
+             </button>
+           )}
+           <div className="h-6 w-px bg-slate-200"></div>
+           <button onClick={() => handleDownloadImage('png')} className="flex items-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 text-sm font-medium transition-colors shadow-sm">
+              <Icon name="Download" className="w-4 h-4 mr-2" /> PNG
+            </button>
+            <button onClick={() => handleDownloadImage('pdf')} className="flex items-center px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm">
+              <Icon name="FileText" className="w-4 h-4 mr-2" /> PDF
+            </button>
+        </div>
+      </div>
+
+      {/* Org Chart Container */}
+      <div className="relative">
+        {/* Committees Overlay Panel */}
+        {showCommittees && hasCommittees && (
+          <div className="absolute left-2 right-2 sm:left-4 sm:right-auto sm:w-80 top-4 z-50 bg-white rounded-xl border-2 border-purple-300 shadow-2xl max-h-[calc(100vh-200px)] overflow-hidden">
+            <div className="flex items-center justify-between gap-2 p-4 bg-gradient-to-r from-purple-50 to-purple-100 border-b border-purple-200">
+              <div className="flex items-center gap-2">
+                <Icon name="Users" className="w-5 h-5 text-purple-600" />
+                <h3 className="font-bold text-base text-slate-800">Committees</h3>
+              </div>
+              <button
+                onClick={() => setShowCommittees(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-white/50 transition-colors"
+                title="Close"
+              >
+                <Icon name="X" className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 overflow-y-auto max-h-[calc(100vh-280px)]">
+              {(() => {
+                let validOrgIds = [unitFilter];
+                if (showAllDescendants) {
+                  validOrgIds = getDescendantOrgIds(unitFilter);
+                }
+
+                // Determine current org type
+                const currentOrg = dataFiles.organization.find(o => o.ORGID === unitFilter);
+                const currentType = currentOrg ? (currentOrg.Type || '').toUpperCase() : '';
+                const isWingLevel = currentType.includes('WING');
+                const isGroupLevel = currentType.includes('GROUP');
+                const isSquadronLevel = !isWingLevel && !isGroupLevel;
+
+                // Helper: Get direct children (not all descendants)
+                const getDirectChildren = (orgId) => {
+                  return dataFiles.organization
+                    .filter(o => String(o.NextLevel || '').trim() === String(orgId).trim())
+                    .map(o => String(o.ORGID).trim());
+                };
+
+                // Helper: Get CAC scope based on current level
+                const getCACOrgIds = () => {
+                  if (isWingLevel) {
+                    // Wing: Include ALL descendants to capture all WCAC members
+                    // This ensures Wing CAC reps/assistants from any squadron show up
+                    return getDescendantOrgIds(unitFilter);
+                  } else if (isGroupLevel) {
+                    // Group: Include ALL descendants to capture all GCAC members
+                    return getDescendantOrgIds(unitFilter);
+                  } else {
+                    // Squadron: Include only this squadron to show its members' CAC participation
+                    return [unitFilter];
+                  }
+                };
+
+                const cacOrgIds = getCACOrgIds();
+                const unitCommittees = (dataFiles.committees || []).filter(c => validOrgIds.includes(c.ORGID));
+
+                const positionOrder = { CHAIR: 1, VICE: 2, RECORDER: 3, REPRESENTATIVE: 4, ALTERNATE: 5 };
+                const getPositionType = (text, isChairFlag = false) => {
+                  const t = (text || '').toUpperCase();
+                  if ((isChairFlag || t.includes('CHAIR')) && !t.includes('VICE')) return 'CHAIR';
+                  if (t.includes('VICE')) return 'VICE';
+                  if (t.includes('RECORDER') || t.includes('SECRETARY')) return 'RECORDER';
+                  if (t.includes('ASSISTANT') || t.includes('ALTERNATE')) return 'ALTERNATE';
+                  return 'REPRESENTATIVE';
+                };
+
+                // Group by committee name
+                const committeeGroups = {};
+                unitCommittees.forEach(c => {
+                  let name = c.Committee || 'Unknown Committee';
+
+                  // Normalize Cadet Advisory Council names to match wing/group level
+                  const nameUpper = name.toUpperCase();
+                  if (nameUpper.includes('CADET ADVISORY COUNCIL')) {
+                    if (isWingLevel && !nameUpper.includes('GROUP')) {
+                      name = 'Wing Cadet Advisory Council';
+                    } else if (isGroupLevel && !nameUpper.includes('WING')) {
+                      name = 'Group Cadet Advisory Council';
+                    }
+                  }
+
+                  if (!committeeGroups[name]) {
+                    committeeGroups[name] = [];
+                  }
+                  const positionType = getPositionType(c.Position || c.Role || c.Title, c.Chair === "1");
+                  committeeGroups[name].push({ ...c, positionType, sortOrder: positionOrder[positionType] || 99 });
+                });
+
+                // Add CAC members from cadetDuty data
+                if (dataFiles.cadetDuty && dataFiles.cadetDuty.length > 0) {
+                  const cacDuties = dataFiles.cadetDuty
+                    .filter(d => cacOrgIds.includes(d.ORGID))
+                    .filter(d => {
+                      const dutyUpper = (d.Duty || '').toUpperCase();
+                      if (!dutyUpper.includes('CAC')) return false;
+
+                      // Wing level: Only show WCAC duties
+                      if (isWingLevel) {
+                        return dutyUpper.includes('WCAC');
+                      }
+
+                      // Group level: Only show GCAC duties
+                      if (isGroupLevel) {
+                        return dutyUpper.includes('GCAC');
+                      }
+
+                      // Squadron level: Show both WCAC and GCAC for members from this squadron
+                      return dutyUpper.includes('WCAC') || dutyUpper.includes('GCAC');
+                    });
+
+                  cacDuties.forEach(d => {
+                    const dutyUpper = (d.Duty || '').toUpperCase();
+                    let committeeName = 'Cadet Advisory Council';
+
+                    // Determine committee name based on duty title
+                    if (dutyUpper.includes('WCAC')) {
+                      committeeName = 'Wing Cadet Advisory Council';
+                    } else if (dutyUpper.includes('GCAC')) {
+                      committeeName = 'Group Cadet Advisory Council';
+                    }
+
+                    const positionType = getPositionType(dutyUpper, d.Chair === "1");
+                    const sortOrder = positionOrder[positionType] || 99;
+
+                    if (!committeeGroups[committeeName]) {
+                      committeeGroups[committeeName] = [];
+                    }
+
+                    // Check if this member already exists in this committee (avoid duplicates)
+                    const existingEntry = committeeGroups[committeeName].find(m => m.CAPID === d.CAPID);
+                    if (!existingEntry) {
+                      // Add as committee entry
+                      committeeGroups[committeeName].push({
+                        CAPID: d.CAPID,
+                        Chair: positionType === 'CHAIR' ? "1" : "0",
+                        Position: positionType,
+                        ORGID: d.ORGID,
+                        positionType,
+                        sortOrder
+                      });
+                    }
+                  });
+                }
+
+                return Object.entries(committeeGroups).map(([name, members]) => {
+                  // Sort members: Senior advisors first (for CAC), then by position, then by name
+                  const isCACCommittee = name.toUpperCase().includes('CADET ADVISORY COUNCIL');
+                  const sortedMembers = [...members].sort((a, b) => {
+                    // Get member data
+                    const memA = dataFiles.members.find(mem => mem.CAPID === a.CAPID);
+                    const memB = dataFiles.members.find(mem => mem.CAPID === b.CAPID);
+
+                    // Check if members are senior advisors in CAC
+                    if (isCACCommittee && memA && memB) {
+                      const isSeniorA = (memA.Type || memA.TYPE) === "SENIOR" || (memA.Type || memA.TYPE) === "LIFE";
+                      const isSeniorB = (memB.Type || memB.TYPE) === "SENIOR" || (memB.Type || memB.TYPE) === "LIFE";
+
+                      // Senior advisors always come first in CAC
+                      if (isSeniorA && !isSeniorB) return -1;
+                      if (!isSeniorA && isSeniorB) return 1;
+                    }
+
+                    // Then sort by position order (Chair, Vice, Recorder, etc.)
+                    const orderA = a.sortOrder || 99;
+                    const orderB = b.sortOrder || 99;
+                    if (orderA !== orderB) return orderA - orderB;
+
+                    // Finally sort by name
+                    const nameA = memA ? `${memA.NameLast} ${memA.NameFirst}` : '';
+                    const nameB = memB ? `${memB.NameLast} ${memB.NameFirst}` : '';
+                    return nameA.localeCompare(nameB);
+                  });
+                  return (
+                  <div key={name} className="bg-slate-50 rounded-lg p-3 border border-slate-200 hover:border-purple-300 transition-colors">
+                    <div className="font-bold text-xs text-purple-700 mb-2 uppercase tracking-wide">{name}</div>
+                    <div className="space-y-1">
+                      {sortedMembers.map((m, idx) => {
+                        const member = dataFiles.members.find(mem => mem.CAPID === m.CAPID);
+                        if (!member) return null;
+                        const position = ((m.positionType || m.Position || m.Role || m.Title || '') + '').toUpperCase();
+                        const isChair = position.includes('CHAIR') && !position.includes('VICE') || m.Chair === "1";
+                        const isViceChair = position.includes('VICE');
+                        const isRecorder = position.includes('RECORDER') || position.includes('SECRETARY');
+                        const isAlternate = position.includes('ASSISTANT') || position.includes('ALT');
+
+                        // Check if this is a senior member in a Cadet Advisory Council
+                        const isSeniorMember = (member.Type || member.TYPE) === "SENIOR" || (member.Type || member.TYPE) === "LIFE";
+                        const isCACCommittee = name.toUpperCase().includes('CADET ADVISORY COUNCIL');
+                        const isSeniorAdvisor = isSeniorMember && isCACCommittee;
+
+                        return (
+                          <div
+                            key={idx}
+                            className="text-xs text-slate-700 flex items-center justify-between hover:bg-white px-2 py-1.5 rounded cursor-pointer transition-colors"
+                            onClick={() => {
+                              const foundMember = processedData.find(pm => pm.CAPID === member.CAPID);
+                              const fallbackMember = buildMemberProfileData(member);
+                              const finalMember = foundMember || fallbackMember;
+                              if (finalMember) {
+                                setSelectedMemberProfile(finalMember);
+                                setShowCommittees(false);
+                              }
+                            }}
+                          >
+                            <span className="font-medium">
+                              {member.Rank} {member.NameLast}, {member.NameFirst}{isAlternate ? ' (A)' : ''}
+                            </span>
+                            <div className="flex gap-1">
+                              {isSeniorAdvisor && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">ADVISOR</span>}
+                              {(isChair || position.includes('CHAIR')) && <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">CHAIR</span>}
+                              {isViceChair && <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">VICE</span>}
+                              {isRecorder && <span className="text-[10px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">RECORDER</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Org Chart - Full Width */}
+        <div className="overflow-x-auto overflow-y-auto pb-6 sm:pb-10 pt-6 sm:pt-10 px-3 sm:px-6 lg:px-10 bg-white rounded-xl border border-slate-200 shadow-inner min-h-[400px] sm:min-h-[600px]" id="org-chart-canvas" style={{background: 'radial-gradient(#e5e7eb 1px, transparent 1px)', backgroundSize: '20px 20px', touchAction: 'pan-x pan-y'}}>
+           <div className="inline-block min-w-full">
+             {orgChartData ? (
+               <div className="flex flex-col items-center">
+                   <OrgNode
+                    node={orgChartData}
+                    hideVacant={hideVacant}
+                    expandedSections={expandedSections}
+                    setExpandedSections={setExpandedSections}
+                    showCommandChainOnly={showCommandChainOnly}
+                    onMemberClick={(memberName) => {
+                      let cap = null;
+                      let displayName = memberName;
+                      if (memberName.includes('||')) {
+                        const parts = memberName.split('||');
+                        displayName = parts[0];
+                        cap = parts[1];
+                      }
+                      if (cap) {
+                        const found = processedData.find(m => String(m.CAPID).trim() === String(cap).trim());
+                        const fallback = buildMemberProfileData(dataFiles.members.find(m => String(m.CAPID).trim() === String(cap).trim()));
+                        if (found || fallback) setSelectedMemberProfile(found || fallback);
+                        return;
+                      }
+                      const nameParts = displayName.split(' ');
+                      if (nameParts.length >= 3) {
+                        const lastName = nameParts[1].replace(',', '');
+                        const firstName = nameParts[2];
+                        const member = processedData.find(m =>
+                         m.NameLast === lastName && m.NameFirst === firstName
+                       );
+                       if (member) {
+                         setSelectedMemberProfile(member);
+                       } else {
+                         const rawMember = dataFiles.members.find(m => m.NameLast === lastName && m.NameFirst === firstName);
+                         const built = buildMemberProfileData(rawMember);
+                         if (built) setSelectedMemberProfile(built);
+                       }
+                     }
+                    }}
+        onDrillDown={showAllDescendants ? (node) => setDrillDownPosition(node) : null}
+      />
+   </div>
+ ) : (
+               <div className="text-center text-slate-400 mt-20 flex flex-col items-center">
+                 <Icon name="Network" className="w-16 h-16 mb-4 opacity-20" />
+                 <p>No Organization Data Available</p>
+               </div>
+             )}
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PME_COURSE_DEFS = [
+  { key: 'ncoa', label: 'NCOA', matches: ({ courseKey, howKey }) => courseKey === 'ncoa' || (howKey.includes('nco academy') && !howKey.includes('senior')) },
+  { key: 'sncoa', label: 'SNCOA', matches: ({ courseKey, howKey }) => courseKey === 'sncoa' || howKey.includes('senior nco academy') },
+  { key: 'sos', label: 'SOS', matches: ({ courseKey, howKey }) => courseKey === 'sos' || howKey.includes('squadron officer school') },
+  { key: 'acsc', label: 'ACSC', matches: ({ courseKey, howKey }) => courseKey === 'acsc' || howKey.includes('air command') || howKey.includes('command and general staff') },
+  { key: 'awc', label: 'AWC', matches: ({ courseKey, howKey }) => courseKey === 'awc' || howKey.includes('war college') }
+];
+
+const CAP_LEADERSHIP_COURSE_DEFS = [
+  { key: 'squadron-command', label: 'Squadron Command', matches: ({ courseKey }) => courseKey.includes('squadron command course') },
+  { key: 'group-command', label: 'Group Command', matches: ({ courseKey }) => courseKey.includes('group command course') },
+  { key: 'region-command', label: 'Region Command', matches: ({ courseKey }) => courseKey.includes('region command course') },
+  { key: 'volu', label: 'VOLU Instructor', matches: ({ courseKey }) => courseKey.includes('volu instructor') }
+];
+
+const LEGACY_LEADERSHIP_COURSE_DEFS = [
+  { key: 'sls', label: 'SLS', matches: ({ courseKey }) => courseKey === 'sls' },
+  { key: 'clc', label: 'CLC', matches: ({ courseKey }) => courseKey === 'clc' },
+  { key: 'ucc', label: 'UCC', matches: ({ courseKey }) => courseKey === 'ucc' },
+  { key: 'rsc', label: 'RSC', matches: ({ courseKey }) => courseKey === 'rsc' },
+  { key: 'nsc', label: 'NSC', matches: ({ courseKey }) => courseKey === 'nsc' },
+  { key: 'wcc', label: 'WCC', matches: ({ courseKey }) => courseKey.includes('wing chaplain course') || courseKey === 'wcc' }
+];
+
+function FloatingHelpAndModals(props) {
+  const {
+    showReference, setShowReference, selectedMember, detailLevel,
+    setSelectedMember, setDetailLevel, getLevelBreakdown, LEVEL_DISPLAY_MAP,
+    promotionMember, setPromotionMember, getPromotionDetails,
+    selectedMemberProfile, setSelectedMemberProfile, getMemberEmail,
+    dataFiles, drillDownPosition, setDrillDownPosition, unitFilter,
+    getDescendantOrgIds, processedData, buildMemberProfileData,
+    DUTY_TO_TRACK_MAP, LEVELS, getCadetProtectionStatus, getTlcStatus,
+    dataService, activeTab
+  } = props;
+
+  const getLevelStatusDisplay = (meta = {}) => {
+    const status = meta.status || 'not-started';
+    const statusMap = {
+      completed: { label: 'Completed', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', bar: 'bg-emerald-500' },
+      pending: { label: 'Submitted', badge: 'bg-amber-100 text-amber-700 border-amber-200', bar: 'bg-amber-500' },
+      ready: { label: 'Ready to Submit', badge: 'bg-amber-100 text-amber-700 border-amber-200', bar: 'bg-amber-500' },
+      'in-progress': { label: 'In Progress', badge: 'bg-blue-100 text-blue-700 border-blue-200', bar: 'bg-blue-500' },
+      'not-started': { label: 'Not Started', badge: 'bg-slate-100 text-slate-600 border-slate-200', bar: 'bg-slate-400' }
+    };
+    return statusMap[status] || statusMap['not-started'];
+  };
+
+  const trainingRecords = React.useMemo(() => {
+    if (Array.isArray(dataFiles.training)) return dataFiles.training;
+    if (typeof parseCSV === 'function') return parseCSV(dataFiles.training);
+    return [];
+  }, [dataFiles.training]);
+
+  const trainingCourseIndex = React.useMemo(() => {
+    const map = new Map();
+    if (!trainingRecords || trainingRecords.length === 0) return map;
+
+    const normalizeText = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const parseDateValue = (value) => {
+      if (!value) return null;
+      const raw = String(value).trim();
+      if (!raw || raw === '01/01/1900') return null;
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return { raw, date: parsed };
+    };
+    const getRecordDate = (record) => parseDateValue(record.Completed) || parseDateValue(record.DateMod);
+    const upsert = (bucket, key, dateValue) => {
+      const current = bucket[key];
+      if (!current || dateValue.date > current.date) {
+        bucket[key] = dateValue;
+      }
+    };
+
+    trainingRecords.forEach(record => {
+      const capid = String(record.CAPID || '').trim();
+      if (!capid) return;
+      const courseKey = normalizeText(record.TypeCrs);
+      const howKey = normalizeText(record.HowComplete);
+      if (!courseKey && !howKey) return;
+      const dateValue = getRecordDate(record);
+      if (!dateValue) return;
+      const bucket = map.get(capid) || { pme: {}, leadership: {}, legacyLeadership: {} };
+      const context = { courseKey, howKey };
+      PME_COURSE_DEFS.forEach(def => {
+        if (def.matches(context)) upsert(bucket.pme, def.key, dateValue);
+      });
+      CAP_LEADERSHIP_COURSE_DEFS.forEach(def => {
+        if (def.matches(context)) upsert(bucket.leadership, def.key, dateValue);
+      });
+      LEGACY_LEADERSHIP_COURSE_DEFS.forEach(def => {
+        if (def.matches(context)) upsert(bucket.legacyLeadership, def.key, dateValue);
+      });
+      if (!map.has(capid)) map.set(capid, bucket);
+    });
+
+    return map;
+  }, [trainingRecords]);
+
+  return (
+    <>
+{/* FLOATING ACTION BUTTON FOR REFERENCE */}
+<button 
+    onClick={() => setShowReference(true)} 
+    className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 z-50"
+    title="Help & Reference"
+>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+</button>
+
+{/* All modals are now rendered at app level in Index.html */}
+    </>
+  );
+}
+</script>

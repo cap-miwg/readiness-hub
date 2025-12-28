@@ -1,0 +1,10 @@
+<script type="text/babel">
+// Cadet-specific utility functions
+const calculateDaysSince = (dateString) => {
+  if (!dateString || dateString === '01/01/1900') return null;
+  const date = new Date(dateString);
+  const today = new Date();
+  const diffTime = Math.abs(today - date);
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+</script>

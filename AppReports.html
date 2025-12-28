@@ -1,0 +1,3013 @@
+<script type="text/babel">
+function ReportsSection(props) {
+  const {
+    reportTagFilter, setReportTagFilter, selectedReport, setSelectedReport,
+    allReports, processedData, cadetData, reportsCollapsed, setReportsCollapsed,
+    availableReportTags, toggleReportTag, formatReportTagLabel, reportTagClasses,
+    filteredReports, handleGenerateReport, handleRegenerateReport, handleExportReportPDF,
+    handleExportCurrentReportPDF, setSelectedTaskMembers, selectedTaskMembers,
+    getMemberEmail, LEVEL_DISPLAY_MAP, setSelectedMemberTaskDetails,
+    selectedMemberTaskDetails, isMobile
+  } = props;
+
+  // Time range options for recruiting/retention reports
+  const timeRangeOptions = [
+    { value: 6, label: '6 mo' },
+    { value: 12, label: '12 mo' },
+    { value: 24, label: '24 mo' },
+    { value: 60, label: '5 yr' },
+    { value: 0, label: 'All' }
+  ];
+
+  const renderRequirementIndicator = (value) => {
+    if (value === null || value === undefined) {
+      return <span className="text-[10px] font-semibold text-slate-400">N/A</span>;
+    }
+    return (
+      <Icon
+        name={value ? 'CheckCircle' : 'Circle'}
+        className={`w-4 h-4 mx-auto ${value ? 'text-green-600' : 'text-slate-300'}`}
+      />
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Icon name="FileText" className="w-6 h-6 text-blue-600" />
+          <div>
+            <h2 className="font-bold text-2xl text-slate-800">Unit Reports & Analysis</h2>
+            <p className="text-sm text-slate-500 mt-1">Generate insights and identify action items for unit improvement</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setReportsCollapsed(prev => !prev)}
+          className="px-3 py-2 text-sm font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+        >
+          <Icon name={reportsCollapsed ? 'ChevronDown' : 'ChevronUp'} className="w-4 h-4" />
+          {reportsCollapsed ? 'Show report catalog' : 'Collapse catalog'}
+        </button>
+      </div>
+
+      <div className="mt-2 border-t border-slate-100 pt-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase text-slate-500">Filter by tag</span>
+            {reportTagFilter.length > 0 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                {reportTagFilter.length} active
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setReportTagFilter([])}
+            disabled={reportTagFilter.length === 0}
+            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+              reportTagFilter.length === 0
+                ? 'border-slate-200 text-slate-300 cursor-not-allowed'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Clear tags
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mt-3">
+          {availableReportTags.map(tag => {
+            const active = reportTagFilter.includes(tag);
+            return (
+              <button
+                key={tag}
+                onClick={() => toggleReportTag(tag)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  active
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {formatReportTagLabel(tag)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {!reportsCollapsed && (
+        <>
+          {filteredReports.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              {filteredReports.map(report => {
+                const accentBg = report.accent === 'amber' ? 'from-amber-50' : 'from-blue-50';
+                const badgeBg = report.accent === 'amber' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600';
+                return (
+                  <div key={report.id} className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                        <Icon name={report.icon} className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg text-slate-800">{report.title}</h3>
+                        <p className="text-xs text-slate-600 mt-1">{report.description}</p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {report.tags.map(tag => (
+                            <span key={`${report.id}-${tag}`} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${reportTagClasses[tag] || 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
+                              {formatReportTagLabel(tag)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => handleGenerateReport(report)}
+                        className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Icon name="BarChart3" className="w-4 h-4" />
+                        Generate
+                      </button>
+                      <button
+                        onClick={() => handleExportReportPDF(report)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                        title="Export to PDF"
+                      >
+                        <Icon name="Download" className="w-4 h-4" />
+                        PDF
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-4 border border-dashed border-slate-200 rounded-lg p-6 text-center text-slate-500">
+              <Icon name="Filter" className="w-6 h-6 mx-auto mb-2 text-slate-400" />
+              <p className="text-sm">No reports match the selected tags. Clear or adjust tags to see more options.</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+
+    {/* Report Display Area */}
+    {selectedReport && (
+      <div id="report-output" className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex justify-between items-start mb-4 gap-3">
+          <div>
+            <h3 className="font-bold text-xl text-slate-800">
+              {selectedReport.title || (selectedReport.type === 'training' ? 'Most Needed Training Analysis' : 'Track/Duty Discrepancies')}
+            </h3>
+            {selectedReport.tags && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {selectedReport.tags.map(tag => (
+                  <span key={`selected-${tag}`} className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${reportTagClasses[tag] || 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
+                    {formatReportTagLabel(tag)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleExportCurrentReportPDF()}
+              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+            >
+              <Icon name="Download" className="w-4 h-4" />
+              Export PDF
+            </button>
+            <button
+              onClick={() => setReportsCollapsed(false)}
+              className="px-3 py-1.5 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              Show Report Catalog
+            </button>
+            <button
+              onClick={() => { setSelectedReport(null); setSelectedTaskMembers(null); }}
+              className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              Clear Report
+            </button>
+          </div>
+        </div>
+
+        {selectedReport.type === 'training' && (
+          <div>
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+              <p className="text-sm text-blue-900">
+                <strong>Analysis:</strong> Moderated-only ET demand — what Volunteer University instructors should teach next. Members are only counted for moderated modules in their current working level/part (lowest incomplete). Level 2 track split is respected, and self-paced/automated modules are excluded since members can complete those online. Click the member count to see names and CAP IDs.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">All members have completed all required training!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedReport.data.map((item, idx) => (
+                  <div key={idx} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <h4 className="font-bold text-slate-800">{item.taskName}</h4>
+                        <p className="text-xs text-slate-500 mt-1">{item.description || 'No description available'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">Level {LEVEL_DISPLAY_MAP[item.level]?.label || item.level}</span>
+                          <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded">{item.groupName}</span>
+                        </div>
+                      </div>
+                      <div className="text-right ml-4">
+                        <button
+                          onClick={() => setSelectedTaskMembers(item)}
+                          className="text-2xl font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer transition-colors"
+                          title="Click to see member list"
+                        >
+                          {item.neededByCount}
+                        </button>
+                        <div className="text-xs text-slate-500">members need</div>
+                        <div className="text-xs font-medium text-slate-600 mt-1">{item.percentageOfUnit}% of unit</div>
+                        <div className="text-xs font-bold text-blue-700 mt-1">{item.percentageOfLevel}% of Level {LEVEL_DISPLAY_MAP[item.level]?.label || item.level}</div>
+                        <div className="text-[10px] text-slate-400">({item.workingOnLevel} working this level)</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedReport.type === 'discrepancies' && (
+          <div>
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+              <p className="text-sm text-amber-900">
+                <strong>Task List:</strong> These members have duty assignments but are missing the required specialty track enrollment.
+                Use this as an action list to correct discrepancies in eServices.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No track/duty discrepancies found!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedReport.data.map((item, idx) => (
+                  <div key={idx} className="border border-amber-200 rounded-lg p-4 hover:bg-amber-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-slate-800">{item.memberName}</h4>
+                        <p className="text-xs text-slate-500 mt-1">CAPID: {item.capid} - {item.rank}</p>
+                        <div className="mt-2 space-y-1">
+                          {item.issues.map((issue, issueIdx) => (
+                            <div key={issueIdx} className="flex items-start gap-2">
+                              <Icon name="AlertCircle" className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                              <div className="text-xs">
+                                <span className="font-medium text-amber-800">{issue.duty}</span>
+                                <span className="text-slate-600"> requires </span>
+                                <span className="font-medium text-blue-700">{issue.requiredTrack}</span>
+                                <span className="text-slate-600"> track</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-bold">
+                          {item.issues.length} {item.issues.length === 1 ? 'issue' : 'issues'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedReport.type === 'approval' && (
+          <div>
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
+              <p className="text-sm text-green-900">
+                Members below have completed all modules for a level and need submission/approval (or have a pending/disapproved submission).
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No levels awaiting approval!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Member</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Level</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                          <div className="text-xs text-slate-500">{row.rank}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2 text-xs text-slate-800">
+                          {row.levelName} (L{row.levelLabel})
+                        </td>
+                        <td className="px-3 py-2 text-xs font-semibold">
+                          <span className={`px-2 py-1 rounded-full border ${row.status.includes('Pending') ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedReport.type === 'promotion' && (
+          <div>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+              <p className="text-sm text-blue-900">
+                <strong>Promotion Eligibility Report:</strong> Senior members who meet all requirements for promotion to the next rank (Time in Grade, Education & Training Level, and Duty Position requirements).
+              </p>
+              <p className="text-xs text-blue-800 mt-2">
+                <strong>Note:</strong> Lt Cols are excluded from this report as promotion to Col is restricted to those holding wing command positions only.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No members currently eligible for promotion!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Member</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Current Rank</th>
+                      <th className="px-3 py-2 text-left">Next Rank</th>
+                      <th className="px-3 py-2 text-left">TIG</th>
+                      <th className="px-3 py-2 text-left">ET Level</th>
+                      <th className="px-3 py-2 text-left">Duty Req</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-xs font-semibold text-slate-800">{row.rank}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-bold">
+                            <Icon name="TrendingUp" className="w-3 h-3" />
+                            {row.nextRank}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          <div className="flex items-center gap-1">
+                            <Icon name="CheckCircle" className="w-3 h-3 text-green-600" />
+                            <span className="text-green-700 font-medium">{row.tigMonths}m</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">({row.tigRequired}m req)</div>
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          <div className="flex items-center gap-1">
+                            <Icon name="CheckCircle" className="w-3 h-3 text-green-600" />
+                            <span className="text-green-700 font-medium">{row.levelCurrent}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">({row.levelRequired} req)</div>
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          <span className={`px-2 py-0.5 rounded ${row.dutyStatus === 'N/A' ? 'bg-slate-100 text-slate-600' : 'bg-green-100 text-green-700'}`}>
+                            {row.dutyStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedReport.type === 'near-promotion' && (
+          <div>
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+              <p className="text-sm text-amber-900">
+                <strong>Near Promotion Report:</strong> Senior members who are close to promotion eligibility but not quite there yet. Use this to identify focus areas for training, duty assignments, or members who just need more time in grade.
+              </p>
+              <div className="mt-2 text-xs text-amber-800">
+                <strong>Thresholds:</strong> Within 6 months of TIG requirement, 5 or fewer tasks remaining for required level, or within 6 months of duty time requirement.
+              </div>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No members are currently near promotion eligibility!</p>
+              </div>
+            ) : (
+              <div>
+                <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <Icon name="Info" className="w-4 h-4" />
+                    <span>Sorted by priority (most urgent first), then by next rank and name. Members are grouped by what's blocking their promotion.</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {selectedReport.data.map((row, idx) => {
+                    const isHighPriority = row.priority <= 2;
+                    const borderColor = isHighPriority ? 'border-orange-200' : 'border-slate-200';
+                    const bgHover = isHighPriority ? 'hover:bg-orange-50' : 'hover:bg-slate-50';
+
+                    return (
+                      <div key={idx} className={`border ${borderColor} rounded-lg p-4 ${bgHover} transition-colors`}>
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-bold text-slate-900">{row.memberName}</h4>
+                              {isHighPriority && (
+                                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-bold uppercase rounded">High Priority</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-600">
+                              <span className="font-mono">{row.capid}</span>
+                              <span>{row.unit}</span>
+                              <span className="font-semibold">{row.rank} → {row.nextRank}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                              row.category.includes('Near')
+                                ? 'bg-orange-100 text-orange-700 border border-orange-200'
+                                : 'bg-amber-100 text-amber-700 border border-amber-200'
+                            }`}>
+                              {row.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-2 mb-3">
+                          <Icon name="AlertCircle" className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                          <div className="text-sm text-slate-700">
+                            <span className="font-medium">Blocking factors:</span> {row.blockingFactors}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div className={`p-2 rounded ${row.isTigMet ? 'bg-green-50' : row.isNearTIG ? 'bg-orange-50' : 'bg-slate-50'}`}>
+                            <div className="flex items-center gap-1 mb-1">
+                              <Icon name={row.isTigMet ? 'CheckCircle' : 'Clock'} className={`w-3 h-3 ${row.isTigMet ? 'text-green-600' : row.isNearTIG ? 'text-orange-600' : 'text-slate-400'}`} />
+                              <span className="font-bold text-slate-700">Time in Grade</span>
+                            </div>
+                            <div className={`${row.isTigMet ? 'text-green-700' : row.isNearTIG ? 'text-orange-700' : 'text-slate-600'}`}>
+                              {row.tigMonthsCurrent} / {row.tigMonthsRequired} months
+                            </div>
+                            {!row.isTigMet && (
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                {row.tigMonthsRemaining}m remaining
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={`p-2 rounded ${row.isLevelMet ? 'bg-green-50' : row.isNearLevel ? 'bg-orange-50' : 'bg-slate-50'}`}>
+                            <div className="flex items-center gap-1 mb-1">
+                              <Icon name={row.isLevelMet ? 'CheckCircle' : 'Book'} className={`w-3 h-3 ${row.isLevelMet ? 'text-green-600' : row.isNearLevel ? 'text-orange-600' : 'text-slate-400'}`} />
+                              <span className="font-bold text-slate-700">ET Level</span>
+                            </div>
+                            <div className={`${row.isLevelMet ? 'text-green-700' : row.isNearLevel ? 'text-orange-700' : 'text-slate-600'}`}>
+                              {row.levelCurrent} / {row.levelRequired}
+                            </div>
+                            {!row.isLevelMet && row.tasksRemaining > 0 && (
+                              <button
+                                onClick={() => setSelectedMemberTaskDetails({
+                                  memberName: row.memberName,
+                                  capid: row.capid,
+                                  taskDetails: row.taskDetails
+                                })}
+                                className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline cursor-pointer mt-0.5 font-medium"
+                              >
+                                {row.tasksRemaining} task{row.tasksRemaining !== 1 ? 's' : ''} left →
+                              </button>
+                            )}
+                          </div>
+
+                          <div className={`p-2 rounded ${row.isDutyMet || row.dutyStatus === 'N/A' ? 'bg-green-50' : row.isNearDuty ? 'bg-orange-50' : 'bg-slate-50'}`}>
+                            <div className="flex items-center gap-1 mb-1">
+                              <Icon name={row.isDutyMet || row.dutyStatus === 'N/A' ? 'CheckCircle' : 'Briefcase'} className={`w-3 h-3 ${row.isDutyMet || row.dutyStatus === 'N/A' ? 'text-green-600' : row.isNearDuty ? 'text-orange-600' : 'text-slate-400'}`} />
+                              <span className="font-bold text-slate-700">Duty Req</span>
+                            </div>
+                            <div className={`text-[11px] ${row.isDutyMet || row.dutyStatus === 'N/A' ? 'text-green-700' : row.isNearDuty ? 'text-orange-700' : 'text-slate-600'}`}>
+                              {row.dutyStatus}
+                            </div>
+                            {!row.isDutyMet && row.dutyMonthsRemaining > 0 && (
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                {row.dutyMonthsRemaining}m remaining
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cadet Report: No Promotion in 120 Days */}
+        {selectedReport.type === 'cadet-no-promotion' && (
+          <div>
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+              <p className="text-sm text-amber-900">
+                <strong>No Promotion Report:</strong> Cadets who have not been promoted in the last 120 days. These cadets may need assistance with achievement requirements or motivation.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">All cadets have been promoted within the last 120 days!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cadet Name</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Current Rank</th>
+                      <th className="px-3 py-2 text-left">Last Promotion</th>
+                      <th className="px-3 py-2 text-left">Days Since</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-xs font-semibold text-slate-800">{row.rank}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.lastPromotion}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
+                            row.daysSince > 180 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {row.daysSince} days
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedReport.type === 'cadet-protection' && (() => {
+          const counts = selectedReport.data.reduce((acc, row) => {
+            if (row.status === 'Due Soon') acc.dueSoon += 1;
+            if (row.status === 'Overdue') acc.overdue += 1;
+            if (row.status === 'Missing') acc.missing += 1;
+            if ((row.memberType || '').toUpperCase() === 'CADET') acc.cadets += 1;
+            else acc.seniors += 1;
+            return acc;
+          }, { dueSoon: 0, overdue: 0, missing: 0, cadets: 0, seniors: 0 });
+
+          return (
+            <div>
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+                <p className="text-sm text-amber-900">
+                  <strong>Cadet Protection Training Report:</strong> Members who are overdue or due soon on annual Cadet Protection training. Cadets eligible at 17 are flagged as due soon to encourage completion before turning 18.
+                </p>
+              </div>
+
+              {selectedReport.data.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                  <p className="font-medium">All members are current on Cadet Protection training!</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                    <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-800">Due Soon: {counts.dueSoon}</span>
+                    <span className="px-2 py-1 rounded-full bg-rose-100 text-rose-800">Overdue: {counts.overdue}</span>
+                    <span className="px-2 py-1 rounded-full bg-rose-100 text-rose-800">Missing: {counts.missing}</span>
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Cadets: {counts.cadets}</span>
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Seniors: {counts.seniors}</span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                      <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Member</th>
+                          <th className="px-3 py-2 text-left">CAPID</th>
+                          <th className="px-3 py-2 text-left">Unit</th>
+                          <th className="px-3 py-2 text-left">Type</th>
+                          <th className="px-3 py-2 text-left">Rank</th>
+                          <th className="px-3 py-2 text-left">Course</th>
+                          <th className="px-3 py-2 text-left">Requirement</th>
+                          <th className="px-3 py-2 text-left">Status</th>
+                          <th className="px-3 py-2 text-left">Last Completed</th>
+                          <th className="px-3 py-2 text-left">Expiration</th>
+                          <th className="px-3 py-2 text-left">Days</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedReport.data.map((row, idx) => {
+                          const typeBadge = row.memberType === 'CADET'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-purple-100 text-purple-800';
+                          const requirementBadge = row.requirement === 'Required'
+                            ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                            : 'bg-blue-100 text-blue-700 border border-blue-200';
+                          const statusBadge = (row.status === 'Overdue' || row.status === 'Missing')
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : 'bg-amber-100 text-amber-800 border border-amber-200';
+
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="px-3 py-2">
+                                <div className="font-bold text-slate-900">{row.memberName}</div>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                              <td className="px-3 py-2">
+                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${typeBadge}`}>
+                                  {row.memberType}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.course}</td>
+                              <td className="px-3 py-2 text-xs">
+                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${requirementBadge}`}>
+                                  {row.requirement}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-xs font-semibold">
+                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${statusBadge}`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.lastCompleted}</td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.expiration}</td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.daysText}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+          })()}
+
+          {selectedReport.type === 'tlc-compliance' && (() => {
+            const rows = selectedReport.data || [];
+            const requiredCount = selectedReport.meta?.required || 2;
+            const isUnitSummary = selectedReport.meta?.view === 'unit-summary';
+            const isExemptScope = !!selectedReport.meta?.isExempt;
+            const statusStyles = {
+              current: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+              'due-soon': 'bg-amber-100 text-amber-800 border-amber-200',
+              expired: 'bg-rose-100 text-rose-800 border-rose-200',
+              missing: 'bg-slate-100 text-slate-700 border-slate-200'
+            };
+
+              if (isUnitSummary) {
+                const totals = rows.reduce((acc, row) => {
+                  acc.units += 1;
+                  acc.qualified += row.qualified || 0;
+                  acc.current += row.current || 0;
+                  acc.dueSoon += row.dueSoon || 0;
+                  acc.expired += row.expired || 0;
+                  acc.missing += row.missing || 0;
+                  acc.totalMembers += row.totalMembers || 0;
+                  if (row.complianceStatus === 'compliant') acc.compliant += 1;
+                  else if (row.complianceStatus === 'exempt') acc.exempt += 1;
+                  else acc.nonCompliant += 1;
+                  return acc;
+                }, { units: 0, compliant: 0, nonCompliant: 0, exempt: 0, qualified: 0, current: 0, dueSoon: 0, expired: 0, missing: 0, totalMembers: 0 });
+
+              return (
+                <div>
+                  <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200 mb-4">
+                    <p className="text-sm text-indigo-900">
+                      <strong>TLC Compliance by Unit:</strong> Summary view because sub-units are included. Units meet the requirement with at least {requiredCount} TLC-qualified senior members (Current or Due Soon).
+                    </p>
+                  </div>
+
+                  {rows.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                      <p className="font-medium">No unit TLC data available for this scope.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                        <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800">Compliant Units: {totals.compliant}</span>
+                        <span className="px-2 py-1 rounded-full bg-rose-100 text-rose-800">Needs TLC: {totals.nonCompliant}</span>
+                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Exempt Units: {totals.exempt}</span>
+                        <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">Qualified Members: {totals.qualified}</span>
+                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Units: {totals.units}</span>
+                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Total Seniors: {totals.totalMembers}</span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                          <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Unit</th>
+                              <th className="px-3 py-2 text-center">Qualified</th>
+                              <th className="px-3 py-2 text-center">Required</th>
+                              <th className="px-3 py-2 text-center">Status</th>
+                              <th className="px-3 py-2 text-center">Current</th>
+                              <th className="px-3 py-2 text-center">Due Soon</th>
+                              <th className="px-3 py-2 text-center">Expired</th>
+                              <th className="px-3 py-2 text-center">Missing</th>
+                              <th className="px-3 py-2 text-center">Total Seniors</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {rows.map((row, idx) => {
+                              const compliantBadge = row.complianceStatus === 'compliant'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                : row.complianceStatus === 'exempt'
+                                  ? 'bg-slate-100 text-slate-700 border-slate-200'
+                                  : 'bg-rose-100 text-rose-800 border-rose-200';
+                              return (
+                                <tr key={idx} className="hover:bg-slate-50">
+                                  <td className="px-3 py-2">
+                                    <div className="font-bold text-slate-900">{row.unit}</div>
+                                  </td>
+                                  <td className="px-3 py-2 text-center text-xs font-semibold text-slate-800">{row.qualified}</td>
+                                  <td className="px-3 py-2 text-center text-xs text-slate-700">{row.required}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${compliantBadge}`}>
+                                      {row.compliance}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-center text-xs text-slate-700">{row.current}</td>
+                                  <td className="px-3 py-2 text-center text-xs text-slate-700">{row.dueSoon}</td>
+                                  <td className="px-3 py-2 text-center text-xs text-slate-700">{row.expired}</td>
+                                  <td className="px-3 py-2 text-center text-xs text-slate-700">{row.missing}</td>
+                                  <td className="px-3 py-2 text-center text-xs text-slate-700">{row.totalMembers}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            const counts = rows.reduce((acc, row) => {
+              const key = row.statusKey || 'missing';
+              acc[key] = (acc[key] || 0) + 1;
+              if (row.isQualified) acc.qualified += 1;
+              return acc;
+            }, { current: 0, 'due-soon': 0, expired: 0, missing: 0, qualified: 0 });
+
+              return (
+                <div>
+                  <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200 mb-4">
+                    <p className="text-sm text-indigo-900">
+                      <strong>TLC Status (Training Leaders of Cadets):</strong> Shows who has and does not have TLC in the selected unit. TLC is counted as qualified when Current or Due Soon.{isExemptScope ? ' This unit is exempt from the TLC compliance threshold.' : ` Unit requirement is ${requiredCount} qualified members.`}
+                    </p>
+                  </div>
+
+                {rows.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                    <p className="font-medium">No TLC data available for this unit.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800">Current: {counts.current}</span>
+                      <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-800">Due Soon: {counts['due-soon']}</span>
+                      <span className="px-2 py-1 rounded-full bg-rose-100 text-rose-800">Expired: {counts.expired}</span>
+                      <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Missing: {counts.missing}</span>
+                      {isExemptScope ? (
+                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">Exempt from TLC compliance</span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">Qualified: {counts.qualified} / {requiredCount}</span>
+                      )}
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                        <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Member</th>
+                            <th className="px-3 py-2 text-left">CAPID</th>
+                            <th className="px-3 py-2 text-left">Unit</th>
+                            <th className="px-3 py-2 text-left">Rank</th>
+                            <th className="px-3 py-2 text-left">Duties</th>
+                            <th className="px-3 py-2 text-left">TLC Course</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                            <th className="px-3 py-2 text-left">Completed</th>
+                            <th className="px-3 py-2 text-left">Expires</th>
+                            <th className="px-3 py-2 text-left">Days</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {rows.map((row, idx) => {
+                            const statusBadge = statusStyles[row.statusKey] || statusStyles.missing;
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="px-3 py-2">
+                                  <div className="font-bold text-slate-900">{row.memberName}</div>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                                <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                                <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+                                <td className="px-3 py-2 text-xs text-slate-600" title={row.dutyFull || row.dutySummary}>{row.dutySummary}</td>
+                                <td className="px-3 py-2 text-xs text-slate-700">{row.course}</td>
+                                <td className="px-3 py-2 text-xs font-semibold">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${statusBadge}`}>
+                                    {row.status}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-xs text-slate-700">{row.completed}</td>
+                                <td className="px-3 py-2 text-xs text-slate-700">{row.expiration}</td>
+                                <td className="px-3 py-2 text-xs text-slate-700">{row.daysText}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Cadet Report: Membership Lapse */}
+          {selectedReport.type === 'membership-lapse' && (
+            <div>
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+              <p className="text-sm text-amber-900">
+                <strong>Membership Expiring Soon:</strong> All members (seniors and cadets) whose membership will expire in 90 days or less. Take action to ensure renewals are processed on time.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No memberships expiring in the next 90 days!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Member Name</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Type</th>
+                      <th className="px-3 py-2 text-left">Rank</th>
+                      <th className="px-3 py-2 text-left">Expiration</th>
+                      <th className="px-3 py-2 text-left">Days Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${
+                            row.memberType === 'CADET' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {row.memberType}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.expiration}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
+                            row.urgency === 'critical' ? 'bg-red-100 text-red-800' :
+                            row.urgency === 'warning' ? 'bg-orange-100 text-orange-800' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            <Icon name="Clock" className="w-3 h-3 mr-1" />
+                            {row.daysUntil} days
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cadet Report: Aerospace Education */}
+        {selectedReport.type === 'aerospace-education' && (
+          <div>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+              <p className="text-sm text-blue-900">
+                <strong>Aerospace Education Completion:</strong> Shows all cadets and their completion of the 7 Aerospace Dimensions modules.
+                Each module cell is split: left side shows interactive module completion, right side shows written test completion.
+              </p>
+              <div className="mt-2 flex gap-4 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-green-500 rounded"></div>
+                  <span>Completed</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-slate-200 rounded"></div>
+                  <span>Not Started</span>
+                </div>
+              </div>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="Users" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No cadet data available!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-50 z-10">
+                        Cadet Name
+                      </th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-700 border-r border-slate-200">CAPID</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-700 border-r border-slate-200">Rank</th>
+                      {[1, 2, 3, 4, 5, 6, 7].map(num => (
+                        <th key={num} className="px-2 py-2 text-center font-bold text-slate-700 border-r border-slate-200 min-w-[140px]">
+                          <div className="text-xs">Module {num}</div>
+                          <div className="grid grid-cols-2 gap-px mt-1 text-[10px] font-normal text-slate-500">
+                            <div className="text-center">Interactive</div>
+                            <div className="text-center">Test</div>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-semibold text-slate-900 border-r border-slate-200 sticky left-0 bg-white">
+                          <div className="whitespace-nowrap">{row.memberName}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-slate-600 border-r border-slate-200 whitespace-nowrap">
+                          {row.capid}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700 border-r border-slate-200 whitespace-nowrap">
+                          {row.rank}
+                        </td>
+                        {[1, 2, 3, 4, 5, 6, 7].map(num => {
+                          const module = row[`module${num}`];
+                          return (
+                            <td key={num} className="p-0 border-r border-slate-200 relative">
+                              {module.honorCredit && (
+                                <div className="absolute -top-1 -right-1 z-10 text-yellow-500 text-sm">⭐</div>
+                              )}
+                              <div className="grid grid-cols-2 gap-px min-h-[60px]">
+                                {/* Interactive Module (Left) */}
+                                <div className={`p-2 flex flex-col justify-center items-center ${
+                                  module.interactiveCompleted ? 'bg-green-100' : 'bg-slate-50'
+                                }`}>
+                                  {module.interactiveCompleted ? (
+                                    <>
+                                      <div className="text-green-800 font-semibold mb-1">✓</div>
+                                      {module.interactiveDate && (
+                                        <div className="text-[10px] text-green-700 text-center leading-tight">
+                                          {module.interactiveDate}
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="text-slate-400 text-xl">—</div>
+                                  )}
+                                </div>
+                                {/* Written Test (Right) */}
+                                <div className={`p-2 flex flex-col justify-center items-center border-l border-slate-200 ${
+                                  module.testCompleted ? 'bg-green-100' : 'bg-slate-50'
+                                }`}>
+                                  {module.testCompleted ? (
+                                    <>
+                                      <div className="text-green-800 font-bold mb-1">{module.testScore}%</div>
+                                      {module.testDate && (
+                                        <div className="text-[10px] text-green-700 text-center leading-tight">
+                                          {module.testDate}
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="text-slate-400 text-xl">—</div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cadet Report: Encampment Status */}
+        {selectedReport.type === 'encampment-status' && (
+          <div>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+              <p className="text-sm text-blue-900">
+                <strong>Encampment Completion Status:</strong> Shows all cadets in the unit and whether they have completed an encampment.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="Users" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No cadet data available!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cadet Name</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Rank</th>
+                      <th className="px-3 py-2 text-center">Status</th>
+                      <th className="px-3 py-2 text-center">Count</th>
+                      <th className="px-3 py-2 text-left">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
+                            row.hasEncampment ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            <Icon name={row.hasEncampment ? 'CheckCircle' : 'X'} className="w-3 h-3 mr-1" />
+                            {row.hasEncampment ? 'Completed' : 'None'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-xs font-semibold text-slate-700">
+                          {row.count}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-600">
+                          {row.encampments.length > 0 ? (
+                            <div className="space-y-1">
+                              {row.encampments.slice(0, 2).map((enc, i) => (
+                                <div key={i} className="truncate max-w-md">
+                                  {enc.type} - {enc.completed}
+                                </div>
+                              ))}
+                              {row.encampments.length > 2 && (
+                                <div className="text-blue-600 font-medium">+{row.encampments.length - 2} more</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">No encampments</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cadet Report: Orientation Flights Status */}
+        {selectedReport.type === 'oflight-status' && (() => {
+          const stats = selectedReport.data.reduce((acc, row) => {
+            acc.totalCadets += 1;
+            if (!row.hasAnyFlight) acc.noFlights += 1;
+            if (row.completedSyllabi === 5) acc.allComplete += 1;
+            acc.totalPoweredFlights += row.totalPoweredFlights || 0;
+            acc.totalBackSeat += row.backSeatRides || 0;
+            // Track syllabus completion
+            for (let i = 6; i <= 10; i++) {
+              if (row[`syllabus${i}`]?.completed) acc[`syl${i}`] = (acc[`syl${i}`] || 0) + 1;
+            }
+            return acc;
+          }, { totalCadets: 0, noFlights: 0, allComplete: 0, totalPoweredFlights: 0, totalBackSeat: 0, syl6: 0, syl7: 0, syl8: 0, syl9: 0, syl10: 0 });
+
+          const participationRate = stats.totalCadets > 0 ? Math.round(((stats.totalCadets - stats.noFlights) / stats.totalCadets) * 100) : 0;
+          const completionRate = stats.totalCadets > 0 ? Math.round((stats.allComplete / stats.totalCadets) * 100) : 0;
+
+          return (
+          <div>
+            <div className="bg-sky-50 p-4 rounded-lg border border-sky-200 mb-4">
+              <p className="text-sm text-sky-900">
+                <strong>Orientation Flights Status:</strong> Shows powered O-Flight syllabus completion (syllabi 6-10) for all cadets. Cadets with no O-Flights are highlighted at the top of the list.
+              </p>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">6:</span> Ground Handling, Preflight, Takeoff & Landing
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">7:</span> Normal Flight Maneuvers
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">8:</span> Advanced Flight Maneuvers
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">9:</span> Use of Instruments in Flight
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold">10:</span> Weather
+                </div>
+              </div>
+            </div>
+
+            {/* Summary Statistics */}
+            {selectedReport.data.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+                <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-slate-800">{stats.totalCadets}</div>
+                  <div className="text-xs text-slate-500">Total Cadets</div>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-amber-700">{stats.noFlights}</div>
+                  <div className="text-xs text-amber-600">No O-Flights</div>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-emerald-700">{stats.allComplete}</div>
+                  <div className="text-xs text-emerald-600">All 5 Complete</div>
+                </div>
+                <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-sky-700">{participationRate}%</div>
+                  <div className="text-xs text-sky-600">Participation Rate</div>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-blue-700">{stats.totalPoweredFlights}</div>
+                  <div className="text-xs text-blue-600">Total Powered Flights</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-slate-700">{stats.totalBackSeat}</div>
+                  <div className="text-xs text-slate-500">Back Seat Rides</div>
+                </div>
+              </div>
+            )}
+
+            {/* Syllabus Breakdown */}
+            {selectedReport.data.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-lg p-3 mb-4">
+                <div className="text-xs font-semibold text-slate-600 mb-2">Syllabus Completion Breakdown</div>
+                <div className="grid grid-cols-5 gap-2">
+                  {[6, 7, 8, 9, 10].map(num => {
+                    const count = stats[`syl${num}`] || 0;
+                    const pct = stats.totalCadets > 0 ? Math.round((count / stats.totalCadets) * 100) : 0;
+                    return (
+                      <div key={num} className="text-center">
+                        <div className="text-lg font-bold text-slate-800">{count}</div>
+                        <div className="text-[10px] text-slate-500">Syllabus {num}</div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{width: `${pct}%`}}></div>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{pct}%</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="Plane" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No cadet data available!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cadet Name</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Join Date</th>
+                      <th className="px-3 py-2 text-center">Age</th>
+                      <th className="px-3 py-2 text-center" title="Syllabus 6: Ground Handling, Preflight, Takeoff & Landing">6</th>
+                      <th className="px-3 py-2 text-center" title="Syllabus 7: Normal Flight Maneuvers">7</th>
+                      <th className="px-3 py-2 text-center" title="Syllabus 8: Advanced Flight Maneuvers">8</th>
+                      <th className="px-3 py-2 text-center" title="Syllabus 9: Use of Instruments in Flight">9</th>
+                      <th className="px-3 py-2 text-center" title="Syllabus 10: Weather">10</th>
+                      <th className="px-3 py-2 text-center">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className={`hover:bg-slate-50 ${!row.hasAnyFlight ? 'bg-amber-50' : ''}`}>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {!row.hasAnyFlight && (
+                              <Icon name="AlertCircle" className="w-4 h-4 text-amber-500" title="No O-Flights yet" />
+                            )}
+                            <span className="font-bold text-slate-900">{row.memberName}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{row.joinDate}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600 text-center">{row.age}</td>
+                        {[6, 7, 8, 9, 10].map(num => {
+                          const data = row[`syllabus${num}`];
+                          return (
+                            <td key={num} className="px-3 py-2 text-center">
+                              {data && data.completed ? (
+                                <div className="flex flex-col items-center">
+                                  <Icon name="CheckCircle" className="w-5 h-5 text-emerald-500" />
+                                  <span className="text-[9px] text-slate-500 mt-0.5">{data.date}</span>
+                                </div>
+                              ) : (
+                                <Icon name="Circle" className="w-5 h-5 text-slate-300 mx-auto" />
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-2 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="font-bold text-slate-900">{row.totalPoweredFlights}</span>
+                            {row.backSeatRides > 0 && (
+                              <span className="text-[9px] text-slate-500">+{row.backSeatRides} back</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 bg-amber-50 border border-amber-200 rounded"></div>
+                    <span>No O-Flights yet</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Icon name="CheckCircle" className="w-4 h-4 text-emerald-500" />
+                    <span>Syllabus completed</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          );
+        })()}
+
+        {/* Cadet Report: Recent Promotions */}
+        {selectedReport.type === 'recent-promotions' && (
+          <div>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+              <p className="text-sm text-blue-900">
+                <strong>Recent Promotions:</strong> Cadets who have been promoted in the past 30 or 60 days. Great for recognition and tracking unit progress.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="TrendingUp" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No cadets promoted in the last 60 days!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cadet Name</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Previous Rank</th>
+                      <th className="px-3 py-2 text-left">Current Rank</th>
+                      <th className="px-3 py-2 text-left">Promotion Date</th>
+                      <th className="px-3 py-2 text-left">Days Ago</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{row.previousRank}</td>
+                        <td className="px-3 py-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-bold">
+                            <Icon name="TrendingUp" className="w-3 h-3" />
+                            {row.currentRank}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.rankDate}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
+                            row.timeframe === '30-day' ? 'bg-blue-100 text-blue-800' : 'bg-sky-100 text-sky-800'
+                          }`}>
+                            {row.daysSincePromotion} days
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cadet Report: Promotion Requirements */}
+        {selectedReport.type === 'promotion-requirements' && (
+          <div>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+              <p className="text-sm text-blue-900">
+                <strong>Cadet Promotion Requirements:</strong> Comprehensive table showing each cadet's current achievement, next achievement, and progress on promotion requirements.
+              </p>
+            </div>
+
+            {selectedReport.data.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="Users" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No cadet data available!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Cadet Name</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Rank</th>
+                      <th className="px-3 py-2 text-left">Current Achievement</th>
+                      <th className="px-3 py-2 text-left">Next Achievement</th>
+                      <th className="px-3 py-2 text-center">Leadership</th>
+                      <th className="px-3 py-2 text-center">Aerospace</th>
+                      <th className="px-3 py-2 text-center">Fitness</th>
+                      <th className="px-3 py-2 text-center">Character</th>
+                      <th className="px-3 py-2 text-center">Activity/Special</th>
+                      <th className="px-3 py-2 text-center">Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedReport.data.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-slate-900">{row.memberName}</div>
+                          <div className="font-mono text-xs text-slate-500">{row.capid}</div>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                        <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+                        <td className="px-3 py-2">
+                          <div className="text-xs font-semibold text-slate-800">{row.currentAchievement}</div>
+                          <div className="text-[10px] text-slate-500">{row.currentPhase}</div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="text-xs font-semibold text-blue-800">{row.nextAchievement}</div>
+                          <div className="text-[10px] text-slate-500">{row.nextPhase}</div>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {renderRequirementIndicator(row.leadership)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {renderRequirementIndicator(row.aerospace)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {renderRequirementIndicator(row.fitness)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {renderRequirementIndicator(row.character)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {renderRequirementIndicator(row.activity)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-xs font-bold text-slate-700">{row.progress}</span>
+                            <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                              <div className={`h-full ${row.percentComplete === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{width: `${row.percentComplete}%`}}></div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cadet Report: Approaching Age 18 or 21 */}
+        {selectedReport.type === 'approaching-age-milestone' && (() => {
+          const rows = selectedReport.data || [];
+          const stats = rows.reduce((acc, row) => {
+            acc.total += 1;
+            if (row.milestone === 18) acc.age18 += 1;
+            if (row.milestone === 21) acc.age21 += 1;
+            if (row.urgency === 'critical') acc.critical += 1;
+            if (row.urgency === 'warning') acc.warning += 1;
+            return acc;
+          }, { total: 0, age18: 0, age21: 0, critical: 0, warning: 0 });
+
+          return (
+            <div>
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+                <p className="text-sm text-amber-900">
+                  <strong>Age Milestone Report:</strong> Cadets approaching significant age milestones within the next 6 months. Use this report to plan for cadet transitions to senior membership (age 18) and cadet program age-outs (age 21).
+                </p>
+                <div className="mt-2 text-xs text-amber-800">
+                  <strong>Key dates:</strong> Age 18 = eligible to become Senior Member | Age 21 = maximum cadet program age
+                </div>
+              </div>
+
+              {rows.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Icon name="Calendar" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                  <p className="font-medium">No cadets approaching age 18 or 21 in the next 6 months!</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Summary Statistics */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-slate-800">{stats.total}</div>
+                      <div className="text-xs text-slate-500">Total Approaching</div>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-blue-700">{stats.age18}</div>
+                      <div className="text-xs text-blue-600">Turning 18</div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-purple-700">{stats.age21}</div>
+                      <div className="text-xs text-purple-600">Turning 21</div>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-red-700">{stats.critical}</div>
+                      <div className="text-xs text-red-600">Within 30 Days</div>
+                    </div>
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-orange-700">{stats.warning}</div>
+                      <div className="text-xs text-orange-600">Within 90 Days</div>
+                    </div>
+                  </div>
+
+                  {/* Table view */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                      <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Cadet Name</th>
+                          <th className="px-3 py-2 text-left">CAPID</th>
+                          <th className="px-3 py-2 text-left">Unit</th>
+                          <th className="px-3 py-2 text-left">Rank</th>
+                          <th className="px-3 py-2 text-left">DOB</th>
+                          <th className="px-3 py-2 text-center">Current Age</th>
+                          <th className="px-3 py-2 text-center">Milestone</th>
+                          <th className="px-3 py-2 text-left">Milestone Date</th>
+                          <th className="px-3 py-2 text-center">Days Until</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {rows.map((row, idx) => {
+                          const urgencyBadge = {
+                            critical: 'bg-red-100 text-red-800 border-red-200',
+                            warning: 'bg-orange-100 text-orange-800 border-orange-200',
+                            notice: 'bg-blue-100 text-blue-800 border-blue-200'
+                          };
+                          const milestoneBadge = row.milestone === 18
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-purple-100 text-purple-800';
+
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="px-3 py-2">
+                                <div className="font-bold text-slate-900">{row.memberName}</div>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+                              <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.dob}</td>
+                              <td className="px-3 py-2 text-center text-xs font-semibold text-slate-800">{row.currentAge}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${milestoneBadge}`}>
+                                  {row.milestoneLabel}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-slate-700">{row.milestoneDate}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${urgencyBadge[row.urgency]}`}>
+                                  {row.daysUntil} days
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* QCUA (Quality Cadet Unit Award) Report */}
+        {selectedReport.type === 'qcua' && (() => {
+          const rows = selectedReport.data || [];
+          const meta = selectedReport.meta || {};
+          const isMultiUnit = meta.view === 'multi-unit';
+
+          const statusBadgeStyles = {
+            'On Track': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            'Potentially Eligible': 'bg-amber-100 text-amber-800 border-amber-200',
+            'Not On Track': 'bg-rose-100 text-rose-800 border-rose-200',
+            'Ineligible (< 10 cadets)': 'bg-slate-100 text-slate-600 border-slate-200'
+          };
+
+          const criterionStatusIcon = (criterion) => {
+            if (!criterion.trackable) {
+              return <Icon name="CircleHelp" className="w-4 h-4 text-slate-400" title="Not trackable in this app" />;
+            }
+            if (criterion.met === null) {
+              return <Icon name="Minus" className="w-4 h-4 text-slate-400" title="N/A" />;
+            }
+            if (criterion.met) {
+              return <Icon name="CheckCircle" className="w-4 h-4 text-emerald-600" />;
+            }
+            return <Icon name="XCircle" className="w-4 h-4 text-rose-500" />;
+          };
+
+          const formatCriterionValue = (criterion) => {
+            if (!criterion.trackable) {
+              return <span className="text-slate-400 italic text-xs">{criterion.notTrackableReason}</span>;
+            }
+            if (criterion.noNewCadets) {
+              return <span className="text-slate-500 text-xs">No new cadets in cycle</span>;
+            }
+            if (criterion.isCountBased) {
+              return (
+                <span className={`text-xs font-semibold ${criterion.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {criterion.count} / {criterion.threshold} required
+                </span>
+              );
+            }
+            if (criterion.percent !== null) {
+              return (
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold ${criterion.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {criterion.percent}%
+                  </span>
+                  <span className="text-xs text-slate-500">({criterion.count}/{criterion.total})</span>
+                  <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${criterion.percent >= criterion.threshold ? 'bg-emerald-500' : 'bg-rose-400'}`}
+                      style={{ width: `${Math.min(criterion.percent, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            }
+            return <span className="text-slate-400">—</span>;
+          };
+
+          // Single unit detailed view
+          const renderSingleUnit = (unit) => {
+            const criteriaOrder = [
+              'cadetAchievement', 'encampment', 'enrollment', 'emergencyServices',
+              'onboarding', 'orientationFlights', 'tlcGraduates',
+              'aerospace', 'localAction', 'stemTeam'
+            ];
+
+            return (
+              <div key={unit.unitName} className="space-y-4">
+                {/* Unit Header */}
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-800">{unit.unitName}</h4>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {unit.totalCadets} cadets | {unit.totalSeniors} seniors | Cycle: {meta.cycleStart} to {meta.cycleEnd}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1.5 rounded-lg text-sm font-bold border ${statusBadgeStyles[unit.awardStatus]}`}>
+                      {unit.awardStatus}
+                    </span>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-slate-800">{unit.criteriaMet}/10</div>
+                      <div className="text-[10px] text-slate-500 uppercase">Criteria Met</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Eligibility Warning */}
+                {!unit.isEligible && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-amber-800">
+                      <Icon name="AlertTriangle" className="w-4 h-4" />
+                      <span className="text-sm font-medium">Unit needs at least 10 cadets to be eligible for QCUA</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Criteria Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {criteriaOrder.map(key => {
+                    const criterion = unit.criteria[key];
+                    if (!criterion) return null;
+
+                    const bgColor = !criterion.trackable
+                      ? 'bg-slate-50 border-slate-200'
+                      : criterion.met === null
+                        ? 'bg-slate-50 border-slate-200'
+                        : criterion.met
+                          ? 'bg-emerald-50 border-emerald-200'
+                          : 'bg-rose-50 border-rose-200';
+
+                    return (
+                      <div key={key} className={`p-3 rounded-lg border ${bgColor}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              {criterionStatusIcon(criterion)}
+                              <span className="font-semibold text-slate-800 text-sm">{criterion.name}</span>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-1">{criterion.description}</div>
+                          </div>
+                          <div className="text-right">
+                            {formatCriterionValue(criterion)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Non-trackable notice */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mt-4">
+                  <div className="flex items-start gap-2">
+                    <Icon name="Info" className="w-4 h-4 text-slate-500 mt-0.5" />
+                    <div className="text-xs text-slate-600">
+                      <strong>Note:</strong> 3 criteria (Aerospace, Local Action, STEM Team) cannot be tracked in this app due to lack of data in the available downloads.
+                      Units showing "Potentially Eligible" may qualify if they meet these manual-verification criteria.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          };
+
+          // Multi-unit summary table
+          const renderMultiUnitSummary = () => {
+            const criteriaHeaders = [
+              { key: 'cadetAchievement', short: 'WB', title: 'Wright Brothers (45%)' },
+              { key: 'encampment', short: 'ENC', title: 'Encampment (50%)' },
+              { key: 'enrollment', short: 'ENR', title: 'Enrollment (25+)' },
+              { key: 'emergencyServices', short: 'GES', title: 'GES (60%)' },
+              { key: 'onboarding', short: 'ONB', title: 'Onboarding (70%)' },
+              { key: 'orientationFlights', short: 'OFL', title: 'O-Flights (70%)' },
+              { key: 'tlcGraduates', short: 'TLC', title: 'TLC (3+)' }
+            ];
+
+            return (
+              <div className="space-y-4">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-slate-800">{meta.totalUnits}</div>
+                    <div className="text-xs text-slate-500">Total Units</div>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-emerald-700">{meta.onTrackUnits}</div>
+                    <div className="text-xs text-emerald-600">On Track</div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-amber-700">{rows.filter(r => r.awardStatus === 'Potentially Eligible').length}</div>
+                    <div className="text-xs text-amber-600">Potentially Eligible</div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-blue-700">{meta.eligibleUnits}</div>
+                    <div className="text-xs text-blue-600">10+ Cadets</div>
+                  </div>
+                </div>
+
+                {/* Summary Table */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold text-slate-700 border-b border-slate-200">Unit</th>
+                        <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Cadets</th>
+                        <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Status</th>
+                        <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Score</th>
+                        {criteriaHeaders.map(h => (
+                          <th key={h.key} className="px-2 py-2 text-center font-bold text-slate-600 border-b border-slate-200" title={h.title}>
+                            {h.short}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {rows.map((unit, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap">{unit.unitName}</td>
+                          <td className="px-2 py-2 text-center text-slate-600">{unit.totalCadets}</td>
+                          <td className="px-2 py-2 text-center">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${statusBadgeStyles[unit.awardStatus]}`}>
+                              {unit.awardStatus === 'Ineligible (< 10 cadets)' ? '<10' : unit.awardStatus.replace('Potentially ', 'Pot. ')}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2 text-center font-bold text-slate-700">{unit.criteriaMet}/10</td>
+                          {criteriaHeaders.map(h => {
+                            const c = unit.criteria[h.key];
+                            return (
+                              <td key={h.key} className="px-2 py-2 text-center">
+                                {!c.trackable ? (
+                                  <span className="text-slate-300">?</span>
+                                ) : c.met === null ? (
+                                  <span className="text-slate-300">—</span>
+                                ) : c.met ? (
+                                  <Icon name="Check" className="w-3.5 h-3.5 text-emerald-600 mx-auto" />
+                                ) : (
+                                  <Icon name="X" className="w-3.5 h-3.5 text-rose-500 mx-auto" />
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap gap-4 text-xs text-slate-600 mt-2">
+                  <div className="flex items-center gap-1">
+                    <Icon name="Check" className="w-3 h-3 text-emerald-600" />
+                    <span>Met</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Icon name="X" className="w-3 h-3 text-rose-500" />
+                    <span>Not Met</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400">?</span>
+                    <span>Not Trackable</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400">—</span>
+                    <span>N/A</span>
+                  </div>
+                </div>
+
+                {/* Criteria Legend */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="text-xs font-semibold text-slate-700 mb-2">Criteria Key:</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-slate-600">
+                    {criteriaHeaders.map(h => (
+                      <div key={h.key}><strong>{h.short}:</strong> {h.title}</div>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    + 3 non-trackable: Aerospace (AEX/STEM Kit), Local Action (4 events), STEM Team
+                  </div>
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+                <p className="text-sm text-blue-900">
+                  <strong>Quality Cadet Unit Award (QCUA):</strong> Units with 10+ cadets that meet at least 6 of 10 criteria earn the award.
+                  Award cycle: {meta.cycleStart} to {meta.cycleEnd}. This report tracks 7 criteria automatically; 3 require manual verification.
+                </p>
+              </div>
+
+              {rows.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Icon name="Award" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                  <p className="font-medium">No unit data available!</p>
+                </div>
+              ) : isMultiUnit ? (
+                renderMultiUnitSummary()
+              ) : (
+                <div className="space-y-6">
+                  {rows.map(unit => renderSingleUnit(unit))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    )}
+
+    {/* QUA (Quality Unit Award) Report */}
+    {selectedReport && selectedReport.type === 'qua' && (() => {
+      const rows = selectedReport.data || [];
+      const meta = selectedReport.meta || {};
+      const isMultiUnit = meta.view === 'multi-unit';
+
+      const statusBadgeStyles = {
+        'On Track': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        'Potentially Eligible': 'bg-amber-100 text-amber-800 border-amber-200',
+        'Not On Track': 'bg-rose-100 text-rose-800 border-rose-200',
+        'Required Criteria Not Met': 'bg-red-100 text-red-800 border-red-200',
+        'Not Eligible': 'bg-slate-100 text-slate-600 border-slate-200'
+      };
+
+      const criterionStatusIcon = (criterion) => {
+        if (!criterion.trackable) {
+          return <Icon name="Square" className="w-4 h-4 text-slate-400" title="Manual verification required" />;
+        }
+        if (criterion.met === null) {
+          return <Icon name="CircleHelp" className="w-4 h-4 text-slate-400" title="Data not available" />;
+        }
+        if (criterion.met) {
+          return <Icon name="CheckCircle" className="w-4 h-4 text-emerald-600" />;
+        }
+        return <Icon name="XCircle" className="w-4 h-4 text-rose-500" />;
+      };
+
+      const formatSubCriteria = (subCriteria, criterionKey) => {
+        if (!subCriteria) return null;
+
+        // Special handling for Professional Development criteria
+        if (criterionKey === 'professionalDevelopment') {
+          return (
+            <div className="mt-2 space-y-2 text-xs">
+              {subCriteria.newLevels && (
+                <div className={`p-2 rounded ${subCriteria.newLevels.met ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                  <div className={`flex items-center gap-2 font-medium ${subCriteria.newLevels.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {subCriteria.newLevels.met ? <Icon name="Check" className="w-3 h-3" /> : <Icon name="X" className="w-3 h-3" />}
+                    <span>New Professional Level Completions (Level II-V)</span>
+                  </div>
+                  <div className="ml-5 mt-1 text-slate-600">
+                    <span className="font-semibold">{subCriteria.newLevels.count}</span> members ({subCriteria.newLevels.percent}%) achieved a new level this FY
+                    <span className="text-slate-500 ml-1">(10% required)</span>
+                  </div>
+                </div>
+              )}
+              {subCriteria.smPromotion && (
+                <div className={`p-2 rounded ${subCriteria.smPromotion.met ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                  <div className={`flex items-center gap-2 font-medium ${subCriteria.smPromotion.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {subCriteria.smPromotion.met ? <Icon name="Check" className="w-3 h-3" /> : <Icon name="X" className="w-3 h-3" />}
+                    <span>Senior Member Promotion Compliance</span>
+                  </div>
+                  <div className="ml-5 mt-1 text-slate-600">
+                    {subCriteria.smPromotion.met
+                      ? 'All SM have been promoted within 1 year of eligibility'
+                      : <span><span className="font-semibold text-rose-600">{subCriteria.smPromotion.violations}</span> SM have been eligible for promotion &gt; 1 year without action</span>
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Default handling for other criteria
+        return (
+          <div className="mt-2 space-y-1 text-xs">
+            {Object.entries(subCriteria).map(([key, sub]) => {
+              if (key === 'smPromotion') {
+                return (
+                  <div key={key} className={`flex items-center gap-2 ${sub.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {sub.met ? <Icon name="Check" className="w-3 h-3" /> : <Icon name="X" className="w-3 h-3" />}
+                    <span>No SM &gt; 1 year without promotion</span>
+                    {sub.violations > 0 && <span className="text-rose-600">({sub.violations} violations)</span>}
+                  </div>
+                );
+              }
+              const hasPercent = sub.percent !== undefined;
+              const hasCount = sub.count !== undefined;
+              return (
+                <div key={key} className={`flex items-center gap-2 ${sub.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {sub.met ? <Icon name="Check" className="w-3 h-3" /> : <Icon name="X" className="w-3 h-3" />}
+                  <span>{sub.name}:</span>
+                  {hasPercent && <span className="font-semibold">{sub.percent}%</span>}
+                  {hasCount && !hasPercent && <span className="font-semibold">{sub.count}</span>}
+                  {sub.threshold && <span className="text-slate-500">({hasPercent ? `${sub.threshold}% req` : `${sub.threshold} req`})</span>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      const formatCriterionValue = (criterion) => {
+        if (!criterion.trackable) {
+          return <span className="text-slate-400 italic text-xs">{criterion.notTrackableReason || 'Manual verification'}</span>;
+        }
+        if (criterion.met === null && criterion.notTrackableReason) {
+          return <span className="text-slate-400 italic text-xs">{criterion.notTrackableReason}</span>;
+        }
+        // Retention criterion with growth/retention data
+        if (criterion.growth !== undefined || criterion.retention !== undefined) {
+          return (
+            <div className="text-xs">
+              {criterion.growth !== null && (
+                <div className={`font-semibold ${criterion.growth >= 5 ? 'text-emerald-700' : 'text-slate-600'}`}>
+                  Growth: {criterion.growth}% {criterion.growth >= 5 && <span className="text-emerald-600">(5% met)</span>}
+                </div>
+              )}
+              {criterion.retention !== null && (
+                <div className={`font-semibold ${criterion.retention >= 75 ? 'text-emerald-700' : 'text-slate-600'}`}>
+                  Retention: {criterion.retention}% {criterion.retention >= 75 && <span className="text-emerald-600">(75% met)</span>}
+                </div>
+              )}
+            </div>
+          );
+        }
+        // Standard percentage-based criterion
+        if (criterion.percent !== undefined && criterion.percent !== null) {
+          return (
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-semibold ${criterion.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+                {criterion.percent}%
+              </span>
+              <span className="text-xs text-slate-500">({criterion.count}/{criterion.total})</span>
+              <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${criterion.percent >= criterion.threshold ? 'bg-emerald-500' : 'bg-rose-400'}`}
+                  style={{ width: `${Math.min(criterion.percent, 100)}%` }}
+                />
+              </div>
+            </div>
+          );
+        }
+        // Count-based criterion
+        if (criterion.count !== undefined) {
+          return (
+            <span className={`text-xs font-semibold ${criterion.met ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {criterion.count} / {criterion.threshold} required
+            </span>
+          );
+        }
+        return <span className="text-slate-400">—</span>;
+      };
+
+      // Component to render expandable member details table
+      const MemberDetailsTable = ({ members, title, showQuals = false, showCourses = false, showActivities = false, showStatus = false, showLevel = false, showReason = false, colorClass = 'border-slate-200' }) => {
+        const [expanded, setExpanded] = React.useState(false);
+        if (!members || members.length === 0) return null;
+
+        return (
+          <div className={`mt-2 border rounded ${colorClass}`}>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="w-full flex items-center justify-between px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700"
+            >
+              <span>{title} ({members.length})</span>
+              <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} className="w-3 h-3" />
+            </button>
+            {expanded && (
+              <div className="max-h-48 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-semibold text-slate-600">Name</th>
+                      <th className="px-2 py-1 text-left font-semibold text-slate-600">CAPID</th>
+                      <th className="px-2 py-1 text-left font-semibold text-slate-600">Rank</th>
+                      {showStatus && <th className="px-2 py-1 text-left font-semibold text-slate-600">Status</th>}
+                      {showLevel && <th className="px-2 py-1 text-left font-semibold text-slate-600">Level</th>}
+                      {showReason && <th className="px-2 py-1 text-left font-semibold text-slate-600">Details</th>}
+                      {showQuals && <th className="px-2 py-1 text-left font-semibold text-slate-600">Qualifications</th>}
+                      {showCourses && <th className="px-2 py-1 text-left font-semibold text-slate-600">Courses</th>}
+                      {showActivities && <th className="px-2 py-1 text-left font-semibold text-slate-600">Activities</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {members.map((m, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-2 py-1 text-slate-700">{m.memberName}</td>
+                        <td className="px-2 py-1 text-slate-500">{m.capid}</td>
+                        <td className="px-2 py-1 text-slate-500">{m.rank}</td>
+                        {showStatus && <td className={`px-2 py-1 ${m.status === 'current' || m.status === 'exempt' ? 'text-emerald-600' : m.status === 'due-soon' ? 'text-amber-600' : 'text-rose-600'}`}>{m.status}{m.reason ? ` - ${m.reason}` : ''}</td>}
+                        {showLevel && <td className="px-2 py-1 text-slate-600">{m.levelAchieved || '—'}</td>}
+                        {showReason && <td className="px-2 py-1 text-slate-600">{m.reason || (m.joinDate ? `Joined: ${m.joinDate}` : '—')}</td>}
+                        {showQuals && <td className="px-2 py-1 text-slate-600 max-w-xs truncate" title={m.qualifications?.join(', ') || m.qualName}>{m.qualifications?.join(', ') || m.qualName || '—'}</td>}
+                        {showCourses && <td className="px-2 py-1 text-slate-600 max-w-xs truncate" title={m.courses?.join(', ')}>{m.courses?.join(', ') || '—'}</td>}
+                        {showActivities && <td className="px-2 py-1 text-slate-600 max-w-xs truncate" title={m.activities?.map(a => a.type).join(', ')}>{m.activities?.map(a => a.type).join(', ') || '—'}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      // Render retention details with percentages
+      const renderRetentionDetails = (criterion) => {
+        if (criterion.growth === null && criterion.retention === null) return null;
+        return (
+          <div className="mt-2 text-xs bg-slate-50 rounded p-2 space-y-1">
+            <div className="font-semibold text-slate-700 mb-1">Current Status:</div>
+            {criterion.growth !== null && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Growth Rate:</span>
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold ${criterion.growth >= 5 ? 'text-emerald-600' : criterion.growth >= 0 ? 'text-amber-600' : 'text-rose-600'}`}>
+                    {criterion.growth >= 0 ? '+' : ''}{criterion.growth}%
+                  </span>
+                  {criterion.growth >= 5 ? (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">5% met</span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded">5% req</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {criterion.retention !== null && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Retention Rate:</span>
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold ${criterion.retention >= 75 ? 'text-emerald-600' : criterion.retention >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>
+                    {criterion.retention}%
+                  </span>
+                  {criterion.retention >= 75 ? (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">75% met</span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded">75% req</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {criterion.startTotal !== null && criterion.currentTotal !== null && (
+              <div className="flex justify-between items-center pt-1 border-t border-slate-200 mt-1">
+                <span className="text-slate-500">Members:</span>
+                <span className="text-slate-600">{criterion.startTotal} → {criterion.currentTotal}</span>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      // Render member details for a criterion
+      const renderCriterionMemberDetails = (criterion, criterionKey) => {
+        const details = [];
+
+        if (criterionKey === 'cadetProtection') {
+          if (criterion.compliantMembers?.length > 0) {
+            details.push(
+              <MemberDetailsTable
+                key="compliant"
+                members={criterion.compliantMembers}
+                title="Compliant Members"
+                showStatus={true}
+                colorClass="border-emerald-200"
+              />
+            );
+          }
+          if (criterion.nonCompliantMembers?.length > 0) {
+            details.push(
+              <MemberDetailsTable
+                key="noncompliant"
+                members={criterion.nonCompliantMembers}
+                title="Non-Compliant Members"
+                showStatus={true}
+                colorClass="border-rose-200"
+              />
+            );
+          }
+        }
+
+        if (criterionKey === 'professionalDevelopment') {
+          if (criterion.completedMembers?.length > 0) {
+            details.push(
+              <MemberDetailsTable
+                key="completed"
+                members={criterion.completedMembers}
+                title="New Level Completions (FY)"
+                showLevel={true}
+                colorClass="border-emerald-200"
+              />
+            );
+          }
+          if (criterion.subCriteria?.smPromotion?.members?.length > 0) {
+            details.push(
+              <MemberDetailsTable
+                key="smviolation"
+                members={criterion.subCriteria.smPromotion.members}
+                title="SM Promotion Violations (>1yr)"
+                showReason={true}
+                colorClass="border-rose-200"
+              />
+            );
+          }
+        }
+
+        if (criterionKey === 'retention') {
+          details.push(renderRetentionDetails(criterion));
+        }
+
+        if (criterionKey === 'encampmentSupport' && criterion.members?.length > 0) {
+          details.push(
+            <MemberDetailsTable
+              key="encampment"
+              members={criterion.members}
+              title="Encampment Participants"
+              showActivities={true}
+              colorClass="border-blue-200"
+            />
+          );
+        }
+
+        return details.length > 0 ? <div className="mt-2">{details}</div> : null;
+      };
+
+      // Render member details for sub-criteria (ES, Command & Leadership)
+      // Note: Skip 'newLevels' and 'smPromotion' for professionalDevelopment - they're already handled by renderCriterionMemberDetails
+      const renderSubCriteriaMemberDetails = (subCriteria) => {
+        if (!subCriteria) return null;
+        const details = [];
+
+        // Keys to skip - these are already rendered elsewhere
+        const skipKeys = ['newLevels', 'smPromotion'];
+
+        Object.entries(subCriteria).forEach(([key, sub]) => {
+          // Skip keys that are handled separately
+          if (skipKeys.includes(key)) return;
+
+          if (sub.members?.length > 0 && sub.name) {
+            const showQuals = key === 'ges' || key === 'icut' || key === 'operational';
+            const showCourses = key === 'volu';
+            details.push(
+              <MemberDetailsTable
+                key={key}
+                members={sub.members}
+                title={`${sub.name} Members`}
+                showQuals={showQuals}
+                showCourses={showCourses}
+                colorClass={sub.met ? 'border-emerald-200' : 'border-amber-200'}
+              />
+            );
+          }
+        });
+
+        return details.length > 0 ? <div className="mt-2">{details}</div> : null;
+      };
+
+      // Single unit detailed view
+      const renderSingleUnit = (unit) => {
+        const requiredCriteriaOrder = ['cadetProtection', 'professionalDevelopment', 'retention'];
+        const missionCriteriaOrder = ['esReadiness', 'commandLeadership', 'encampmentSupport', 'aerospaceEducation', 'communityEngagement', 'flyingExcellence', 'innovationCyber'];
+
+        return (
+          <div key={unit.unitName} className="space-y-4">
+            {/* Unit Header */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h4 className="text-lg font-bold text-slate-800">{unit.unitName}</h4>
+                <div className="text-xs text-slate-500 mt-1">
+                  {unit.unitCategoryLabel} | {unit.totalSeniors} senior members | {meta.fyLabel} ({meta.fyStart} to {meta.fyEnd})
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`px-3 py-1.5 rounded-lg text-sm font-bold border ${statusBadgeStyles[unit.awardStatus]}`}>
+                  {unit.awardStatus}
+                </span>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-slate-800">{unit.criteriaMet}/10</div>
+                  <div className="text-[10px] text-slate-500 uppercase">Criteria Met</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Required Criteria Section */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Icon name="ShieldCheck" className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-bold text-slate-700">Required Criteria (All Must Be Met)</span>
+                {unit.allRequiredMet ? (
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded">All Met</span>
+                ) : (
+                  <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-xs font-semibold rounded">Not Met</span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {requiredCriteriaOrder.map(key => {
+                  const criterion = unit.criteria[key];
+                  if (!criterion) return null;
+
+                  const bgColor = !criterion.trackable
+                    ? 'bg-slate-50 border-slate-200'
+                    : criterion.met === null
+                      ? 'bg-slate-50 border-slate-200'
+                      : criterion.met
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-rose-50 border-rose-200';
+
+                  return (
+                    <div key={key} className={`p-3 rounded-lg border ${bgColor}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            {criterionStatusIcon(criterion)}
+                            <span className="font-semibold text-slate-800 text-sm">{criterion.name}</span>
+                          </div>
+                          <div className="text-xs text-slate-600 mt-1">{criterion.description}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        {formatCriterionValue(criterion)}
+                        {criterion.subCriteria && formatSubCriteria(criterion.subCriteria, key)}
+                        {renderCriterionMemberDetails(criterion, key)}
+                        {criterion.subCriteria && renderSubCriteriaMemberDetails(criterion.subCriteria)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Mission-Specific Criteria Section */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Icon name="Target" className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-bold text-slate-700">Mission-Specific Criteria (Choose Any 4)</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {missionCriteriaOrder.map(key => {
+                  const criterion = unit.criteria[key];
+                  if (!criterion) return null;
+
+                  const bgColor = !criterion.trackable
+                    ? 'bg-slate-50 border-slate-200 border-dashed'
+                    : criterion.met === null
+                      ? 'bg-slate-50 border-slate-200'
+                      : criterion.met
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-rose-50 border-rose-200';
+
+                  return (
+                    <div key={key} className={`p-3 rounded-lg border ${bgColor}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            {criterionStatusIcon(criterion)}
+                            <span className="font-semibold text-slate-800 text-sm">{criterion.name}</span>
+                            {!criterion.trackable && <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Manual</span>}
+                          </div>
+                          <div className="text-xs text-slate-600 mt-1">{criterion.description}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        {formatCriterionValue(criterion)}
+                        {criterion.subCriteria && formatSubCriteria(criterion.subCriteria, key)}
+                        {renderCriterionMemberDetails(criterion, key)}
+                        {criterion.subCriteria && renderSubCriteriaMemberDetails(criterion.subCriteria)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Non-trackable notice */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mt-4">
+              <div className="flex items-start gap-2">
+                <Icon name="Info" className="w-4 h-4 text-slate-500 mt-0.5" />
+                <div className="text-xs text-slate-600">
+                  <strong>Note:</strong> 4 criteria (AE Events, Community Engagement, Flying Excellence, Innovation/Cyber) cannot be tracked in this app.
+                  Units showing "Potentially Eligible" may qualify if they meet these manual-verification criteria.
+                  Check the box mentally for criteria your unit has completed.
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // Multi-unit summary table
+      const renderMultiUnitSummary = () => {
+        const criteriaHeaders = [
+          { key: 'cadetProtection', short: 'CP', title: 'Cadet Protection (100%)' },
+          { key: 'professionalDevelopment', short: 'PD', title: 'Professional Development' },
+          { key: 'retention', short: 'RET', title: 'Retention (5% growth OR 75% retention)' },
+          { key: 'esReadiness', short: 'ES', title: 'ES Readiness (50% GES, 25% ICUT, 15% Ops)' },
+          { key: 'commandLeadership', short: 'CMD', title: 'Command & Leadership' },
+          { key: 'encampmentSupport', short: 'ENC', title: 'Encampment Support (15%)' }
+        ];
+
+        return (
+          <div className="space-y-4">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-slate-800">{meta.totalUnits}</div>
+                <div className="text-xs text-slate-500">Total Units</div>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-700">{meta.onTrackUnits}</div>
+                <div className="text-xs text-emerald-600">On Track</div>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-amber-700">{meta.potentialUnits}</div>
+                <div className="text-xs text-amber-600">Potentially Eligible</div>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-blue-700">{rows.filter(r => r.allRequiredMet).length}</div>
+                <div className="text-xs text-blue-600">Required Met</div>
+              </div>
+            </div>
+
+            {/* Summary Table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-bold text-slate-700 border-b border-slate-200">Unit</th>
+                    <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Type</th>
+                    <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Seniors</th>
+                    <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Status</th>
+                    <th className="px-2 py-2 text-center font-bold text-slate-700 border-b border-slate-200">Score</th>
+                    {criteriaHeaders.map(h => (
+                      <th key={h.key} className="px-2 py-2 text-center font-bold text-slate-600 border-b border-slate-200" title={h.title}>
+                        {h.short}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {rows.map((unit, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap">{unit.unitName}</td>
+                      <td className="px-2 py-2 text-center text-slate-600 text-[10px]">{unit.unitCategoryLabel}</td>
+                      <td className="px-2 py-2 text-center text-slate-600">{unit.totalSeniors}</td>
+                      <td className="px-2 py-2 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${statusBadgeStyles[unit.awardStatus]}`}>
+                          {unit.awardStatus === 'Required Criteria Not Met' ? 'Req Fail' : unit.awardStatus.replace('Potentially ', 'Pot. ')}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-center font-bold text-slate-700">{unit.criteriaMet}/10</td>
+                      {criteriaHeaders.map(h => {
+                        const c = unit.criteria[h.key];
+                        return (
+                          <td key={h.key} className="px-2 py-2 text-center">
+                            {!c.trackable ? (
+                              <span className="text-slate-300">?</span>
+                            ) : c.met === null ? (
+                              <span className="text-slate-300">—</span>
+                            ) : c.met ? (
+                              <Icon name="Check" className="w-3.5 h-3.5 text-emerald-600 mx-auto" />
+                            ) : (
+                              <Icon name="X" className="w-3.5 h-3.5 text-rose-500 mx-auto" />
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-4 text-xs text-slate-600 mt-2">
+              <div className="flex items-center gap-1">
+                <Icon name="Check" className="w-3 h-3 text-emerald-600" />
+                <span>Met</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Icon name="X" className="w-3 h-3 text-rose-500" />
+                <span>Not Met</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-slate-400">?</span>
+                <span>Not Trackable</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-slate-400">—</span>
+                <span>No Data</span>
+              </div>
+            </div>
+
+            {/* Criteria Legend */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <div className="text-xs font-semibold text-slate-700 mb-2">Criteria Key:</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-slate-600">
+                {criteriaHeaders.map(h => (
+                  <div key={h.key}><strong>{h.short}:</strong> {h.title}</div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                + 4 non-trackable: Aerospace Education, Community Engagement, Flying Excellence, Innovation/Cyber
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div>
+          <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200 mb-4">
+            <p className="text-sm text-emerald-900">
+              <strong>Quality Unit Award (QUA):</strong> Great Lakes Region award for Groups, Senior Squadrons, and Composite Squadrons.
+              Units must meet 7 of 10 criteria (3 required + 4 mission-specific). Fiscal Year: {meta.fyStart} to {meta.fyEnd}.
+              This report tracks 6 criteria automatically; 4 require manual verification.
+            </p>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <Icon name="Award" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">No eligible units found</p>
+              <p className="text-xs mt-1">QUA applies to Groups, Senior Squadrons, and Composite Squadrons only</p>
+            </div>
+          ) : isMultiUnit ? (
+            renderMultiUnitSummary()
+          ) : (
+            <div className="space-y-6">
+              {rows.map(unit => renderSingleUnit(unit))}
+            </div>
+          )}
+        </div>
+      );
+    })()}
+
+    {/* Recruiting Trends Report */}
+    {selectedReport && selectedReport.type === 'recruiting-trends' && (() => {
+      const meta = selectedReport.meta || {};
+      const rows = selectedReport.data || [];
+
+      if (meta.error) {
+        return (
+          <div className="text-center py-8 text-slate-400">
+            <Icon name="AlertCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+            <p className="font-medium">{meta.error}</p>
+          </div>
+        );
+      }
+
+      const trendColor = meta.trend === 'increasing' ? 'text-emerald-600' :
+                         meta.trend === 'decreasing' ? 'text-rose-600' : 'text-slate-500';
+      const trendIcon = meta.trend === 'increasing' ? 'TrendingUp' :
+                        meta.trend === 'decreasing' ? 'TrendingDown' : 'Minus';
+
+      const currentTimeRange = selectedReport.options?.timeRange || meta.timeRange || 12;
+
+      return (
+        <div>
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-sm text-blue-900">
+                  <strong>Recruiting Trends Analysis:</strong> Monthly patterns of new member acquisition including first-time joins and returning members.
+                  {meta.isAggregate && ' Showing aggregate data for all subordinate units.'}
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  {meta.dataPoints} data points analyzed
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-semibold text-blue-700 mr-2">Time Range:</span>
+                {timeRangeOptions.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleRegenerateReport({ timeRange: opt.value })}
+                    className={`px-2 py-1 text-xs font-semibold rounded transition-colors ${
+                      currentTimeRange === opt.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-slate-500 font-bold mb-1">Total Recruited</div>
+              <div className="text-2xl font-bold text-slate-800">{meta.totalRecruited}</div>
+              <div className="text-xs text-slate-500">in period</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-slate-500 font-bold mb-1">Monthly Avg</div>
+              <div className="text-2xl font-bold text-slate-800">{meta.monthlyAverage}</div>
+              <div className={`text-xs flex items-center gap-1 ${trendColor}`}>
+                <Icon name={trendIcon} className="w-3 h-3" />
+                {meta.trendPercent > 0 ? '+' : ''}{meta.trendPercent}% vs prior
+              </div>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-emerald-700 font-bold mb-1">New Members</div>
+              <div className="text-xl font-bold text-emerald-800">{meta.newTotal}</div>
+              <div className="text-xs text-emerald-600">{meta.totalRecruited > 0 ? Math.round((meta.newTotal / meta.totalRecruited) * 100) : 0}% of total</div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-blue-700 font-bold mb-1">Rejoins</div>
+              <div className="text-xl font-bold text-blue-800">{meta.rejoinTotal}</div>
+              <div className="text-xs text-blue-600">{meta.totalRecruited > 0 ? Math.round((meta.rejoinTotal / meta.totalRecruited) * 100) : 0}% of total</div>
+            </div>
+          </div>
+
+          {/* Member Type Breakdown */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-slate-500 font-bold mb-2">Senior Members</div>
+              <div className="text-xl font-bold text-slate-800">{meta.seniorTotal}</div>
+              <div className="text-xs text-slate-500">recruited in period</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-slate-500 font-bold mb-2">Cadets</div>
+              <div className="text-xl font-bold text-slate-800">{meta.cadetTotal}</div>
+              <div className="text-xs text-slate-500">recruited in period</div>
+            </div>
+          </div>
+
+          {/* Seasonality */}
+          {meta.seasonality && (
+            <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6">
+              <div className="text-sm font-semibold text-slate-700 mb-3">Seasonal Patterns</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-emerald-700 font-semibold mb-1">Peak Recruiting Months</div>
+                  <div className="flex gap-2">
+                    {meta.seasonality.peakMonths.map(m => (
+                      <span key={m} className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{m}</span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-rose-700 font-semibold mb-1">Low Recruiting Months</div>
+                  <div className="flex gap-2">
+                    {meta.seasonality.lowMonths.map(m => (
+                      <span key={m} className="px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs font-medium">{m}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Subordinate Unit Breakdown (aggregate mode) */}
+          {meta.isAggregate && meta.unitBreakdown && meta.unitBreakdown.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6">
+              <div className="text-sm font-semibold text-slate-700 mb-3">Unit Recruiting Rates</div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-right">Members</th>
+                      <th className="px-3 py-2 text-right">Avg/Month</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {meta.unitBreakdown.slice(0, 10).map((unit, idx) => (
+                      <tr key={unit.orgId} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-medium text-slate-800">{unit.unitName}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{unit.currentTotal}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-slate-800">{unit.recruitingRate || '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Monthly Breakdown Table */}
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <div className="p-3 border-b border-slate-200 bg-slate-50">
+              <div className="text-sm font-semibold text-slate-700">Monthly Breakdown</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Month</th>
+                    <th className="px-3 py-2 text-right">New</th>
+                    <th className="px-3 py-2 text-right">Rejoin</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                    <th className="px-3 py-2 text-right">Members</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rows.slice(0, 24).map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-medium text-slate-800">{row.month}</td>
+                      <td className="px-3 py-2 text-right text-emerald-600">{row.totalNew || 0}</td>
+                      <td className="px-3 py-2 text-right text-blue-600">{row.totalRejoin || 0}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-800">{row.totalRecruited || 0}</td>
+                      <td className="px-3 py-2 text-right text-slate-500">{row.totalMembers || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* Retention Analysis Report */}
+    {selectedReport && selectedReport.type === 'retention-analysis' && (() => {
+      const meta = selectedReport.meta || {};
+      const rows = selectedReport.data || [];
+
+      if (meta.error) {
+        return (
+          <div className="text-center py-8 text-slate-400">
+            <Icon name="AlertCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+            <p className="font-medium">{meta.error}</p>
+          </div>
+        );
+      }
+
+      const healthColor = meta.healthIndicator === 'healthy' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                          meta.healthIndicator === 'moderate' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                          meta.healthIndicator === 'at-risk' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                          'bg-slate-100 text-slate-600 border-slate-200';
+      const healthLabel = meta.healthIndicator === 'healthy' ? 'Healthy' :
+                          meta.healthIndicator === 'moderate' ? 'Moderate' :
+                          meta.healthIndicator === 'at-risk' ? 'At Risk' : 'Unknown';
+
+      const growthColor = meta.growthStatus === 'growing' ? 'text-emerald-600' :
+                          meta.growthStatus === 'declining' ? 'text-rose-600' : 'text-slate-500';
+      const growthIcon = meta.growthStatus === 'growing' ? 'TrendingUp' :
+                         meta.growthStatus === 'declining' ? 'TrendingDown' : 'Minus';
+
+      const currentTimeRange = selectedReport.options?.timeRange || meta.timeRange || 12;
+
+      return (
+        <div>
+          <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-sm text-amber-900">
+                  <strong>Retention & Renewal Analysis:</strong> Tracks renewal rates, attrition patterns, and identifies members approaching membership expiration.
+                  {meta.isAggregate && ' Showing aggregate data for all subordinate units.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-semibold text-amber-700 mr-2">Time Range:</span>
+                {timeRangeOptions.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleRegenerateReport({ timeRange: opt.value })}
+                    className={`px-2 py-1 text-xs font-semibold rounded transition-colors ${
+                      currentTimeRange === opt.value
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-white text-amber-700 border border-amber-300 hover:bg-amber-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Health Status Banner */}
+          <div className={`flex items-center justify-between p-4 rounded-lg border mb-6 ${healthColor}`}>
+            <div className="flex items-center gap-3">
+              <Icon name={meta.healthIndicator === 'healthy' ? 'CheckCircle' : meta.healthIndicator === 'at-risk' ? 'AlertTriangle' : 'AlertCircle'} className="w-6 h-6" />
+              <div>
+                <div className="font-bold text-lg">Retention Rate: {meta.retentionRate !== null ? `${meta.retentionRate}%` : '--'}</div>
+                <div className="text-sm opacity-80">Status: {healthLabel}</div>
+              </div>
+            </div>
+            <div className={`px-3 py-1.5 rounded-full font-bold text-sm border ${healthColor}`}>
+              {healthLabel}
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-slate-500 font-bold mb-1">Current Members</div>
+              <div className="text-2xl font-bold text-slate-800">{meta.currentTotal}</div>
+              {meta.memberBreakdown && (
+                <div className="text-xs text-slate-500">
+                  {meta.memberBreakdown.senior} Sr / {meta.memberBreakdown.cadet} Cdt
+                </div>
+              )}
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-emerald-700 font-bold mb-1">Renewals</div>
+              <div className="text-xl font-bold text-emerald-800">{meta.renewalsInPeriod}</div>
+              <div className="text-xs text-emerald-600">in period</div>
+            </div>
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-rose-700 font-bold mb-1">Est. Attrition</div>
+              <div className="text-xl font-bold text-rose-800">{meta.estimatedAttrition}</div>
+              <div className="text-xs text-rose-600">{meta.annualizedAttritionRate !== null ? `${meta.annualizedAttritionRate}%/yr` : ''}</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <div className="text-[10px] uppercase text-slate-500 font-bold mb-1">Net Change</div>
+              <div className={`text-xl font-bold flex items-center gap-1 ${growthColor}`}>
+                <Icon name={growthIcon} className="w-5 h-5" />
+                {meta.netChange > 0 ? '+' : ''}{meta.netChange}
+              </div>
+              <div className="text-xs text-slate-500 capitalize">{meta.growthStatus}</div>
+            </div>
+          </div>
+
+          {/* Subordinate Unit Breakdown (aggregate mode) */}
+          {meta.isAggregate && meta.unitBreakdown && meta.unitBreakdown.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6">
+              <div className="text-sm font-semibold text-slate-700 mb-3">Unit Retention Rates</div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-right">Members</th>
+                      <th className="px-3 py-2 text-right">Retention</th>
+                      <th className="px-3 py-2 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {meta.unitBreakdown.slice(0, 10).map((unit, idx) => (
+                      <tr key={unit.orgId} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-medium text-slate-800">{unit.unitName}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{unit.currentTotal}</td>
+                        <td className="px-3 py-2 text-right font-semibold">
+                          <span className={unit.retentionRate >= 80 ? 'text-emerald-600' : unit.retentionRate >= 60 ? 'text-amber-600' : 'text-rose-600'}>
+                            {unit.retentionRate !== null ? `${unit.retentionRate}%` : '--'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={`text-xs font-medium ${unit.growthStatus === 'growing' ? 'text-emerald-600' : unit.growthStatus === 'declining' ? 'text-rose-600' : 'text-slate-500'}`}>
+                            {unit.growthStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Members Due for Renewal */}
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden mb-6">
+            <div className="p-3 border-b border-slate-200 bg-amber-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-amber-800">Members Due for Renewal</div>
+                <div className="flex gap-2 text-xs">
+                  <span className="px-2 py-0.5 bg-rose-100 text-rose-700 rounded">{meta.expiringIn30Days} in 30 days</span>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded">{meta.expiringIn60Days} in 60 days</span>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded">{meta.expiringIn90Days} in 90 days</span>
+                </div>
+              </div>
+            </div>
+            {rows.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                <p className="font-medium">No members expiring in the next 90 days!</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Member</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Type</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-right">Expires</th>
+                      <th className="px-3 py-2 text-right">Days</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map((member, idx) => (
+                      <tr key={idx} className={`hover:bg-slate-50 ${member.urgency === 'critical' ? 'bg-rose-50' : member.urgency === 'warning' ? 'bg-amber-50' : ''}`}>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-slate-800">{member.memberName}</div>
+                          <div className="text-xs text-slate-500">{member.rank}</div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-600">{member.capid}</td>
+                        <td className="px-3 py-2 text-xs">
+                          <span className={`px-2 py-0.5 rounded ${member.memberType === 'Cadet' ? 'bg-sky-100 text-sky-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {member.memberType}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{member.unit}</td>
+                        <td className="px-3 py-2 text-right text-xs text-slate-600">{member.expiration}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={`font-bold ${member.urgency === 'critical' ? 'text-rose-600' : member.urgency === 'warning' ? 'text-amber-600' : 'text-slate-600'}`}>
+                            {member.daysUntil}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* Member List Modal */}
+    {selectedTaskMembers && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setSelectedTaskMembers(null)}>
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="flex justify-between items-center p-6 border-b border-slate-200">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">{selectedTaskMembers.taskName}</h2>
+          <p className="text-sm text-slate-600 mt-1">
+            Level {LEVEL_DISPLAY_MAP[selectedTaskMembers.level]?.label || selectedTaskMembers.level} - {selectedTaskMembers.neededByCount} members need this module
+          </p>
+        </div>
+        <button onClick={() => setSelectedTaskMembers(null)} className="text-slate-400 hover:text-slate-600 p-2">
+          <Icon name="X" className="w-6 h-6" />
+        </button>
+      </div>
+      <div className="p-6 overflow-y-auto">
+        {(() => {
+          const emails = Array.from(new Set(
+            (selectedTaskMembers.neededBy || [])
+              .map(member => getMemberEmail(member.capid))
+              .filter(Boolean)
+          ));
+          if (!emails.length) return null;
+          return (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-slate-700">Emails ({emails.length})</span>
+                <span className="text-[11px] text-slate-500">Copy/paste to email all</span>
+              </div>
+              <textarea
+                className="w-full text-xs font-mono text-slate-700 border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                rows="2"
+                readOnly
+                value={emails.join('; ')}
+              />
+            </div>
+          );
+        })()}
+        <div className="space-y-2">
+          {selectedTaskMembers.neededBy && selectedTaskMembers.neededBy.length > 0 ? (
+            selectedTaskMembers.neededBy.map((member, idx) => (
+              <div key={idx} className="flex justify-between items-center p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                <div>
+                  <div className="font-medium text-slate-800">{member.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {member.rank}
+                    {(() => {
+                      const email = getMemberEmail(member.capid);
+                      return email ? <span className="text-slate-600 font-mono ml-2">{email}</span> : <span className="text-slate-400 italic ml-2">No email</span>;
+                    })()}
+                  </div>
+                </div>
+                <div className="text-sm font-mono text-slate-600 bg-slate-100 px-3 py-1 rounded">
+                  {member.capid}
+                </div>
+              </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-400">
+                  <p>No members found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Member Task Details Modal */}
+    {selectedMemberTaskDetails && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setSelectedMemberTaskDetails(null)}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="flex justify-between items-center p-6 border-b border-slate-200">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">{selectedMemberTaskDetails.memberName}</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Remaining Training Tasks - CAPID: {selectedMemberTaskDetails.capid}
+              </p>
+            </div>
+            <button onClick={() => setSelectedMemberTaskDetails(null)} className="text-slate-400 hover:text-slate-600 p-2">
+              <Icon name="X" className="w-6 h-6" />
+            </button>
+          </div>
+          <div className="p-6 overflow-y-auto">
+            {selectedMemberTaskDetails.taskDetails && selectedMemberTaskDetails.taskDetails.length > 0 ? (
+              <div className="space-y-3">
+                {selectedMemberTaskDetails.taskDetails.map((detail, idx) => {
+                  const totalRemaining = detail.required - detail.completed;
+                  return (
+                    <div key={idx} className="border rounded-lg overflow-hidden shadow-sm">
+                      <div className={`px-4 py-2.5 text-sm font-bold flex justify-between items-center ${totalRemaining === 0 ? 'bg-green-50 text-green-800 border-b border-green-100' : 'bg-amber-50 text-amber-800 border-b border-amber-200'}`}>
+                        <div>
+                          <span className="block">{detail.groupName}</span>
+                          <span className="text-xs font-normal opacity-75">{detail.levelName}</span>
+                        </div>
+                        <span className="text-xs px-2 py-0.5 bg-white rounded border ml-2">{detail.completed} / {detail.required}</span>
+                      </div>
+                      <div className="p-4 bg-white space-y-2">
+                        {detail.tasks && detail.tasks.length > 0 ? (
+                          detail.tasks.map((task, taskIdx) => (
+                            <div key={taskIdx} className="flex items-start text-xs group">
+                              <div className="mr-3 mt-0.5">
+                                <CircleEmpty />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-slate-600">{task.TaskName || task.name || 'Unnamed Task'}</span>
+                                  {(() => {
+                                    const trackTags = (task.appliesTo || []).filter(tag => tag !== 'ALL');
+                                    if (!trackTags.length) return null;
+                                    return (
+                                      <div className="flex gap-1">
+                                        {trackTags.map(tag => (
+                                          <span key={`${task.TaskID || taskIdx}-${tag}`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{tag}</span>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                                {(task.Description || task.description) && (
+                                  <p className="text-slate-400 mt-0.5 leading-tight">{task.Description || task.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-slate-400 text-sm italic">
+                            All tasks in this group are complete
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">
+                <Icon name="CheckCircle" className="w-16 h-16 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No remaining tasks found</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </div>
+  );
+}
+</script>

@@ -1,0 +1,1205 @@
+<script type="text/babel">
+/**
+ * ModalRecruitingRetention - Detailed Recruiting & Retention Analysis Modal
+ *
+ * Features:
+ * - Time series charts (membership trend, recruiting/renewal breakdown)
+ * - Seasonality analysis
+ * - Component breakdown of sustainability score
+ * - Risk indicators
+ * - Commander-friendly insights
+ */
+const { useRef: useRefRR, useCallback: useCallbackRR } = React;
+
+/**
+ * ModalHelpTooltip - Tooltip that works reliably in modals with proper z-index
+ */
+const ModalHelpTooltip = ({ explanation, children, position = 'top' }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRefRR(null);
+
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      // Position above the trigger element
+      setCoords({
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2
+      });
+    }
+    setIsVisible(true);
+  };
+
+  if (!explanation) return children || null;
+
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        className="inline-flex items-center cursor-help ml-1"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setIsVisible(false)}
+      >
+        <Icon name="HelpCircle" className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+      </span>
+      {isVisible && (
+        <div
+          className="fixed z-[100] transform -translate-x-1/2 -translate-y-full pointer-events-none"
+          style={{ top: coords.top, left: coords.left }}
+        >
+          <div className="bg-slate-800 text-white text-xs rounded-lg shadow-xl p-3 max-w-xs">
+            <div className="font-bold mb-1">{explanation.label}</div>
+            <div className="text-slate-300 mb-2">{explanation.fullDesc || explanation.shortDesc}</div>
+            {explanation.goodValue && (
+              <div className="text-emerald-300 text-[10px]">
+                Target: {explanation.goodValue}
+              </div>
+            )}
+            {explanation.formula && (
+              <div className="text-slate-400 text-[10px] mt-1 pt-1 border-t border-slate-600">
+                {explanation.formula}
+              </div>
+            )}
+          </div>
+          <div className="w-3 h-3 bg-slate-800 transform rotate-45 mx-auto -mt-1.5"></div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const RecruitingRetentionModal = ({
+  isOpen,
+  onClose,
+  metrics,
+  unitFilter,
+  showAllDescendants,
+  timeRange,
+  orgStatsService,
+  descendantOrgIds,
+  dataFiles
+}) => {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [mbrTypeFilter, setMbrTypeFilter] = useState('combined');
+  const [localTimeRange, setLocalTimeRange] = useState(timeRange || 12);
+  const [unitTableSort, setUnitTableSort] = useState({ field: 'sustainabilityScore', direction: 'desc' });
+  const chartRefs = useRefRR({});
+
+  // Get unit name helper
+  const getUnitName = useCallbackRR((orgId) => {
+    const org = (dataFiles?.organization || []).find(o =>
+      String(o.ORGID || '').trim() === String(orgId || '').trim()
+    );
+    if (!org) return `Unit ${orgId}`;
+    const cleanUnit = org.Unit ? org.Unit.replace(/^0+/, '').padStart(3, '0') : '000';
+    return `${org.Region || ''}-${org.Wing || ''}-${cleanUnit}`;
+  }, [dataFiles?.organization]);
+
+  // Get metrics for all subordinate units (for "By Unit" tab)
+  const subordinateUnitMetrics = useMemo(() => {
+    if (!showAllDescendants || !orgStatsService || !descendantOrgIds?.length) return [];
+
+    // Filter to only operational units (exclude command HQs)
+    const operationalUnits = descendantOrgIds.filter(orgId => {
+      const org = (dataFiles?.organization || []).find(o =>
+        String(o.ORGID || '').trim() === String(orgId || '').trim()
+      );
+      const type = String(org?.Type || '').toUpperCase();
+      const isHQ = type.includes('GROUP') || type.includes('WING') ||
+                   type.includes('REGION') || type.includes('NATIONAL');
+      return !isHQ;
+    });
+
+    return orgStatsService.getMetricsForMultipleUnits(operationalUnits, {
+      timeRangeMonths: localTimeRange
+    });
+  }, [showAllDescendants, orgStatsService, descendantOrgIds, dataFiles?.organization, localTimeRange]);
+
+  // Sort unit metrics
+  const sortedUnitMetrics = useMemo(() => {
+    if (!subordinateUnitMetrics.length) return [];
+
+    return [...subordinateUnitMetrics].sort((a, b) => {
+      let aVal, bVal;
+
+      if (unitTableSort.field === 'name') {
+        aVal = getUnitName(a.orgId);
+        bVal = getUnitName(b.orgId);
+      } else {
+        aVal = a[unitTableSort.field] ?? -Infinity;
+        bVal = b[unitTableSort.field] ?? -Infinity;
+      }
+
+      if (typeof aVal === 'string') {
+        return unitTableSort.direction === 'asc'
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      return unitTableSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+  }, [subordinateUnitMetrics, unitTableSort, getUnitName]);
+
+  const handleUnitTableSort = (field) => {
+    setUnitTableSort(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  // Recalculate metrics when filters change
+  const displayMetrics = useMemo(() => {
+    if (!orgStatsService || !unitFilter) return metrics;
+
+    return orgStatsService.getMetricsForUnit(unitFilter, {
+      includeDescendants: showAllDescendants,
+      descendantOrgIds: descendantOrgIds || [],
+      timeRangeMonths: localTimeRange,
+      mbrType: mbrTypeFilter
+    });
+  }, [orgStatsService, unitFilter, showAllDescendants, descendantOrgIds, localTimeRange, mbrTypeFilter, metrics]);
+
+  // Destroy charts on close or filter change
+  const destroyCharts = useCallbackRR(() => {
+    Object.values(chartRefs.current).forEach(chart => {
+      if (chart && typeof chart.destroy === 'function') {
+        chart.destroy();
+      }
+    });
+    chartRefs.current = {};
+  }, []);
+
+  // Initialize charts when modal opens or tab changes
+  useEffect(() => {
+    if (!isOpen || !displayMetrics?.monthlyData?.length) {
+      destroyCharts();
+      return;
+    }
+
+    destroyCharts();
+
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      if (activeTab === 'overview' || activeTab === 'trends') {
+        initializeMembershipTrendChart();
+      }
+      if (activeTab === 'trends') {
+        initializeRecruitingBreakdownChart();
+      }
+      if (activeTab === 'seasonality') {
+        initializeSeasonalityChart();
+      }
+      if (activeTab === 'overview') {
+        initializeComponentsChart();
+      }
+    }, 150);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isOpen, displayMetrics, activeTab, mbrTypeFilter]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => destroyCharts();
+  }, [destroyCharts]);
+
+  const initializeMembershipTrendChart = () => {
+    const canvas = document.getElementById('chart-membership-trend');
+    if (!canvas || !displayMetrics?.monthlyData || !window.Chart) return;
+
+    const ctx = canvas.getContext('2d');
+    const data = displayMetrics.monthlyData;
+
+    chartRefs.current.trend = new window.Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.label || d.date),
+        datasets: [
+          {
+            label: 'Total Members',
+            data: data.map(d => d[mbrTypeFilter]?.total || 0),
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              afterBody: (context) => {
+                const idx = context[0].dataIndex;
+                const d = data[idx];
+                return [
+                  `New: ${d[mbrTypeFilter]?.new || 0}`,
+                  `Renewed: ${d[mbrTypeFilter]?.renew || 0}`,
+                  `Rejoined: ${d[mbrTypeFilter]?.rejoin || 0}`
+                ];
+              }
+            }
+          }
+        },
+        scales: {
+          y: { beginAtZero: false },
+          x: {
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+              font: { size: 10 }
+            }
+          }
+        }
+      }
+    });
+  };
+
+  const initializeRecruitingBreakdownChart = () => {
+    const canvas = document.getElementById('chart-recruiting-breakdown');
+    if (!canvas || !displayMetrics?.monthlyData || !window.Chart) return;
+
+    const ctx = canvas.getContext('2d');
+    const data = displayMetrics.monthlyData;
+
+    chartRefs.current.breakdown = new window.Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.label || d.date),
+        datasets: [
+          {
+            label: 'New Members',
+            data: data.map(d => d[mbrTypeFilter]?.new || 0),
+            backgroundColor: '#22c55e',
+            stack: 'recruiting'
+          },
+          {
+            label: 'Rejoins',
+            data: data.map(d => d[mbrTypeFilter]?.rejoin || 0),
+            backgroundColor: '#eab308',
+            stack: 'recruiting'
+          },
+          {
+            label: 'Renewals',
+            data: data.map(d => d[mbrTypeFilter]?.renew || 0),
+            backgroundColor: '#3b82f6',
+            stack: 'retention'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+              font: { size: 10 }
+            }
+          },
+          y: { stacked: true, beginAtZero: true }
+        }
+      }
+    });
+  };
+
+  const initializeSeasonalityChart = () => {
+    const canvas = document.getElementById('chart-seasonality');
+    if (!canvas || !displayMetrics?.metrics?.seasonality || !window.Chart) return;
+
+    const ctx = canvas.getContext('2d');
+    const patterns = displayMetrics.metrics.seasonality.patterns;
+
+    chartRefs.current.seasonality = new window.Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: patterns.map(p => p.month),
+        datasets: [
+          {
+            label: 'Avg Recruiting',
+            data: patterns.map(p => p.avgRecruiting.toFixed(1)),
+            backgroundColor: '#22c55e'
+          },
+          {
+            label: 'Avg Renewals',
+            data: patterns.map(p => p.avgRenewals.toFixed(1)),
+            backgroundColor: '#3b82f6'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' }
+        },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  };
+
+  const initializeComponentsChart = () => {
+    const canvas = document.getElementById('chart-sustainability-components');
+    if (!canvas || !displayMetrics?.metrics?.sustainability || !window.Chart) return;
+
+    const ctx = canvas.getContext('2d');
+    const components = displayMetrics.metrics.sustainability.components;
+
+    chartRefs.current.components = new window.Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: ['Recruiting', 'Retention', 'Growth', 'Stability'],
+        datasets: [{
+          label: 'Score',
+          data: [components.recruiting, components.retention, components.growth, components.stability],
+          backgroundColor: 'rgba(59, 130, 246, 0.2)',
+          borderColor: '#3b82f6',
+          borderWidth: 2,
+          pointBackgroundColor: '#3b82f6'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          r: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { stepSize: 20 }
+          }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+  };
+
+  // Tabs - include "By Unit" tab when showing aggregate data
+  // NOTE: Must be defined before conditional return to comply with React hooks rules
+  const tabs = useMemo(() => {
+    const baseTabs = [
+      { id: 'overview', label: 'Overview', icon: 'LayoutDashboard' },
+      { id: 'trends', label: 'Trends', icon: 'TrendingUp' },
+      { id: 'seasonality', label: 'Seasonality', icon: 'Calendar' },
+      { id: 'insights', label: 'Insights', icon: 'Lightbulb' }
+    ];
+
+    // Add "By Unit" tab when in aggregate mode with subordinate units
+    if (showAllDescendants && subordinateUnitMetrics.length > 0) {
+      baseTabs.splice(1, 0, { id: 'byunit', label: 'By Unit', icon: 'LayoutList' });
+    }
+
+    return baseTabs;
+  }, [showAllDescendants, subordinateUnitMetrics.length]);
+
+  const timeRangeOptions = [
+    { value: 6, label: '6 Months' },
+    { value: 12, label: '12 Months' },
+    { value: 24, label: '2 Years' },
+    { value: 60, label: '5 Years' },
+    { value: 120, label: '10 Years' },
+    { value: 0, label: 'All Time' }
+  ];
+
+  if (!isOpen) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Recruiting & Retention Analysis" maxWidthClass="max-w-6xl">
+      <div className="space-y-6">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div className="flex items-center gap-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">Time Range</label>
+              <select
+                value={localTimeRange}
+                onChange={(e) => setLocalTimeRange(parseInt(e.target.value))}
+                className="block w-full rounded-lg border-slate-300 text-sm py-1.5 px-2 bg-white border"
+              >
+                {timeRangeOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">Member Type</label>
+              <select
+                value={mbrTypeFilter}
+                onChange={(e) => setMbrTypeFilter(e.target.value)}
+                className="block w-full rounded-lg border-slate-300 text-sm py-1.5 px-2 bg-white border"
+              >
+                <option value="combined">All Members</option>
+                <option value="senior">Senior Only</option>
+                <option value="cadet">Cadets Only</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-1">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Icon name={tab.icon} className="w-4 h-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && displayMetrics && (
+          <div className="space-y-6">
+            {/* What This Shows - Explanation Box */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Icon name="Info" className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium mb-1">What does this dashboard show?</p>
+                  <p className="text-blue-700">
+                    This analysis tracks your unit's membership health over time. The Sustainability Score combines
+                    <strong> recruiting</strong> (how many new members join),
+                    <strong> retention</strong> (how many stay),
+                    <strong> growth</strong> (net change), and
+                    <strong> stability</strong> (consistency) into a single health indicator.
+                    Hover over the <Icon name="HelpCircle" className="inline w-3 h-3 mx-0.5" /> icons for more details on each metric.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sustainability Score Hero */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Sustainability Score</h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    {displayMetrics.metrics.sustainability?.summary || 'Analyzing membership health...'}
+                  </p>
+                  {displayMetrics.metrics.sustainability?.focusArea && displayMetrics.metrics.sustainability.focusArea.score < 70 && (
+                    <p className="text-sm text-amber-700 mt-2 font-medium">
+                      <Icon name="Lightbulb" className="inline w-4 h-4 mr-1" />
+                      Focus on improving <strong>{displayMetrics.metrics.sustainability.focusArea.label}</strong> (your lowest component) for the biggest impact.
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="text-5xl font-bold text-slate-900">
+                    {displayMetrics.metrics.sustainability?.overallScore ?? '--'}
+                  </div>
+                  <div className="text-sm font-medium text-slate-500">out of 100</div>
+                </div>
+              </div>
+              <div className="mt-4">
+                <SustainabilityGauge
+                  score={displayMetrics.metrics.sustainability?.overallScore}
+                  rating={displayMetrics.metrics.sustainability?.rating}
+                />
+              </div>
+            </div>
+
+            {/* Component Scores - with explanations */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg border border-slate-200 p-4 group relative">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500 uppercase flex items-center">
+                      Recruiting
+                      <ModalHelpTooltip explanation={displayMetrics.metrics.recruiting?.explanation} />
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {displayMetrics.metrics.sustainability?.components?.recruiting ?? '--'}
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <Icon name="UserPlus" className="w-5 h-5" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {displayMetrics.metrics.recruiting?.monthlyAverage || '0'} new/mo avg
+                </p>
+                <p className="text-[10px] text-emerald-600 mt-1">
+                  Target: 2+ per month
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500 uppercase flex items-center">
+                      Retention
+                      <ModalHelpTooltip explanation={displayMetrics.metrics.retention?.explanation} />
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {displayMetrics.metrics.sustainability?.components?.retention ?? '--'}
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <Icon name="Users" className="w-5 h-5" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {displayMetrics.metrics.retention?.retentionRate !== null ? `${displayMetrics.metrics.retention.retentionRate}%` : '--'} renewal rate
+                </p>
+                <p className="text-[10px] text-emerald-600 mt-1">
+                  Target: 80%+
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500 uppercase flex items-center">
+                      Growth
+                      <ModalHelpTooltip explanation={displayMetrics.metrics.growth?.explanation} />
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {displayMetrics.metrics.sustainability?.components?.growth ?? '--'}
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+                    <Icon name="TrendingUp" className="w-5 h-5" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {(displayMetrics.metrics.growth?.netChangeInPeriod || 0) > 0 ? '+' : ''}
+                  {displayMetrics.metrics.growth?.netChangeInPeriod || 0} members
+                </p>
+                <p className="text-[10px] text-emerald-600 mt-1">
+                  Target: Positive growth
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500 uppercase flex items-center">
+                      Stability
+                      <ModalHelpTooltip explanation={displayMetrics.metrics.volatility?.explanation} />
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {displayMetrics.metrics.sustainability?.components?.stability ?? '--'}
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <Icon name="Activity" className="w-5 h-5" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {displayMetrics.metrics.volatility?.stabilityRating
+                    ? displayMetrics.metrics.volatility.stabilityRating.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+                    : 'Unknown'}
+                </p>
+                <p className="text-[10px] text-emerald-600 mt-1">
+                  Target: &lt;10% variation
+                </p>
+              </div>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Trend Chart */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <h4 className="font-semibold text-slate-800 mb-4">Membership Trend</h4>
+                <div className="h-64">
+                  <canvas id="chart-membership-trend"></canvas>
+                </div>
+              </div>
+
+              {/* Radar Chart */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <h4 className="font-semibold text-slate-800 mb-4">Component Analysis</h4>
+                <div className="h-64">
+                  <canvas id="chart-sustainability-components"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* By Unit Tab - shows individual unit metrics in aggregate mode */}
+        {activeTab === 'byunit' && showAllDescendants && sortedUnitMetrics.length > 0 && (
+          <div className="space-y-6">
+            {/* Explanation */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Icon name="LayoutList" className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-indigo-800">
+                  <p className="font-medium mb-1">Unit-by-Unit Breakdown</p>
+                  <p className="text-indigo-700">
+                    This table shows recruiting and retention metrics for each subordinate unit.
+                    Click column headers to sort. Use this to identify which units need support
+                    and which are performing well.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                <div className="text-xs font-semibold text-blue-700 uppercase">Total Units</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{sortedUnitMetrics.length}</div>
+              </div>
+              <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+                <div className="text-xs font-semibold text-emerald-700 uppercase">Growing Units</div>
+                <div className="text-2xl font-bold text-emerald-900 mt-1">
+                  {sortedUnitMetrics.filter(u => u.growthStatus === 'growing').length}
+                </div>
+              </div>
+              <div className="bg-rose-50 rounded-lg p-4 border border-rose-100">
+                <div className="text-xs font-semibold text-rose-700 uppercase">Declining Units</div>
+                <div className="text-2xl font-bold text-rose-900 mt-1">
+                  {sortedUnitMetrics.filter(u => u.growthStatus === 'declining').length}
+                </div>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                <div className="text-xs font-semibold text-amber-700 uppercase">Needs Attention</div>
+                <div className="text-2xl font-bold text-amber-900 mt-1">
+                  {sortedUnitMetrics.filter(u => u.sustainabilityRating === 'needs-attention' || u.sustainabilityRating === 'fair').length}
+                </div>
+              </div>
+            </div>
+
+            {/* Unit Comparison Table */}
+            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      {[
+                        { field: 'name', label: 'Unit', className: 'min-w-[180px]' },
+                        { field: 'currentTotal', label: 'Members' },
+                        { field: 'sustainabilityScore', label: 'Score' },
+                        { field: 'retentionRate', label: 'Retention' },
+                        { field: 'recruitingRate', label: 'Recruiting' },
+                        { field: 'netChange', label: 'Growth' }
+                      ].map(col => (
+                        <th
+                          key={col.field}
+                          className={`px-3 py-2.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wide cursor-pointer hover:bg-slate-100 transition-colors ${col.className || ''}`}
+                          onClick={() => handleUnitTableSort(col.field)}
+                        >
+                          <div className="flex items-center gap-1">
+                            {col.label}
+                            {unitTableSort.field === col.field && (
+                              <Icon
+                                name={unitTableSort.direction === 'asc' ? 'ChevronUp' : 'ChevronDown'}
+                                className="w-3 h-3"
+                              />
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {sortedUnitMetrics.map((unit, idx) => {
+                      const getSustainabilityColor = (rating) => {
+                        switch (rating) {
+                          case 'excellent': return 'text-emerald-700 bg-emerald-100';
+                          case 'good': return 'text-blue-700 bg-blue-100';
+                          case 'fair': return 'text-amber-700 bg-amber-100';
+                          case 'needs-attention': return 'text-rose-700 bg-rose-100';
+                          default: return 'text-slate-500 bg-slate-100';
+                        }
+                      };
+                      const getGrowthIcon = (status) => {
+                        switch (status) {
+                          case 'growing': return { icon: 'TrendingUp', color: 'text-emerald-600' };
+                          case 'declining': return { icon: 'TrendingDown', color: 'text-rose-600' };
+                          default: return { icon: 'Minus', color: 'text-slate-400' };
+                        }
+                      };
+                      const growth = getGrowthIcon(unit.growthStatus);
+                      const unitName = getUnitName(unit.orgId);
+
+                      return (
+                        <tr
+                          key={unit.orgId}
+                          className={`hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-25'}`}
+                        >
+                          <td className="px-3 py-2.5">
+                            <div className="font-medium text-slate-800 text-sm">{unitName}</div>
+                            <div className="text-xs text-slate-500">
+                              {unit.memberBreakdown && `${unit.memberBreakdown.senior} Sr / ${unit.memberBreakdown.cadet} Cdt`}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-sm font-semibold text-slate-800">
+                            {unit.currentTotal}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold ${getSustainabilityColor(unit.sustainabilityRating)}`}>
+                              {unit.sustainabilityScore ?? '--'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-sm">
+                            {unit.retentionRate !== null ? (
+                              <span className={unit.retentionRate >= 80 ? 'text-emerald-600' : unit.retentionRate >= 60 ? 'text-amber-600' : 'text-rose-600'}>
+                                {unit.retentionRate}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">--</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-sm text-slate-700">
+                            {unit.recruitingRate !== null ? `${unit.recruitingRate}/mo` : '--'}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1">
+                              <Icon name={growth.icon} className={`w-4 h-4 ${growth.color}`} />
+                              <span className={`text-sm font-medium ${growth.color}`}>
+                                {unit.netChange !== null ? (unit.netChange > 0 ? '+' : '') + unit.netChange : '--'}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Best and Worst Performers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
+                <h5 className="font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                  <Icon name="Award" className="w-5 h-5" />
+                  Top Performing Units
+                </h5>
+                <div className="space-y-2">
+                  {sortedUnitMetrics.slice(0, 3).map((unit, idx) => (
+                    <div key={unit.orgId} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-medium text-slate-800">{getUnitName(unit.orgId)}</span>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-700">{unit.sustainabilityScore}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-rose-50 rounded-lg border border-rose-200 p-4">
+                <h5 className="font-semibold text-rose-800 mb-3 flex items-center gap-2">
+                  <Icon name="AlertCircle" className="w-5 h-5" />
+                  Units Needing Support
+                </h5>
+                <div className="space-y-2">
+                  {[...sortedUnitMetrics].reverse().slice(0, 3).map((unit, idx) => (
+                    <div key={unit.orgId} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-bold">
+                          {sortedUnitMetrics.length - idx}
+                        </span>
+                        <span className="text-sm font-medium text-slate-800">{getUnitName(unit.orgId)}</span>
+                      </div>
+                      <span className="text-sm font-bold text-rose-700">{unit.sustainabilityScore ?? '--'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'trends' && displayMetrics && (
+          <div className="space-y-6">
+            {/* Membership Trend Chart */}
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <h4 className="font-semibold text-slate-800 mb-4">Membership Trend</h4>
+              <div className="h-72">
+                <canvas id="chart-membership-trend"></canvas>
+              </div>
+            </div>
+
+            {/* Recruiting Breakdown Chart */}
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <h4 className="font-semibold text-slate-800 mb-4">Recruiting & Retention Breakdown</h4>
+              <div className="h-72">
+                <canvas id="chart-recruiting-breakdown"></canvas>
+              </div>
+            </div>
+
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+                <div className="text-xs font-semibold text-emerald-700 uppercase flex items-center">
+                  New Members
+                  <ModalHelpTooltip explanation={{
+                    label: 'New Members',
+                    fullDesc: 'Total count of brand new members who joined plus former members who rejoined during the selected time period.',
+                    goodValue: 'At least 2 per month for squadrons',
+                    formula: 'New Joins + Rejoins'
+                  }} />
+                </div>
+                <div className="text-2xl font-bold text-emerald-900 mt-1">
+                  {displayMetrics.metrics.recruiting?.totalInPeriod || 0}
+                </div>
+                <div className="text-xs text-emerald-600 mt-1">
+                  {displayMetrics.metrics.recruiting?.monthlyAverage || 0}/mo avg
+                </div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                <div className="text-xs font-semibold text-blue-700 uppercase flex items-center">
+                  Renewals
+                  <ModalHelpTooltip explanation={{
+                    label: 'Renewals',
+                    fullDesc: 'Count of existing members who renewed their annual membership during the time period. High renewals indicate member satisfaction.',
+                    goodValue: 'Higher than attrition',
+                    formula: 'Sum of all membership renewals'
+                  }} />
+                </div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">
+                  {displayMetrics.metrics.retention?.renewalsInPeriod || 0}
+                </div>
+                <div className="text-xs text-blue-600 mt-1">
+                  {displayMetrics.metrics.retention?.retentionRate || 0}% retention
+                </div>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                <div className="text-xs font-semibold text-amber-700 uppercase flex items-center">
+                  Est. Attrition
+                  <ModalHelpTooltip explanation={{
+                    label: 'Estimated Attrition',
+                    fullDesc: 'The estimated number of members your unit lost during this period through non-renewal, transfer, or other reasons. This is calculated from the difference between recruiting and net growth.',
+                    goodValue: 'Lower than new members recruited',
+                    formula: 'New Members Recruited - Net Growth'
+                  }} />
+                </div>
+                <div className="text-2xl font-bold text-amber-900 mt-1">
+                  {displayMetrics.metrics.retention?.estimatedAttrition || 0}
+                </div>
+                <div className="text-xs text-amber-600 mt-1">
+                  members lost
+                </div>
+              </div>
+              <div className="bg-rose-50 rounded-lg p-4 border border-rose-100">
+                <div className="text-xs font-semibold text-rose-700 uppercase flex items-center">
+                  Attrition Rate
+                  <ModalHelpTooltip explanation={{
+                    label: 'Annualized Attrition Rate',
+                    fullDesc: 'The percentage of your membership lost annually. This helps predict how many new members you need to recruit each year just to maintain your current size.',
+                    goodValue: 'Below 20% is healthy',
+                    formula: '(Attrition ÷ Starting Total) × 100%'
+                  }} />
+                </div>
+                <div className="text-2xl font-bold text-rose-900 mt-1">
+                  {displayMetrics.metrics.retention?.annualizedAttritionRate !== null
+                    ? `${displayMetrics.metrics.retention.annualizedAttritionRate}%`
+                    : '--'}
+                </div>
+                <div className="text-xs text-rose-600 mt-1">
+                  per year
+                </div>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <div className="text-xs font-semibold text-slate-600 uppercase flex items-center">
+                  Data Points
+                  <ModalHelpTooltip explanation={{
+                    label: 'Data Points',
+                    fullDesc: 'The number of monthly data points included in this analysis. More data points provide more reliable trends and seasonality patterns.',
+                    goodValue: '24+ months for seasonality analysis'
+                  }} />
+                </div>
+                <div className="text-2xl font-bold text-slate-900 mt-1">
+                  {displayMetrics.summary?.dataPointCount || 0}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  months of data
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'seasonality' && displayMetrics?.metrics?.seasonality && (
+          <div className="space-y-6">
+            {/* Seasonality Chart */}
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <h4 className="font-semibold text-slate-800 mb-4">Seasonal Patterns (Historical Averages)</h4>
+              <div className="h-72">
+                <canvas id="chart-seasonality"></canvas>
+              </div>
+            </div>
+
+            {/* Peak/Low Months */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
+                <h5 className="font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                  <Icon name="TrendingUp" className="w-5 h-5" />
+                  Peak Recruiting Months
+                </h5>
+                <div className="flex gap-2 mb-3">
+                  {displayMetrics.metrics.seasonality.peakMonths.map(month => (
+                    <span key={month} className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
+                      {month}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-sm text-emerald-700">
+                  Plan recruiting drives during these months for maximum impact.
+                </p>
+              </div>
+              <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
+                <h5 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                  <Icon name="TrendingDown" className="w-5 h-5" />
+                  Low Activity Months
+                </h5>
+                <div className="flex gap-2 mb-3">
+                  {displayMetrics.metrics.seasonality.lowMonths.map(month => (
+                    <span key={month} className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                      {month}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-sm text-amber-700">
+                  Focus on retention and engagement during these months.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'seasonality' && !displayMetrics?.metrics?.seasonality && (
+          <div className="text-center py-12 text-slate-500">
+            <Icon name="Calendar" className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <h4 className="font-semibold text-slate-700 mb-1">Insufficient Data for Seasonality</h4>
+            <p className="text-sm">At least 24 months of data is required to identify seasonal patterns.</p>
+          </div>
+        )}
+
+        {activeTab === 'insights' && displayMetrics && (
+          <div className="space-y-4">
+            {/* What Are Insights - Explanation */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Icon name="Lightbulb" className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-indigo-800">
+                  <p className="font-medium mb-1">How to use these insights</p>
+                  <p className="text-indigo-700">
+                    These insights highlight areas that need attention and provide specific recommendations.
+                    Green cards indicate strengths to maintain. Amber and red cards show opportunities for improvement
+                    with suggested actions you can take.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <h4 className="font-semibold text-slate-800">Commander Insights</h4>
+
+            {/* Generated Insights */}
+            <div className="space-y-3">
+              {/* Growth vs Replacement */}
+              {displayMetrics.metrics.growth && (
+                <div className={`p-4 rounded-lg border ${
+                  displayMetrics.metrics.growth.status === 'growing'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : displayMetrics.metrics.growth.status === 'declining'
+                    ? 'bg-rose-50 border-rose-200'
+                    : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <Icon
+                      name={displayMetrics.metrics.growth.status === 'growing' ? 'TrendingUp' :
+                            displayMetrics.metrics.growth.status === 'declining' ? 'TrendingDown' : 'Minus'}
+                      className={`w-5 h-5 mt-0.5 ${
+                        displayMetrics.metrics.growth.status === 'growing' ? 'text-emerald-600' :
+                        displayMetrics.metrics.growth.status === 'declining' ? 'text-rose-600' : 'text-slate-500'
+                      }`}
+                    />
+                    <div>
+                      <h5 className="font-semibold text-slate-800">Growth Analysis</h5>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Your unit {displayMetrics.metrics.growth.status === 'growing' ? 'grew by' :
+                                   displayMetrics.metrics.growth.status === 'declining' ? 'declined by' : 'changed by'} {' '}
+                        <strong>{Math.abs(displayMetrics.metrics.growth.netChangeInPeriod)} members</strong> over the selected time period.
+                        {displayMetrics.metrics.growth.totalRecruited > 0 && (
+                          <span> Of the {displayMetrics.metrics.growth.totalRecruited} members recruited, {displayMetrics.metrics.growth.growthRatio}% contributed to growth while {100 - displayMetrics.metrics.growth.growthRatio}% replaced members who left.</span>
+                        )}
+                      </p>
+                      {displayMetrics.metrics.growth.status === 'declining' && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-xs font-semibold text-slate-700">What you can do:</p>
+                          <ul className="text-xs text-slate-600 mt-1 space-y-0.5">
+                            <li>• Increase recruiting efforts to offset losses</li>
+                            <li>• Focus equally on retention to slow attrition</li>
+                            <li>• Partner with local schools and community groups</li>
+                            <li>• Host open house events and public activities</li>
+                          </ul>
+                        </div>
+                      )}
+                      {displayMetrics.metrics.growth.status === 'growing' && (
+                        <p className="text-xs text-emerald-700 mt-2 font-medium">
+                          Great work! Your recruiting efforts are successfully growing the unit.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Retention Health */}
+              {displayMetrics.metrics.retention && (
+                <div className={`p-4 rounded-lg border ${
+                  displayMetrics.metrics.retention.healthIndicator === 'healthy'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : displayMetrics.metrics.retention.healthIndicator === 'moderate'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-rose-50 border-rose-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <Icon
+                      name={displayMetrics.metrics.retention.healthIndicator === 'healthy' ? 'Shield' :
+                            displayMetrics.metrics.retention.healthIndicator === 'at-risk' ? 'AlertTriangle' : 'Info'}
+                      className={`w-5 h-5 mt-0.5 ${
+                        displayMetrics.metrics.retention.healthIndicator === 'healthy' ? 'text-emerald-600' :
+                        displayMetrics.metrics.retention.healthIndicator === 'at-risk' ? 'text-rose-600' : 'text-amber-600'
+                      }`}
+                    />
+                    <div>
+                      <h5 className="font-semibold text-slate-800">Retention Status</h5>
+                      <p className="text-sm text-slate-600 mt-1">
+                        {displayMetrics.metrics.retention.retentionRate !== null
+                          ? `${displayMetrics.metrics.retention.retentionRate}% estimated retention rate over the past 12 months.`
+                          : 'Retention rate could not be calculated with available data.'}
+                        {displayMetrics.metrics.retention.healthIndicator === 'healthy' &&
+                          ' Your unit has strong retention - keep up the good work!'}
+                      </p>
+                      {displayMetrics.metrics.retention.healthIndicator !== 'healthy' && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-xs font-semibold text-slate-700">What you can do:</p>
+                          <ul className="text-xs text-slate-600 mt-1 space-y-0.5">
+                            <li>• Call members before their renewal date to check in</li>
+                            <li>• Survey members who don't renew to understand why</li>
+                            <li>• Ensure every member has meaningful activities</li>
+                            <li>• Recognize member achievements regularly</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Volatility Warning */}
+              {displayMetrics.metrics.volatility && (displayMetrics.metrics.volatility.stabilityRating === 'volatile' || displayMetrics.metrics.volatility.stabilityRating === 'moderate') && (
+                <div className="p-4 rounded-lg border bg-amber-50 border-amber-200">
+                  <div className="flex items-start gap-3">
+                    <Icon name="Activity" className="w-5 h-5 mt-0.5 text-amber-600" />
+                    <div>
+                      <h5 className="font-semibold text-slate-800">Membership Volatility</h5>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Your unit experiences {displayMetrics.metrics.volatility.stabilityRating === 'volatile' ? 'significant' : 'moderate'} month-to-month membership swings
+                        (up to <strong>{displayMetrics.metrics.volatility.maxMonthlySwing} members</strong> change in a single month, {displayMetrics.metrics.volatility.coefficientOfVariation}% variation).
+                      </p>
+                      {displayMetrics.metrics.volatility.stabilityRating === 'volatile' && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-xs font-semibold text-slate-700">What you can do:</p>
+                          <ul className="text-xs text-slate-600 mt-1 space-y-0.5">
+                            <li>• Spread recruiting throughout the year instead of bursts</li>
+                            <li>• Send renewal reminders well before expiration dates</li>
+                            <li>• Identify why members leave in waves (end of school year?)</li>
+                            <li>• Create engagement programs to keep members active year-round</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Recruiting Trend */}
+              {displayMetrics.metrics.recruiting && displayMetrics.metrics.recruiting.trend !== 'stable' && (
+                <div className={`p-4 rounded-lg border ${
+                  displayMetrics.metrics.recruiting.trend === 'increasing'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-amber-50 border-amber-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <Icon
+                      name={displayMetrics.metrics.recruiting.trend === 'increasing' ? 'ArrowUpCircle' : 'ArrowDownCircle'}
+                      className={`w-5 h-5 mt-0.5 ${
+                        displayMetrics.metrics.recruiting.trend === 'increasing' ? 'text-emerald-600' : 'text-amber-600'
+                      }`}
+                    />
+                    <div>
+                      <h5 className="font-semibold text-slate-800">Recruiting Trend</h5>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Recruiting is {displayMetrics.metrics.recruiting.trend} compared to the previous 12-month period
+                        ({displayMetrics.metrics.recruiting.trendPercent > 0 ? '+' : ''}{displayMetrics.metrics.recruiting.trendPercent}%).
+                        You're averaging <strong>{displayMetrics.metrics.recruiting.monthlyAverage} new members per month</strong>.
+                      </p>
+                      {displayMetrics.metrics.recruiting.trend === 'increasing' && (
+                        <p className="text-xs text-emerald-700 mt-2 font-medium">
+                          Keep momentum going with current recruiting strategies!
+                        </p>
+                      )}
+                      {displayMetrics.metrics.recruiting.trend === 'decreasing' && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-xs font-semibold text-slate-700">What you can do:</p>
+                          <ul className="text-xs text-slate-600 mt-1 space-y-0.5">
+                            <li>• Review what worked in your stronger recruiting months</li>
+                            <li>• Try new outreach channels (social media, community events)</li>
+                            <li>• Ask current members to bring friends to activities</li>
+                            <li>• Schedule recruiting events during peak months (check Seasonality tab)</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* No Issues Message */}
+              {displayMetrics.metrics.sustainability?.rating === 'excellent' && (
+                <div className="p-4 rounded-lg border bg-emerald-50 border-emerald-200">
+                  <div className="flex items-start gap-3">
+                    <Icon name="CheckCircle" className="w-5 h-5 mt-0.5 text-emerald-600" />
+                    <div>
+                      <h5 className="font-semibold text-slate-800">Excellent Overall Health</h5>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Your unit is performing well across all membership health metrics.
+                        Continue current practices and monitor for any changes in trends.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* No Data State */}
+        {!displayMetrics && (
+          <div className="text-center py-12 text-slate-500">
+            <Icon name="BarChart3" className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <h4 className="font-semibold text-slate-700 mb-1">No Data Available</h4>
+            <p className="text-sm">Unable to load recruiting and retention metrics for this unit.</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
+</script>

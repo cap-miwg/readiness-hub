@@ -1,0 +1,912 @@
+<script type="text/babel">
+// Feedback Tab Component
+// Allows users to submit feedback/issues to GitHub
+const FeedbackTab = ({
+  activeTab,
+  unitFilter,
+  showAllDescendants,
+  lastUpdated,
+  dataFiles,
+  availableUnits,
+  onClose
+}) => {
+  const [category, setCategory] = useState('bug');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState(null);
+
+  // Reset form when component mounts
+  React.useEffect(() => {
+    setCategory('bug');
+    setTitle('');
+    setDescription('');
+    setSubmitResult(null);
+  }, []);
+
+  // Collect diagnostic data
+  const collectDiagnostics = () => {
+    const selectedUnitObj = availableUnits?.find(u => u.id === unitFilter);
+    const members = dataFiles?.members || [];
+
+    return {
+      appVersion: typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'Unknown',
+      browser: getBrowserInfo(),
+      platform: navigator.platform || 'Unknown',
+      screenSize: `${window.innerWidth}x${window.innerHeight}`,
+      userAgent: navigator.userAgent,
+      currentView: activeTab || 'Unknown',
+      selectedUnit: unitFilter || 'None',
+      selectedUnitName: selectedUnitObj?.name || 'Unknown',
+      showAllDescendants: showAllDescendants || false,
+      lastUpdated: lastUpdated || 'Unknown',
+      memberCount: members.length || 0,
+      seniorCount: members.filter(m =>
+        (m.Type || m.TYPE || '').toUpperCase() === 'SENIOR' ||
+        (m.Type || m.TYPE || '').toUpperCase() === 'LIFE'
+      ).length || 0,
+      cadetCount: members.filter(m =>
+        (m.Type || m.TYPE || '').toUpperCase() === 'CADET'
+      ).length || 0,
+      orgCount: dataFiles?.organization?.length || 0
+    };
+  };
+
+  const getBrowserInfo = () => {
+    const ua = navigator.userAgent;
+    if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome';
+    if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+    if (ua.includes('Firefox')) return 'Firefox';
+    if (ua.includes('Edg')) return 'Edge';
+    return 'Unknown';
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    if (!title.trim() || !description.trim()) {
+      setSubmitResult({
+        success: false,
+        message: 'Please fill in both the title and description.'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitResult(null);
+
+    const issueData = {
+      title: title.trim(),
+      description: description.trim(),
+      category: category,
+      diagnostics: collectDiagnostics()
+    };
+
+    if (window.google && window.google.script) {
+      window.google.script.run
+        .withSuccessHandler((result) => {
+          setIsSubmitting(false);
+          if (result.success) {
+            setSubmitResult({
+              success: true,
+              message: 'Your feedback has been submitted successfully!',
+              issueUrl: result.issueUrl,
+              issueNumber: result.issueNumber
+            });
+            setTitle('');
+            setDescription('');
+          } else {
+            setSubmitResult({
+              success: false,
+              message: result.error || 'Failed to submit feedback. Please try again.'
+            });
+          }
+        })
+        .withFailureHandler((error) => {
+          setIsSubmitting(false);
+          setSubmitResult({
+            success: false,
+            message: 'Error: ' + (error.message || error.toString())
+          });
+        })
+        .createGitHubIssue(issueData);
+    } else {
+      setIsSubmitting(false);
+      setSubmitResult({
+        success: false,
+        message: 'Unable to connect to server. Please refresh and try again.'
+      });
+    }
+  };
+
+  const selectedCategory = FEEDBACK_CATEGORIES.find(c => c.id === category);
+
+  // Success state
+  if (submitResult?.success) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Icon name="CheckCircle" className="w-10 h-10 text-green-600" />
+        </div>
+        <h3 className="text-xl font-bold text-slate-800 mb-2">Thank You!</h3>
+        <p className="text-slate-600 mb-4">{submitResult.message}</p>
+        {submitResult.issueUrl && (
+          <a
+            href={submitResult.issueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+          >
+            <Icon name="ExternalLink" className="w-4 h-4" />
+            View Issue #{submitResult.issueNumber} on GitHub
+          </a>
+        )}
+        <div className="mt-6">
+          <button
+            onClick={() => setSubmitResult(null)}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Submit Another
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Category Selection */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          What type of feedback is this?
+        </label>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {FEEDBACK_CATEGORIES.map(cat => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setCategory(cat.id)}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                category === cat.id
+                  ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Icon name={cat.icon} className={`w-5 h-5 ${category === cat.id ? 'text-blue-600' : 'text-slate-400'}`} />
+                <span className={`font-medium text-sm ${category === cat.id ? 'text-blue-700' : 'text-slate-700'}`}>
+                  {cat.label}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 ml-7">{cat.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Title */}
+      <div>
+        <label htmlFor="feedback-title" className="block text-sm font-medium text-slate-700 mb-1">
+          Brief Summary
+        </label>
+        <input
+          id="feedback-title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g., 'Cadet dashboard not showing all members'"
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          maxLength={100}
+          required
+        />
+        <p className="text-xs text-slate-500 mt-1">{title.length}/100 characters</p>
+      </div>
+
+      {/* Description */}
+      <div>
+        <label htmlFor="feedback-description" className="block text-sm font-medium text-slate-700 mb-1">
+          Detailed Description
+        </label>
+        <textarea
+          id="feedback-description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Please describe what you observed, what you expected, and any steps to reproduce the issue..."
+          rows={4}
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
+          required
+        />
+      </div>
+
+      {/* Diagnostic Info Notice */}
+      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+        <div className="flex items-start gap-3">
+          <Icon name="Info" className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-slate-600">
+            <p className="font-medium text-slate-700 mb-1">Automatic Diagnostic Data</p>
+            <p className="text-xs">The following will be included to help diagnose issues:</p>
+            <ul className="mt-1 space-y-0.5 text-xs text-slate-500">
+              <li>Current view: <span className="font-mono bg-slate-200 px-1 rounded">{activeTab}</span></li>
+              <li>Selected unit: <span className="font-mono bg-slate-200 px-1 rounded">{unitFilter || 'None'}</span></li>
+              <li>Browser, screen size, and app version</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Error Message */}
+      {submitResult && !submitResult.success && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
+          <Icon name="AlertCircle" className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium text-red-800">Submission Failed</p>
+            <p className="text-sm text-red-700">{submitResult.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Button */}
+      <div className="flex justify-end pt-2">
+        <button
+          type="submit"
+          disabled={isSubmitting || !title.trim() || !description.trim()}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {isSubmitting ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              <Icon name="Send" className="w-4 h-4" />
+              Submit Feedback
+            </>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// Reference & Help Modal
+// Displays context-aware help with tabs for each app section
+const ReferenceModal = ({
+  isOpen,
+  onClose,
+  activeTab,
+  DUTY_TO_TRACK_MAP,
+  // Props for feedback functionality
+  unitFilter,
+  showAllDescendants,
+  lastUpdated,
+  dataFiles,
+  availableUnits
+}) => {
+  const [activeReferenceTab, setActiveReferenceTab] = useState(activeTab || 'home');
+
+  // Sync with activeTab when modal opens
+  React.useEffect(() => {
+    if (isOpen && activeTab) {
+      setActiveReferenceTab(activeTab);
+    }
+  }, [isOpen, activeTab]);
+
+  if (!isOpen) return null;
+
+  const tabs = [
+    { id: 'home', label: 'Home', icon: 'Home' },
+    { id: 'unit', label: 'Unit Overview', icon: 'Building' },
+    { id: 'senior', label: 'Senior Dashboard', icon: 'Users' },
+    { id: 'cadet', label: 'Cadet Dashboard', icon: 'GraduationCap' },
+    { id: 'reports', label: 'Reports', icon: 'FileText' },
+    { id: 'org', label: 'Org Chart', icon: 'Network' },
+    { id: 'feedback', label: 'Feedback', icon: 'MessageSquare' }
+  ];
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Help & Reference" maxWidthClass="max-w-4xl">
+      {/* Tab Navigation */}
+      <div className="flex gap-1 mb-4 border-b border-slate-200 overflow-x-auto pb-1">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveReferenceTab(tab.id)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors ${
+              activeReferenceTab === tab.id
+                ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <Icon name={tab.icon} className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+
+        {/* HOME TAB */}
+        {activeReferenceTab === 'home' && (
+          <>
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Home" className="w-4 h-4 mr-2 text-blue-600" />
+                Welcome to Michigan Wing Readiness Hub
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
+                <p className="mb-2">The Michigan Wing Readiness Hub is your one-stop dashboard for monitoring unit readiness, training status, and personnel metrics. It provides role-specific views for commanders, senior members, and cadets.</p>
+                <p>Use the navigation buttons or tab bar at the top to switch between different views.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="LayoutGrid" className="w-4 h-4 mr-2 text-indigo-600" />
+                Quick Access Cards
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                  <span className="font-bold block text-slate-800">For Commanders</span>
+                  <p className="text-slate-600 mt-1">Opens Unit Overview with staffing, readiness metrics, and expiration alerts.</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                  <span className="font-bold block text-slate-800">Senior Members</span>
+                  <p className="text-slate-600 mt-1">Opens Senior Dashboard showing E&T levels, specialty tracks, and duty assignments.</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                  <span className="font-bold block text-slate-800">Cadets</span>
+                  <p className="text-slate-600 mt-1">Opens Cadet Dashboard with milestones, phases, and promotion readiness.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="BarChart3" className="w-4 h-4 mr-2 text-green-600" />
+                Statistics Summary
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                  <span className="font-bold block text-slate-800">Total Strength</span>
+                  <p className="text-slate-600 mt-1">All active members (seniors + cadets) in the selected unit scope.</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                  <span className="font-bold block text-slate-800">Units in Scope</span>
+                  <p className="text-slate-600 mt-1">"This Unit" shows only the selected unit. "Unit + Sub" includes all subordinate units.</p>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* UNIT OVERVIEW TAB */}
+        {activeReferenceTab === 'unit' && (
+          <>
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Building" className="w-4 h-4 mr-2 text-blue-600" />
+                Commander Dashboard Overview
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
+                <p>The Unit Overview provides commanders with a high-level snapshot of unit health, staffing, and upcoming requirements. Click any accordion section header to expand/collapse for more details.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Activity" className="w-4 h-4 mr-2 text-green-600" />
+                Key Metrics Explained
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-emerald-50 p-3 rounded border border-emerald-100">
+                  <span className="font-bold block text-emerald-800">Sustainability Score</span>
+                  <p className="text-slate-600 mt-1">A composite score (0-100) based on retention rate, recruiting rate, member tenure, and growth trends. Higher is better.</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                  <span className="font-bold block text-blue-800">Retention Rate</span>
+                  <p className="text-slate-600 mt-1">Percentage of members who renewed their membership over the tracking period. Target: 80%+.</p>
+                </div>
+                <div className="bg-indigo-50 p-3 rounded border border-indigo-100">
+                  <span className="font-bold block text-indigo-800">Recruiting Rate</span>
+                  <p className="text-slate-600 mt-1">Average new members joining per month. Compare against losses to assess growth.</p>
+                </div>
+                <div className="bg-amber-50 p-3 rounded border border-amber-100">
+                  <span className="font-bold block text-amber-800">Net Change</span>
+                  <p className="text-slate-600 mt-1">Total members gained minus lost. Positive = growing, negative = declining.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Shield" className="w-4 h-4 mr-2 text-purple-600" />
+                Compliance Metrics
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                  <span className="font-bold block text-purple-800">Cadet Protection (CP)</span>
+                  <p className="text-slate-600 mt-1">Percentage of members compliant with required Cadet Protection training. All members working with cadets must maintain current CP certification.</p>
+                </div>
+                <div className="bg-orange-50 p-3 rounded border border-orange-100">
+                  <span className="font-bold block text-orange-800">TLC Credit</span>
+                  <p className="text-slate-600 mt-1">Training Leaders of Cadets - units need 2+ qualified senior members. This metric shows qualified count vs. requirement.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Clock" className="w-4 h-4 mr-2 text-rose-600" />
+                Expiration Alerts
+              </h3>
+              <div className="bg-rose-50 p-4 rounded-lg border border-rose-100 text-sm text-slate-700">
+                <p className="mb-2">The Upcoming Expirations section shows members whose memberships, training, or certifications expire within 90 days.</p>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  <li><span className="font-bold text-rose-700">Critical (≤30 days):</span> Requires immediate attention</li>
+                  <li><span className="font-bold text-amber-700">Warning (31-60 days):</span> Plan to address soon</li>
+                  <li><span className="font-bold text-blue-700">Notice (61-90 days):</span> Be aware and monitor</li>
+                </ul>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Users" className="w-4 h-4 mr-2 text-slate-600" />
+                HQ Staff Insights (Wing/Group)
+              </h3>
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 text-sm text-slate-700">
+                <p>When viewing a Wing or Group HQ, you'll see staff-specific metrics including average tenure, experience distribution, and rank breakdown. This helps assess organizational knowledge and succession planning.</p>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* SENIOR DASHBOARD TAB */}
+        {activeReferenceTab === 'senior' && (
+          <>
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Filter" className="w-4 h-4 mr-2 text-blue-600" />
+                Dashboard Filters
+              </h3>
+              <div className="text-sm text-slate-700 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                    <span className="font-bold block text-blue-800">Rank Category</span>
+                    <p className="mt-1">OFFICER (Lt through Col), NCO (MSgt through CMSgt), FLIGHT (FO), SM (Senior Member - no grade).</p>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                    <span className="font-bold block text-purple-800">Track Level</span>
+                    <p className="mt-1">MASTER (highest), SENIOR, TECHNICIAN (entry level), or NONE (not enrolled in any track).</p>
+                  </div>
+                  <div className="bg-indigo-50 p-3 rounded border border-indigo-100">
+                    <span className="font-bold block text-indigo-800">Functional Area</span>
+                    <p className="mt-1">Groups duties by function: Operations, Cadet Programs, Aerospace Education, Administration, etc.</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                    <span className="font-bold block text-slate-800">Duty Position</span>
+                    <p className="mt-1">Filter by specific assigned duties like Commander, Operations Officer, etc.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="BarChart3" className="w-4 h-4 mr-2 text-blue-600" />
+                Education & Training Levels
+              </h3>
+              <div className="text-sm text-slate-700 space-y-3">
+                <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                  <span className="font-bold block text-blue-800 mb-2">Level Indicators (L1, L2.1, L2.2, L3, L4, L5)</span>
+                  <p className="mb-2">Circles show member counts at each E&T level. Click any circle to filter the list:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-1">
+                    <li><span className="font-bold text-green-700">1st Click (Green):</span> Show members who have <strong>Completed</strong> this level.</li>
+                    <li><span className="font-bold text-amber-600">2nd Click (Amber):</span> Show members who are <strong>In Progress/Incomplete</strong> for this level.</li>
+                    <li><span className="font-bold text-slate-600">3rd Click:</span> Clear the filter.</li>
+                  </ul>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
+                  <span className="font-bold block text-amber-800 mb-1">Amber Dots on Member Cards</span>
+                  <p>An amber dot on a level indicator means all modules are done but the path is waiting to be submitted or approved in eServices.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="AlertCircle" className="w-4 h-4 mr-2 text-amber-500" />
+                Education & Training Discrepancies
+              </h3>
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 text-sm text-slate-700 space-y-2">
+                <p>You may notice discrepancies where a member shows a higher Level completed (e.g., Level 3) but Levels 1 or 2 are incomplete. This is expected behavior due to historical changes in the CAP Professional Development program.</p>
+                <p><strong>Why this happens:</strong> When CAP transitioned to the "Education & Training" (Volunteer University) model, members with existing achievements were grandfathered in. They did not have to retroactively complete the new modular requirements for levels they had already earned.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Award" className="w-4 h-4 mr-2 text-purple-600" />
+                Specialty Tracks
+              </h3>
+              <div className="text-sm text-slate-700 space-y-2">
+                <p>Specialty tracks show professional development in specific functional areas. Rating levels progress from Technician → Senior → Master.</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">TECH</span>
+                  <span className="text-slate-400">→</span>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">SENIOR</span>
+                  <span className="text-slate-400">→</span>
+                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-bold">MASTER</span>
+                </div>
+                <p className="mt-2 text-amber-700"><strong>Warning icons</strong> on duty badges indicate the member holds a duty but lacks the recommended specialty track enrollment.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="TrendingUp" className="w-4 h-4 mr-2 text-green-600" />
+                Promotion Eligibility
+              </h3>
+              <div className="bg-green-50 p-3 rounded border border-green-100 text-sm text-slate-700">
+                <p className="mb-2"><strong>Promotable</strong> count shows members who meet <strong>both</strong> requirements:</p>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  <li><strong>Time-in-Grade (TIG):</strong> Minimum months in current rank (varies by rank)</li>
+                  <li><strong>E&T Level:</strong> Required education & training level for next rank</li>
+                </ul>
+                <p className="mt-2 text-xs text-slate-500">Click the Promotable count to filter the dashboard, or click any member's rank to see detailed promotion criteria.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Shield" className="w-4 h-4 mr-2 text-rose-600" />
+                Training Indicators
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-emerald-50 p-3 rounded border border-emerald-100">
+                  <span className="font-bold block text-emerald-800">Green Avatar Ring</span>
+                  <p className="text-slate-600 mt-1">Cadet Protection training is current and not expiring soon.</p>
+                </div>
+                <div className="bg-amber-50 p-3 rounded border border-amber-100">
+                  <span className="font-bold block text-amber-800">Amber Avatar Ring</span>
+                  <p className="text-slate-600 mt-1">Training expires within 90 days - renewal needed soon.</p>
+                </div>
+                <div className="bg-rose-50 p-3 rounded border border-rose-100">
+                  <span className="font-bold block text-rose-800">Red Avatar Ring</span>
+                  <p className="text-slate-600 mt-1">Training is expired or missing - immediate action required.</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="font-bold block text-slate-800">Gray Avatar Ring</span>
+                  <p className="text-slate-600 mt-1">No Cadet Protection data available or not required.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 border-b pb-2">Duty Position to Specialty Track Map</h3>
+              <div className="max-h-48 overflow-y-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-slate-100 sticky top-0">
+                    <tr>
+                      <th className="p-2 font-bold text-slate-600 border-b">Duty Position</th>
+                      <th className="p-2 font-bold text-slate-600 border-b">Required Track</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {Object.entries(DUTY_TO_TRACK_MAP).sort((a, b) => a[0].localeCompare(b[0])).map(([d, t]) => (
+                      <tr key={d} className="hover:bg-slate-50">
+                        <td className="p-2 capitalize text-slate-700">{d.toLowerCase()}</td>
+                        <td className="p-2 text-blue-600 font-mono text-xs">{t}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* CADET DASHBOARD TAB */}
+        {activeReferenceTab === 'cadet' && (
+          <>
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="GraduationCap" className="w-4 h-4 mr-2 text-blue-600" />
+                Cadet Program Overview
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
+                <p>The Cadet Dashboard tracks cadet progression through the 16-achievement program, organized into 5 phases. Each cadet card shows current rank, next achievement requirements, and promotion status.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Layers" className="w-4 h-4 mr-2 text-indigo-600" />
+                Phases Explained
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                <div className="bg-blue-50 p-3 rounded border border-blue-100 text-center">
+                  <span className="font-bold block text-blue-800">Phase I</span>
+                  <p className="text-xs text-slate-600 mt-1">Learning (Curry → Mitchell)</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-100 text-center">
+                  <span className="font-bold block text-blue-800">Phase II</span>
+                  <p className="text-xs text-slate-600 mt-1">Leadership (Mitchell → Earhart)</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-100 text-center">
+                  <span className="font-bold block text-blue-800">Phase III</span>
+                  <p className="text-xs text-slate-600 mt-1">Command (Earhart → Eaker)</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-100 text-center">
+                  <span className="font-bold block text-blue-800">Phase IV</span>
+                  <p className="text-xs text-slate-600 mt-1">Executive (Eaker → Spaatz)</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded border border-purple-100 text-center">
+                  <span className="font-bold block text-purple-800">Phase V</span>
+                  <p className="text-xs text-slate-600 mt-1">Spaatz (Complete)</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Target" className="w-4 h-4 mr-2 text-green-600" />
+                Promotion Status
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-green-50 p-3 rounded border border-green-100">
+                  <span className="font-bold block text-green-800">READY</span>
+                  <p className="text-slate-600 mt-1">All requirements complete - eligible for promotion.</p>
+                </div>
+                <div className="bg-amber-50 p-3 rounded border border-amber-100">
+                  <span className="font-bold block text-amber-800">TIME_PENDING</span>
+                  <p className="text-slate-600 mt-1">Requirements complete but waiting for TIG eligibility date.</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                  <span className="font-bold block text-blue-800">NEARLY_READY</span>
+                  <p className="text-slate-600 mt-1">Most requirements done - just a few items remaining.</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="font-bold block text-slate-800">IN_PROGRESS</span>
+                  <p className="text-slate-600 mt-1">Working on achievement requirements.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Clock" className="w-4 h-4 mr-2 text-orange-600" />
+                Time in Grade (TIG)
+              </h3>
+              <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 text-sm text-slate-700">
+                <p className="mb-2">Cadets must wait a minimum number of days in their current grade before promotion. The "Eligible" date shows when TIG is met.</p>
+                <p><strong>90+ Days Indicator:</strong> An amber dot appears when a cadet has been in grade 90+ days without promotion - may indicate a stalled advancement or missing requirements.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Star" className="w-4 h-4 mr-2 text-purple-600" />
+                Honor Credits
+              </h3>
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-100 text-sm text-slate-700">
+                <p>Honor credits are earned when cadets complete extra activities beyond the minimum requirements. The count shows total honor credit achievements earned across all cadets.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Briefcase" className="w-4 h-4 mr-2 text-slate-600" />
+                Cadet Duty Positions
+              </h3>
+              <div className="text-sm text-slate-700 space-y-2">
+                <p>Leadership billets displayed on cadet cards in order of seniority:</p>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div className="text-xs">1. Cadet Commander</div>
+                  <div className="text-xs">2. Cadet Deputy Cmdr (Ops)</div>
+                  <div className="text-xs">3. Cadet Deputy Cmdr (Spt)</div>
+                  <div className="text-xs">4. Cadet First Sergeant</div>
+                  <div className="text-xs">5. Cadet Flight Commander</div>
+                  <div className="text-xs">6. Cadet Flight Sergeant</div>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* REPORTS TAB */}
+        {activeReferenceTab === 'reports' && (
+          <>
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="FileText" className="w-4 h-4 mr-2 text-blue-600" />
+                Reports Overview
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
+                <p>The Reports section generates actionable insights and analysis. Use tag filters to find specific report types. Click "Generate" to view a report or "PDF" to export directly.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="BookOpen" className="w-4 h-4 mr-2 text-indigo-600" />
+                Report Types
+              </h3>
+              <div className="space-y-3 text-sm">
+                <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                  <span className="font-bold block text-blue-800">Most Needed Training Analysis</span>
+                  <p className="text-slate-600 mt-1">Identifies moderated-only E&T modules that Volunteer University instructors should prioritize teaching. Self-paced modules are excluded since members can complete those online.</p>
+                </div>
+                <div className="bg-amber-50 p-3 rounded border border-amber-100">
+                  <span className="font-bold block text-amber-800">Track/Duty Discrepancies</span>
+                  <p className="text-slate-600 mt-1">Lists members with duty assignments who are missing the required specialty track enrollment. Use as an action list for eServices corrections.</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded border border-green-100">
+                  <span className="font-bold block text-green-800">Levels Awaiting Approval</span>
+                  <p className="text-slate-600 mt-1">Members who have completed all modules for a level and need submission/approval (or have pending/disapproved submissions).</p>
+                </div>
+                <div className="bg-emerald-50 p-3 rounded border border-emerald-100">
+                  <span className="font-bold block text-emerald-800">Promotion Eligibility</span>
+                  <p className="text-slate-600 mt-1">Senior members meeting all promotion requirements (TIG, E&T Level, and Duty Position). Lt Cols excluded as Col promotion is restricted to wing command positions.</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Tag" className="w-4 h-4 mr-2 text-purple-600" />
+                Report Tags
+              </h3>
+              <div className="text-sm text-slate-700">
+                <p className="mb-2">Tags categorize reports by topic area. Select multiple tags to narrow your search:</p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs border border-slate-200">training</span>
+                  <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs border border-slate-200">senior</span>
+                  <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs border border-slate-200">cadet</span>
+                  <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs border border-slate-200">promotion</span>
+                  <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs border border-slate-200">compliance</span>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Download" className="w-4 h-4 mr-2 text-green-600" />
+                Exporting Reports
+              </h3>
+              <div className="bg-green-50 p-4 rounded-lg border border-green-100 text-sm text-slate-700">
+                <p className="mb-2">Two ways to export:</p>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  <li><strong>PDF button on report card:</strong> Exports without generating on-screen first</li>
+                  <li><strong>Export PDF in report view:</strong> Exports the currently displayed report</li>
+                </ul>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Users" className="w-4 h-4 mr-2 text-slate-600" />
+                Member Lists
+              </h3>
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm text-slate-700">
+                <p>On training reports, click the member count number to see names and CAP IDs of specific members needing that training module.</p>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* ORG CHART TAB */}
+        {activeReferenceTab === 'org' && (
+          <>
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Network" className="w-4 h-4 mr-2 text-blue-600" />
+                Organization Chart Features
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
+                <p>The org chart displays unit structure with position holders. Click any member name to view their full profile. Use the toolbar controls to customize the view.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Settings" className="w-4 h-4 mr-2 text-slate-600" />
+                View Options
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="font-bold block text-slate-800">Hide Vacant Positions</span>
+                  <p className="text-slate-600 mt-1">Toggle to show/hide unfilled duty positions.</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="font-bold block text-slate-800">Command Chain Only</span>
+                  <p className="text-slate-600 mt-1">Show only command positions (Commander, Deputy Commanders, Cadet Commander).</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded border border-green-100">
+                  <span className="font-bold block text-green-800">Expand/Collapse All</span>
+                  <p className="text-slate-600 mt-1">Quick toggle to expand or collapse all sections at once.</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                  <span className="font-bold block text-purple-800">Committees</span>
+                  <p className="text-slate-600 mt-1">Opens sidebar showing committee memberships (CAC, WCAC, GCAC, etc.).</p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Circle" className="w-4 h-4 mr-2 text-blue-500" />
+                Cross-Unit Duty Assignments
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
+                <p className="mb-2">Members with duty assignments in units other than their home unit are marked with a <span className="inline-block w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-white"></span> blue indicator dot on their duty badge.</p>
+                <p className="text-xs">This helps identify members supporting multiple units or holding positions above/below their assigned unit.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Eye" className="w-4 h-4 mr-2 text-purple-600" />
+                Drill-Down View (Sub-Units Mode)
+              </h3>
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-100 text-sm text-slate-700">
+                <p className="mb-2">When viewing with "Sub-Units" enabled, click the <svg className="inline w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/></svg> eye icon on any position title to view all members holding that position across all subordinate units.</p>
+                <p className="text-xs">Perfect for Wing/Group commanders to see all squadron commanders, operations officers, etc. at a glance.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Users" className="w-4 h-4 mr-2 text-indigo-600" />
+                Committees Sidebar
+              </h3>
+              <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-sm text-slate-700 space-y-2">
+                <p>When committees exist in the unit, they appear in a sidebar overlay. Committee types include:</p>
+                <ul className="list-disc list-inside ml-1 space-y-1">
+                  <li><strong>CAC:</strong> Cadet Advisory Council (squadron level)</li>
+                  <li><strong>GCAC:</strong> Group Cadet Advisory Council</li>
+                  <li><strong>WCAC:</strong> Wing Cadet Advisory Council</li>
+                </ul>
+                <p className="text-xs mt-2">Committee chairs are marked with a "CHAIR" badge. Senior advisors in CAC committees are marked with an "ADVISOR" badge.</p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Download" className="w-4 h-4 mr-2 text-slate-600" />
+                Export Options
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                  <span className="font-bold block text-slate-800">PNG Export</span>
+                  <p className="text-slate-600 mt-1">Downloads the org chart as a high-resolution image file.</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                  <span className="font-bold block text-blue-800">PDF Export</span>
+                  <p className="text-slate-600 mt-1">Downloads the org chart as a PDF document, suitable for printing.</p>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* FEEDBACK TAB */}
+        {activeReferenceTab === 'feedback' && (
+          <FeedbackTab
+            activeTab={activeTab}
+            unitFilter={unitFilter}
+            showAllDescendants={showAllDescendants}
+            lastUpdated={lastUpdated}
+            dataFiles={dataFiles}
+            availableUnits={availableUnits}
+            onClose={onClose}
+          />
+        )}
+
+      </div>
+    </Modal>
+  );
+};
+</script>

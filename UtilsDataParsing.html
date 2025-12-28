@@ -1,0 +1,72 @@
+<script type="text/babel">
+const parseCSV = (text) => {
+  if (!text || typeof text !== 'string') return [];
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length === 0) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    const row = {};
+    let currentVal = '';
+    let inQuotes = false;
+    let colIndex = 0;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') inQuotes = !inQuotes;
+      else if (char === ',' && !inQuotes) {
+        if (colIndex < headers.length) row[headers[colIndex]] = currentVal.trim().replace(/^"|"$/g, '');
+        currentVal = '';
+        colIndex++;
+      } else currentVal += char;
+    }
+    if (colIndex < headers.length) row[headers[colIndex]] = currentVal.trim().replace(/^"|"$/g, '');
+    return row;
+  });
+};
+
+// Parse the AdditionalOptions column from PL_MemberTaskCredit (lightweight, resilient parser)
+const parseAdditionalOptions = (optionsString) => {
+  if (!optionsString || typeof optionsString !== 'string') return {};
+  const trimmed = optionsString.trim();
+  const content = trimmed.startsWith('{') && trimmed.endsWith('}')
+    ? trimmed.slice(1, -1)
+    : trimmed;
+
+  const result = {};
+  content.split(',').forEach(part => {
+    const [rawKey, ...rest] = part.split(':');
+    if (!rawKey || !rest.length) return;
+    const key = rawKey.trim();
+    const rawValue = rest.join(':').trim().replace(/^"|"$/g, '');
+    if (!key) return;
+    if (/^(true|false)$/i.test(rawValue)) {
+      result[key] = rawValue.toLowerCase() === 'true';
+    } else if (rawValue !== '' && !Number.isNaN(Number(rawValue))) {
+      result[key] = Number(rawValue);
+    } else {
+      result[key] = rawValue;
+    }
+  });
+  return result;
+};
+
+const normalizeRank = (rank) => {
+  if (!rank) return "";
+  const r = rank.toUpperCase().replace(".", "").trim();
+  if (r === "SENIOR MEMBER" || r === "SM") return "SM";
+  if (r.includes("SECOND") || r === "2D LT") return "2D LT";
+  if (r.includes("FIRST") || r === "1ST LT") return "1ST LT";
+  if (r.includes("CAPTAIN")) return "CAPT";
+  if (r.includes("MAJOR")) return "MAJ";
+  if (r.includes("LIEUTENANT COLONEL") || r === "LT COL") return "LT COL";
+  if (r.includes("COLONEL")) return "COL";
+  if (r === "FLIGHT OFFICER") return "FO";
+  if (r === "TECHNICAL FLIGHT OFFICER") return "TFO";
+  if (r === "SENIOR FLIGHT OFFICER") return "SFO";
+  if (r === "STAFF SERGEANT") return "SSGT";
+  if (r === "TECHNICAL SERGEANT") return "TSGT";
+  if (r === "MASTER SERGEANT") return "MSGT";
+  if (r === "SENIOR MASTER SERGEANT") return "SMSGT";
+  if (r === "CHIEF MASTER SERGEANT") return "CMSGT";
+  return r;
+};
+</script>

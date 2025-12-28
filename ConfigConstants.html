@@ -1,0 +1,1066 @@
+<script type="text/babel">
+// --- APP METADATA ---
+const APP_VERSION = '1.0.0';  // Increment with releases
+// APP_NAME: Customize this for your unit (must match APP_NAME in Code.gs)
+const APP_NAME = 'CAP Readiness Hub';
+
+// --- FEEDBACK CATEGORIES ---
+// Used by the feedback submission form in ReferenceModal
+const FEEDBACK_CATEGORIES = [
+  { id: 'bug', label: 'Bug Report', icon: 'Bug', description: 'Something is not working correctly' },
+  { id: 'feature', label: 'Feature Request', icon: 'Lightbulb', description: 'Suggest a new feature or improvement' },
+  { id: 'data-issue', label: 'Data Issue', icon: 'Database', description: 'Incorrect or missing data' },
+  { id: 'ui-ux', label: 'UI/UX Feedback', icon: 'Palette', description: 'Improve the look or usability' },
+  { id: 'question', label: 'Question', icon: 'HelpCircle', description: 'Ask how something works' },
+  { id: 'other', label: 'Other', icon: 'MessageSquare', description: 'General feedback' }
+];
+
+const DUTY_TO_TRACK_MAP = {
+  "AEROSPACE EDUCATION OFFICER": "AEROSPACE", "CYBER EDUCATION OFFICER": "AEROSPACE", "DIRECTOR OF AEROSPACE EDUCATION": "AEROSPACE",
+  "DEPUTY COMMANDER FOR CADETS": "CADET PROGRAMS", "ACTIVITIES OFFICER": "CADET PROGRAMS", "DRUG DEMAND REDUCTION OFFICER": "CADET PROGRAMS", "FITNESS OFFICER": "CADET PROGRAMS", "SQUADRON LEADERSHIP OFFICER": "CADET PROGRAMS", "LEADERSHIP OFFICER": "CADET PROGRAMS", "DIRECTOR OF CADET PROGRAMS": "CADET PROGRAMS",
+  "COMMANDER": "COMMAND",
+  "HISTORIAN": "HISTORIAN",
+  "HEALTH SERVICES OFFICER": "HEALTH SERVICES", "DIRECTOR OF HEALTH SERVICES": "HEALTH SERVICES",
+  "COMMUNICATIONS OFFICER": "COMMUNICATIONS", "DIRECTOR OF COMMUNICATIONS": "COMMUNICATIONS",
+  "DISASTER PREPAREDNESS OFFICER": "EMERGENCY SERVICES", "EMERGENCY SERVICES OFFICER": "EMERGENCY SERVICES", "EMERGENCY SERVICES TRAINING OFFICER": "EMERGENCY SERVICES", "SEARCH AND RESCUE OFFICER": "EMERGENCY SERVICES", "DIRECTOR OF EMERGENCY SERVICES": "EMERGENCY SERVICES",
+  "FINANCE OFFICER": "FINANCE", "DIRECTOR OF FINANCE": "FINANCE",
+  "LEGAL OFFICER": "LEGAL",
+  "INFORMATION TECHNOLOGIES OFFICER": "INFORMATION TECHNOLOGY", "WEB SECURITY ADMIN": "INFORMATION TECHNOLOGY", "DIRECTOR OF INFORMATION TECHNOLOGY": "INFORMATION TECHNOLOGY",
+  "LOGISTICS OFFICER": "LOGISTICS", "MAINTENANCE OFFICER": "LOGISTICS", "SUPPLY OFFICER": "LOGISTICS", "TRANSPORTATION OFFICER": "LOGISTICS", "DIRECTOR OF LOGISTICS": "LOGISTICS",
+  "PUBLIC AFFAIRS OFFICER": "PUBLIC AFFAIRS", "DIRECTOR OF PUBLIC AFFAIRS": "PUBLIC AFFAIRS",
+  "RECRUITING OFFICER": "RECRUITING AND RETENTION", "RETENTION OFFICER": "RECRUITING AND RETENTION", "RECRUITING AND RETENTION OFFICER": "RECRUITING AND RETENTION", "DIRECTOR OF RECRUITING AND RETENTION": "RECRUITING AND RETENTION",
+  "ALERTING OFFICER": "OPERATIONS", "HOMELAND SECURITY OFFICER": "OPERATIONS", "OPERATIONS OFFICER": "OPERATIONS", "SMALL UNMANNED AERIAL SYSTEMS OFFICER": "OPERATIONS", "DIRECTOR OF OPERATIONS": "OPERATIONS",
+  "PERSONNEL OFFICER": "PERSONNEL", "DIRECTOR OF PERSONNEL": "PERSONNEL",
+  "ADMINISTRATIVE OFFICER": "ADMINISTRATION", "DIRECTOR OF ADMINISTRATION": "ADMINISTRATION",
+  "EDUCATION AND TRAINING OFFICER": "PROFESSIONAL DEVELOPMENT", "TESTING OFFICER": "PROFESSIONAL DEVELOPMENT", "DIRECTOR OF PROFESSIONAL DEVELOPMENT": "PROFESSIONAL DEVELOPMENT", "DIRECTOR OF EDUCATION AND TRAINING": "PROFESSIONAL DEVELOPMENT",
+  "SAFETY OFFICER": "SAFETY", "DIRECTOR OF SAFETY": "SAFETY",
+  "STANDARDIZATION AND EVALUATION OFFICER": "STANDARDS AND EVALUATIONS", "STANDARDIZATION/EVALUATION OFFICER": "STANDARDS AND EVALUATIONS", "DIRECTOR OF STANDARDIZATION AND EVALUATION": "STANDARDS AND EVALUATIONS",
+  "INSPECTOR GENERAL": "INSPECTOR GENERAL",
+  "CHAPLAIN": "CHAPLAIN",
+  "CHARACTER DEVELOPMENT INSTRUCTOR": "CHARACTER DEVELOPMENT"
+};
+
+// Specialty Track Display Name Normalization
+// Maps track names as they appear in data to clean display names
+const normalizeTrackDisplayName = (trackName) => {
+  if (!trackName) return trackName;
+  const upperName = trackName.toUpperCase().trim();
+
+  // Remove " OFFICER" suffix from Information Technology
+  if (upperName === 'INFORMATION TECHNOLOGY OFFICER') {
+    return 'INFORMATION TECHNOLOGY';
+  }
+
+  // Return original name for all other tracks
+  return trackName;
+};
+
+// Emergency Services Color Scheme
+const ES_STATUS_COLORS = {
+  'ACTIVE': { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', badge: 'green' },
+  'TRAINING': { bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300', badge: 'amber' },
+  'EXPIRED': { bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-300', badge: 'red' },
+  'NOT_APPROVED': { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-300', badge: 'gray' }
+};
+
+// Well-known ES Achievement IDs
+const ES_ACHIEVEMENT_IDS = {
+  GES: '53',           // General Emergency Services
+  SET: '217',          // Skills Evaluation Technician (Note: This is actually ICUT, SET is 124)
+  ICUT: '217',         // Introductory Communications User Training
+  SET_ACTUAL: '124',   // Skills Evaluator Training
+  VFR_PILOT: '44',     // VFR Pilot
+  MISSION_SCANNER: '55', // Mission Scanner
+  GTL: '69',           // Ground Team Leader
+  IC3: '61',           // Incident Commander Level 3
+  DRIVERS_LICENSE: '211', // CAP Drivers License
+  BCUT: '212',         // Basic Communications User Training (Outdated)
+  ACUT: '213'          // Advanced Communications User Training (Outdated)
+};
+
+// ES Functional Area Display Names
+const ES_FUNCTIONAL_AREAS = {
+  'OPS-Emergency_Services': 'Emergency Services',
+  'OPS-CAPPilot': 'CAP Pilot',
+  'OPS-CAPPilot_OLD': 'CAP Pilot (Outdated)',
+  'OPS-Emergency_Services_SAR': 'Search & Rescue',
+  'OPS-Emergency_Services_DR': 'Disaster Relief',
+  'OPS-DriversLicense': 'Drivers License',
+  'Communications': 'Communications',
+  'Cadet_Programs': 'Cadet Programs',
+  'ET-Senior': 'Education & Training - Senior',
+  'OPS-CounterDrug': 'Counter Drug',
+  'OPS-ARCHER': 'ARCHER',
+  'OPS-CISM': 'CISM',
+  'OPS-OPSEC': 'OPSEC',
+  'OPS-NOCAUG': 'NOC Augmentee',
+  'OPS-K9Handler': 'K9 Handler'
+};
+
+// ES Qualifications to EXCLUDE from display (badges, patches, IS/ICS courses, etc.)
+// These are achievement IDs that should NOT be shown in the ES qualifications section
+const ES_EXCLUDED_ACHIEVEMENT_IDS = new Set([
+  // Badges and Patches
+  '197', // CAP Emergency Services Patch
+  '199', // CAP Master Ground Team Badge
+  '200', // CAP Senior Ground Team Badge
+  '201', // CAP Basic Ground Team Badge
+  '202', // CAP Master Emergency Services Qualification Badge
+  '203', // CAP Senior Emergency Services Qualification Badge
+  '204', // CAP Basic Emergency Services Qualification Badge
+  '241', // Basic Incident Commander Badge
+  '242', // Senior Incident Commander Badge
+  '243', // Master Incident Commander Badge
+  '205', // CAP Master Observer Rating
+  '206', // CAP Senior Observer Rating
+  '207', // CAP Observer Rating
+  '238', // CAP Aircrew Rating
+  '239', // CAP Senior Aircrew Rating
+  '240', // CAP Master Aircrew Rating
+
+  // IS and ICS Courses
+  '176', // IS100 - IS-100
+  '177', // IS200 - IS-200
+  '178', // ICS300 - ICS-300
+  '179', // ICS400 - ICS-400
+  '180', // IS700 - IS-700
+  '181', // IS800 - IS-800
+  '267', // IS3 - IS-3 Radiological Emergency Management
+  '268', // IS5.A - IS-5A An Introduction to Hazardous Materials
+  '270', // IS368 - IS-368
+  '271', // IS405 - IS-405
+  '272', // IS505 - IS-505
+  '273', // IS520 - IS-520
+
+  // ET-Senior Levels
+  '96',  // Level 1
+  '131', // Level II
+  '132', // Level III
+  '133', // Level IV
+  '134', // Level V
+
+  // Outdated Communications (BCUT and ACUT - keep ICUT)
+  '212', // BCUT - Basic Communications User Training
+  '213', // ACUT - Advanced Communications User Training
+
+  // Cadet Programs
+  '95',  // Achievement 1 (Curry)
+
+  // CAP Pilot OLD qualifications (CAPPILOT_OLD functional area)
+  '220', // Instructor Pilot - G1000 (CAP Trained) (OLD)
+  '221', // Check Pilot - G1000 (CAP Trained) (OLD)
+  '223'  // Instrument Pilot - G1000 (CAP Trained) (OLD)
+]);
+
+// Functional areas to EXCLUDE from ES qualifications display
+const ES_EXCLUDED_FUNCTIONAL_AREAS = new Set([
+  'OPS-CAPPilot',      // All CAP Pilot qualifications (handled by check pilots/instructor pilots)
+  'OPS-CAPPilot_OLD',  // Outdated CAP Pilot qualifications
+  'Cadet_Programs',    // Cadet Programs (like Achievement 1)
+  'ET-Senior'          // Education & Training Senior Levels
+]);
+
+// Qualifications that CAN have Skills Evaluators
+// Only actual ES qualifications, not badges/patches/pilot ratings
+const ES_SKILLS_EVALUATOR_ALLOWED_FUNCTIONAL_AREAS = new Set([
+  'OPS-Emergency_Services',
+  'Communications' // Only ICUT in this area is allowed
+]);
+
+// ES Prerequisite Special Cases
+// Some qualifications have OR logic or conditional requirements based on member type
+// These are documented here for reference and future implementation
+const ES_PREREQUISITE_SPECIAL_CASES = {
+  // VFR Pilot: Requires Basic Medical OR Basic Medical Military Waiver
+  '44': {
+    name: 'VFR Pilot',
+    specialPrereqs: [
+      { type: 'OR', options: ['246', '247'] } // Basic Medical OR Basic Medical Military Waiver
+    ]
+  },
+  // GES: Requires Level 1 for seniors OR Achievement 1 for cadets
+  '53': {
+    name: 'GES - General Emergency Services',
+    specialPrereqs: [
+      { type: 'CONDITIONAL_MEMBER_TYPE', senior: '96', cadet: '95' }, // Level 1 (seniors) OR Achievement 1 (cadets)
+      { type: 'TASK', taskID: '131' } // CAP Test 116 ICS 100
+    ]
+  },
+  // Planning Section Chief: Requires AOBD OR GBD, with cross-training requirement
+  '64': {
+    name: 'PSC - Planning Section Chief',
+    specialPrereqs: [
+      {
+        type: 'OR_WITH_CROSS_TRAINING',
+        options: [
+          { achvID: '67', crossTraining: ['70', '71'] }, // AOBD + (GTM3 OR UDF)
+          { achvID: '68', crossTraining: ['55'] }  // GBD + Mission Scanner
+        ]
+      }
+    ]
+  },
+  // UASMP - sUAS Mission Pilot: Requires FAA Part 107 and Form 5U
+  '257': {
+    name: 'UASMP - sUAS Mission Pilot',
+    specialPrereqs: [
+      { type: 'TASK', taskID: '1502' }, // FAA Part 107 Remote Pilot Certification
+      { type: 'TASK', taskID: '1544' }  // Form 5U - Current and valid Form 5U
+    ]
+  }
+};
+
+// ES Age Requirements
+// Defines minimum age requirements for ES qualifications
+// Based on CAP regulations (CAPR 60-1, CAPR 60-3)
+// Only includes qualifications with explicit age requirements in regulations
+const ES_AGE_REQUIREMENTS = {
+  // Airborne Operations (18+ years - required for all flight operations)
+  '55': 18,   // MS - Mission Scanner
+  '56': 18,   // TMP - Transport Mission Pilot
+  '57': 18,   // MP - SAR/DR Mission Pilot
+  '81': 18,   // MO - Mission Observer
+  '193': 18,  // AP - Airborne Photographer
+
+  // Ground Operations (18+ years)
+  '69': 18,   // GTL - Ground Team Leader
+  '68': 18,   // GBD - Ground Branch Director
+
+  // Flight Line Operations (18+ years)
+  '73': 18,   // FLS - Flight Line Supervisor
+
+  // Mission Staff (18+ years)
+  '72': 18,   // PIO - Public Information Officer
+  '78': 18,   // LO - Liaison Officer
+
+  // Section Chiefs (21+ years - ICS leadership positions)
+  '63': 21,   // OSC - Operations Section Chief
+  '64': 21,   // PSC - Planning Section Chief
+  '65': 21,   // LSC - Logistics Section Chief
+  '66': 21,   // FASC - Finance/Admin Section Chief
+
+  // Incident Command (21+ years - senior leadership)
+  '61': 21,   // IC3 - Incident Commander Level 3
+  '125': 21,  // IC2 - Incident Commander Level 2
+  '128': 21,  // IC1 - Incident Commander Level 1
+
+  // Mission Safety (21+ years - safety leadership)
+  '77': 21,   // MSO - Mission Safety Officer
+
+  // Transportation (18+ years - driving requirement)
+  '211': 18   // CAP Drivers License
+};
+
+// Special handling qualifications for dashboard
+const ES_DASHBOARD_SPECIAL = {
+  GES: '53',           // Show in red if missing, hide if completed
+  OPSEC: '169',        // Show in red if missing, hide if completed
+  SE_TRAINING: '124',  // SET - Skills Evaluator Training - hide on senior dashboard
+  CD_COUNTERDRUG: '112' // CD - Counterdrug - hide on senior dashboard
+};
+
+// Qualifications that cannot have Skills Evaluators
+// Note: sUASMP excluded because it's a pilot/aircrew qual and SET tracking is outside this app's scope
+const ES_NO_SKILLS_EVALUATOR_IDS = new Set([
+  '53',  // GES - General Emergency Services
+  '124', // SET - Skills Evaluator Training itself
+  '182', // WS - Water Survival
+  '186', // FRO - Flight Release Officer
+  '187', // SMC/BISC - AFRCC SAR Management Course
+  '188', // SPC - National Inland SAR Planning Course
+  '189', // WAO - Wing Alert Officer
+  '190', // UAO - Unit Alert Officer
+  '248', // SFRO - Senior Flight Release Officer
+  '250', // PODC - Point of Distribution Course
+  '257'  // UASMP - sUAS Mission Pilot (pilot qual, SET tracking outside app scope)
+]);
+
+// Non-expiring qualifications to exclude from profile (except GES which is special)
+const ES_NON_EXPIRING_EXCLUSIONS = new Set([
+  '198', // CAP CN Observer
+  '187', // SMC/BISC - AFRCC SAR Management Course
+  '188'  // SPC - National Inland SAR Planning Course
+  // Add more as needed
+]);
+
+// ES Team Composition Requirements (based on CAPR 60-3)
+// Defines minimum team composition for operational missions
+const ES_TEAM_REQUIREMENTS = {
+  fieldOps: {
+    name: 'Field Operations',
+    shortName: 'Field',
+    icon: 'Users',
+    description: 'Ground teams and urban direction finding',
+    // Ground Team: 1 GTL + 3 GTM minimum (4-person team)
+    // UDF: 2 UDF-qualified members minimum
+    achvIDs: {
+      GTL: '69',   // Ground Team Leader
+      GTM1: '127', // Ground Team Member Level 1
+      GTM2: '126', // Ground Team Member Level 2
+      GTM3: '70',  // Ground Team Member Level 3
+      UDF: '71',   // Urban Direction Finding
+      GBD: '68'    // Ground Branch Director
+    },
+    // Any of these count as GTM for team composition
+    gtmAchvIDs: ['70', '126', '127']
+  },
+  aircrew: {
+    name: 'Aircrew',
+    shortName: 'Air',
+    icon: 'Plane',
+    description: 'Airborne search and reconnaissance',
+    minimum: { pilot: 1, scanner: 1 },
+    preferred: { MP: 1, MO: 1, AP: 1 },
+    achvIDs: {
+      MP: '57',    // SAR/DR Mission Pilot
+      TMP: '56',   // Transport Mission Pilot
+      MS: '55',    // Mission Scanner
+      MO: '81',    // Mission Observer
+      AP: '193',   // Airborne Photographer
+      AOBD: '67'   // Air Operations Branch Director
+    },
+    // Any of these count as pilot
+    pilotAchvIDs: ['56', '57'],
+    // Any of these count as scanner/observer
+    scannerAchvIDs: ['55', '81']
+  },
+  suas: {
+    name: 'sUAS Team',
+    shortName: 'sUAS',
+    icon: 'Camera',
+    description: 'Small Unmanned Aerial Systems team',
+    minimum: { UASMP: 1, UAST: 1 },
+    achvIDs: {
+      UASMP: '257', // sUAS Mission Pilot
+      UAST: '258'   // sUAS Technician
+    }
+  },
+  missionBase: {
+    name: 'Mission Base',
+    shortName: 'Base',
+    icon: 'Radio',
+    description: 'Mission base operations staff',
+    positions: [
+      { code: 'MSA', name: 'Mission Staff Assistant', achvID: '80' },
+      { code: 'MRO', name: 'Mission Radio Operator', achvID: '76' },
+      { code: 'CUL', name: 'Communications Unit Leader', achvID: '75' },
+      { code: 'FLM', name: 'Flight Line Marshaller', achvID: '74' },
+      { code: 'FLS', name: 'Flight Line Supervisor', achvID: '73' },
+      { code: 'PIO', name: 'Public Information Officer', achvID: '72' },
+      { code: 'LO', name: 'Liaison Officer', achvID: '78' },
+      { code: 'MSO', name: 'Mission Safety Officer', achvID: '77' }
+    ],
+    // Minimum positions for a functional mission base
+    minimumPositions: ['MSA', 'MRO']
+  },
+  command: {
+    name: 'Command Staff',
+    shortName: 'Cmd',
+    icon: 'Shield',
+    description: 'Incident command and section chiefs',
+    positions: [
+      // Incident Commanders (hierarchical)
+      { code: 'IC3', name: 'Incident Commander Level 3', achvID: '61', tier: 1 },
+      { code: 'IC2', name: 'Incident Commander Level 2', achvID: '125', tier: 2 },
+      { code: 'IC1', name: 'Incident Commander Level 1', achvID: '128', tier: 3 },
+      // Section Chiefs
+      { code: 'OSC', name: 'Operations Section Chief', achvID: '63', section: true },
+      { code: 'PSC', name: 'Planning Section Chief', achvID: '64', section: true },
+      { code: 'LSC', name: 'Logistics Section Chief', achvID: '65', section: true },
+      { code: 'FASC', name: 'Finance/Admin Section Chief', achvID: '66', section: true },
+      // Branch Directors
+      { code: 'GBD', name: 'Ground Branch Director', achvID: '68', branch: true },
+      { code: 'AOBD', name: 'Air Operations Branch Director', achvID: '67', branch: true }
+    ],
+    // Any IC qualifies
+    icAchvIDs: ['61', '125', '128'],
+    // Section chief IDs
+    sectionChiefAchvIDs: ['63', '64', '65', '66']
+  }
+};
+
+// Reverse lookup: Achievement ID to position code
+const ES_ACHV_TO_POSITION = {
+  // Ground
+  '69': 'GTL', '127': 'GTM1', '126': 'GTM2', '70': 'GTM3', '71': 'UDF', '68': 'GBD',
+  // Air
+  '57': 'MP', '56': 'TMP', '55': 'MS', '81': 'MO', '193': 'AP', '67': 'AOBD',
+  // sUAS
+  '257': 'UASMP', '258': 'UAST',
+  // Mission Base
+  '80': 'MSA', '76': 'MRO', '74': 'FLM', '73': 'FLS', '72': 'PIO', '78': 'LO', '77': 'MSO', '75': 'CUL',
+  // Command
+  '66': 'FASC', '65': 'LSC', '61': 'IC3', '125': 'IC2', '128': 'IC1', '63': 'OSC', '64': 'PSC',
+  // Foundational
+  '53': 'GES', '124': 'SET'
+};
+
+// Position code to Achievement ID lookup
+const ES_POSITION_TO_ACHV = Object.fromEntries(
+  Object.entries(ES_ACHV_TO_POSITION).map(([k, v]) => [v, k])
+);
+
+// ES Readiness Score Weights (fixed weights per user preference)
+const ES_READINESS_WEIGHTS = {
+  teamCapability: 0.35,      // Can field required teams
+  qualificationHealth: 0.25, // Active vs expired ratio
+  evaluatorCoverage: 0.15,   // SET evaluator availability
+  riskMitigation: 0.15,      // No single points of failure
+  pipelineStrength: 0.10     // Members in training
+};
+
+// ES Readiness Rating Thresholds
+const ES_READINESS_THRESHOLDS = {
+  excellent: 80,  // 80+ is excellent
+  good: 65,       // 65-79 is good
+  fair: 50        // 50-64 is fair, below 50 is needs-attention
+};
+
+// Communications duty positions (for ICUT Skills Evaluator requirement)
+const COMMUNICATIONS_DUTY_POSITIONS = new Set([
+  'DIRECTOR OF COMMUNICATIONS',
+  'COMMUNICATIONS OFFICER',
+  'CADET COMMUNICATIONS OFFICER'
+]);
+
+// Cadet program constants
+const CADET_ACHIEVEMENT_TO_RANK = {
+  "1": "C/Amn", "2": "C/A1C", "3": "C/SrA",
+  "4": "C/SSgt", "5": "C/TSgt", "6": "C/MSgt", "7": "C/SMSgt", "8": "C/CMSgt",
+  "9": "C/CMSgt", "10": "C/2d Lt", "11": "C/2d Lt", "12": "C/1st Lt", "13": "C/1st Lt",
+  "14": "C/Capt", "15": "C/Capt", "16": "C/Capt", "17": "C/Maj", "18": "C/Maj", "19": "C/Maj",
+  "20": "C/Lt Col", "21": "C/Col"
+};
+
+const CADET_PHASES = {
+  1: { name: "Phase I (Learning)", achievements: [1, 2, 3], milestoneAchv: 4, milestoneName: "Wright Brothers" },
+  2: { name: "Phase II (Leadership)", achievements: [5, 6, 7, 8, 9], milestoneAchv: 10, milestoneName: "Billy Mitchell", requiresEncampment: true },
+  3: { name: "Phase III (Command)", achievements: [11, 12, 13], milestoneAchv: 14, milestoneName: "Amelia Earhart" },
+  4: { name: "Phase IV (Executive)", achievements: [15, 16, 17, 18, 19], milestoneAchv: 20, milestoneName: "Ira C. Eaker", requiresCLS: true },
+  5: { name: "Spaatz Award", achievements: [], milestoneAchv: 21, milestoneName: "Carl A. Spaatz" }
+};
+
+const CADET_MILESTONE_ACHIEVEMENTS = [4, 10, 14, 20, 21]; // Wright Brothers, Mitchell, Earhart, Eaker, Spaatz
+
+// Achievement ID to Pioneer Last Name mapping (for non-milestone achievements)
+const CADET_ACHIEVEMENT_PIONEERS = {
+  "1": "Curry",
+  "2": "Arnold",
+  "3": "Feik",
+  "5": "Rickenbacker",
+  "6": "Doolittle",
+  "7": "Goddard",
+  "8": "Armstrong",
+  "9": "Brown",
+  "11": "Boyd",
+  "12": "Ride"
+};
+
+// Achievement ID to Achievement Name mapping (based on eServices data)
+const CADET_ACHIEVEMENT_NAMES = {
+  "1": "Achievement 1",
+  "2": "Achievement 2",
+  "3": "Achievement 3",
+  "4": "Wright Brothers",
+  "5": "Achievement 4",
+  "6": "Achievement 5",
+  "7": "Achievement 6",
+  "8": "Achievement 7",
+  "9": "Achievement 8",
+  "10": "Billy Mitchell",
+  "11": "Achievement 9",
+  "12": "Achievement 10",
+  "13": "Achievement 11",
+  "14": "Amelia Earhart",
+  "15": "Achievement 12",
+  "16": "Achievement 13",
+  "17": "Achievement 14",
+  "18": "Achievement 15",
+  "19": "Achievement 16",
+  "20": "Gen Ira C Eaker",
+  "21": "Gen Carl A Spaatz"
+};
+
+// Map CadetAchvID to public achievement number
+const CADET_PUBLIC_ACHIEVEMENT_NUMBERS = {
+  "1": 1, "2": 2, "3": 3,
+  "5": 4, "6": 5, "7": 6, "8": 7, "9": 8,
+  "11": 9, "12": 10, "13": 11,
+  "15": 12, "16": 13, "17": 14, "18": 15, "19": 16
+};
+
+// Achievement ID to Rank Insignia URL mapping
+// Note: Using Google Drive thumbnail API format for proper image embedding
+// Achievements 9, 11, 13, 15, 16, 18, 19 don't award new ranks (N/A), so they show current rank insignia
+//
+// IMPORTANT FOR PUBLIC RELEASE:
+// These Google Drive file IDs point to cadet rank insignia images.
+// For your own deployment, you have two options:
+// 1. Upload your own rank insignia images to Google Drive and replace the IDs below
+// 2. Set these to empty strings "" to disable rank insignia display
+// The thumbnail format is: https://drive.google.com/thumbnail?id=YOUR_FILE_ID&sz=w200
+const CADET_RANK_INSIGNIA = {
+  "1": "https://drive.google.com/thumbnail?id=167Z2v5uu9GWG8SBr_h67xVIj51AUj22s&sz=w200", // C/Amn
+  "2": "https://drive.google.com/thumbnail?id=1D2s7d9kILAEKmf5WsoqCsFQ3GV6qKEZA&sz=w200", // C/A1C
+  "3": "https://drive.google.com/thumbnail?id=1Yy6bs1qMLHKk1_GgkYHkRkD2NqEF2yEo&sz=w200", // C/SrA
+  "4": "https://drive.google.com/thumbnail?id=12_z47ceNd8Ipao-UXzD-wI6WD0wQOzvy&sz=w200", // C/SSgt (Wright Brothers)
+  "5": "https://drive.google.com/thumbnail?id=1-ItusNWLmJR5jzAQGgdTivQciPaPCS1y&sz=w200", // C/TSgt
+  "6": "https://drive.google.com/thumbnail?id=1wVCkls5mJA8LCVR8C3UMW2VN_Gn2YqjS&sz=w200", // C/MSgt
+  "7": "https://drive.google.com/thumbnail?id=1PbShr0Lpd4eP5IYJojxynFgW4VM-dQN7&sz=w200", // C/SMSgt
+  "8": "https://drive.google.com/thumbnail?id=1MeT5Iq_ZXgicPAFhvx_nwyOhp7jWnaD2&sz=w200", // C/CMSgt
+  "9": "https://drive.google.com/thumbnail?id=1MeT5Iq_ZXgicPAFhvx_nwyOhp7jWnaD2&sz=w200", // Achievement 8 - N/A rank (keeps C/CMSgt)
+  "10": "https://drive.google.com/thumbnail?id=18uWgxCSwESqSQ5kxI066uu1lMiKyKp9Q&sz=w200", // C/2dLt (Billy Mitchell)
+  "11": "https://drive.google.com/thumbnail?id=18uWgxCSwESqSQ5kxI066uu1lMiKyKp9Q&sz=w200", // Achievement 9 - N/A rank (keeps C/2dLt)
+  "12": "https://drive.google.com/thumbnail?id=1Ei_WCpLRL2aG4yBCNDPU3uupj9kg-q6D&sz=w200", // C/1stLt (Achievement 10)
+  "13": "https://drive.google.com/thumbnail?id=1Ei_WCpLRL2aG4yBCNDPU3uupj9kg-q6D&sz=w200", // Achievement 11 - N/A rank (keeps C/1stLt)
+  "14": "https://drive.google.com/thumbnail?id=1ofimebcDTSezpjFx1p5Km4JxKASQ6_da&sz=w200", // C/Capt (Amelia Earhart)
+  "15": "https://drive.google.com/thumbnail?id=1ofimebcDTSezpjFx1p5Km4JxKASQ6_da&sz=w200", // Achievement 12 - N/A rank (keeps C/Capt)
+  "16": "https://drive.google.com/thumbnail?id=1ofimebcDTSezpjFx1p5Km4JxKASQ6_da&sz=w200", // Achievement 13 - N/A rank (keeps C/Capt)
+  "17": "https://drive.google.com/thumbnail?id=1BqEUaSAeFpWBbYGZKsN2uDjLbsbqOWv9&sz=w200", // C/Maj (Achievement 14)
+  "18": "https://drive.google.com/thumbnail?id=1BqEUaSAeFpWBbYGZKsN2uDjLbsbqOWv9&sz=w200", // Achievement 15 - N/A rank (keeps C/Maj)
+  "19": "https://drive.google.com/thumbnail?id=1BqEUaSAeFpWBbYGZKsN2uDjLbsbqOWv9&sz=w200", // Achievement 16 - N/A rank (keeps C/Maj)
+  "20": "https://drive.google.com/thumbnail?id=1TnqlPKUWiSGe4nfANyj-FB0c5-i585r8&sz=w200", // C/LtCol (Gen Ira C Eaker)
+  "21": "https://drive.google.com/thumbnail?id=14GxKhbIbwq5p16CwmRGubkZDjqSNvVSS&sz=w200"  // C/Col (Gen Carl A Spaatz)
+};
+
+const CADET_TIME_IN_GRADE_DAYS = 56; // 8 weeks
+const CADET_MIN_TEST_SCORE = 80; // 80% minimum passing
+
+// Cadet promotion requirement labels (single source of truth for UI text)
+const CADET_REQUIREMENT_LABELS = {
+  timeInGrade: 'Time in Grade (8 weeks)',
+  physicalFitness: {
+    early: 'Physical Fitness (HFZ attempted within 180 days)',
+    standard: 'Physical Fitness (HFZ passed within 180 days)'
+  },
+  activeParticipation: 'Active',
+  cadetOath: 'Oath',
+  characterDevelopment: 'Character Development',
+  leadershipTest: 'Leadership Test (80%+)',
+  aerospaceTest: 'Aerospace Test (80%+)',
+  drillTest: 'Drill & Ceremonies',
+  sdaService: 'SDA: Service',
+  sdaPresentation: 'SDA: Presentation',
+  sdaWriting: 'SDA: Writing',
+  leadershipExpectations: 'Leadership Expectations',
+  uniformWear: 'Uniform',
+  leadershipFeedback: 'Leadership Feedback',
+  cadetWingmanCourse: 'Cadet Wingman Course',
+  wrightBrothersLeadershipExam: 'Comprehensive Exam: Learn to Lead Ch. 1-3',
+  mitchellLeadershipExam: 'Comprehensive Exam: Learn to Lead Ch. 4-8',
+  mitchellAerospaceExam: 'Comprehensive Exam: Aerospace Dimensions 1-7',
+  encampment: 'Encampment (Required)',
+  earhartLeadershipExam: 'Comprehensive Exam: Learn to Lead Ch. 9-11',
+  eakerSpeech: 'Speech',
+  eakerEssay: 'Essay',
+  cls: 'Cadet Leadership School (RCLS/COS)',
+  spaatzLeadershipExam: 'Comprehensive Exam: Learn to Lead Ch. 1-16',
+  spaatzJOFExam: 'Comprehensive Exam: Journey of Flight',
+  spaatzEssay: 'Essay',
+  spaatzCFA: 'USAFA Candidate Fitness Assessment'
+};
+
+// Default requirement set if an achievement ID is missing from the map
+const CADET_DEFAULT_REQUIREMENTS = [
+  'physicalFitness', 'activeParticipation', 'cadetOath', 'characterDevelopment', 'timeInGrade'
+];
+
+// Cadet promotion requirements by achievement ID
+const CADET_ACHIEVEMENT_REQUIREMENTS = {
+  "1": [
+    'leadershipTest', 'drillTest', 'leadershipExpectations', 'cadetWingmanCourse',
+    'physicalFitness', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "2": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "3": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "4": [
+    'wrightBrothersLeadershipExam', 'leadershipFeedback', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "5": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "6": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "7": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "8": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "9": [
+    'leadershipTest', 'aerospaceTest', 'drillTest', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "10": [
+    'mitchellLeadershipExam', 'mitchellAerospaceExam', 'encampment', 'leadershipFeedback',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "11": [
+    'leadershipTest', 'aerospaceTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "12": [
+    'leadershipTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "13": [
+    'leadershipTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "14": [
+    'earhartLeadershipExam', 'leadershipFeedback', 'leadershipExpectations', 'uniformWear',
+    'physicalFitness', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "15": [
+    'leadershipTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "16": [
+    'leadershipTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "17": [
+    'leadershipTest', 'aerospaceTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "18": [
+    'leadershipTest', 'aerospaceTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "19": [
+    'leadershipTest', 'aerospaceTest', 'sdaService', 'sdaPresentation', 'sdaWriting',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'characterDevelopment',
+    'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "20": [
+    'leadershipTest', 'eakerSpeech', 'eakerEssay', 'cls', 'leadershipFeedback',
+    'leadershipExpectations', 'uniformWear', 'physicalFitness', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ],
+  "21": [
+    'spaatzLeadershipExam', 'spaatzJOFExam', 'spaatzEssay', 'spaatzCFA',
+    'leadershipExpectations', 'uniformWear', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
+  ]
+};
+
+// Task IDs for cadet leadership expectations by achievement ID
+const CADET_LEADERSHIP_EXPECTATIONS_TASKS = {
+  "1": "451",
+  "2": "458",
+  "3": "461",
+  "4": "503",
+  "5": "464",
+  "6": "467",
+  "7": "470",
+  "8": "473",
+  "9": "476",
+  "10": "506",
+  "11": "479",
+  "12": "482",
+  "13": "485",
+  "14": "509",
+  "15": "488",
+  "16": "491",
+  "17": "494",
+  "18": "497",
+  "19": "500",
+  "20": "512",
+  "21": "515"
+};
+
+// Task IDs for cadet uniform wear by achievement ID
+const CADET_UNIFORM_TASKS = {
+  "2": "516",
+  "3": "517",
+  "4": "531",
+  "5": "518",
+  "6": "519",
+  "7": "520",
+  "8": "521",
+  "9": "522",
+  "10": "532",
+  "11": "523",
+  "12": "524",
+  "13": "525",
+  "14": "533",
+  "15": "526",
+  "16": "527",
+  "17": "528",
+  "18": "529",
+  "19": "530",
+  "20": "534",
+  "21": "535"
+};
+
+// Task IDs for drill and ceremonies performance tests by achievement ID
+const CADET_DRILL_TASKS = {
+  "1": "328",
+  "2": "333",
+  "3": "344",
+  "4": "348",
+  "5": "352",
+  "6": "357",
+  "7": "362",
+  "8": "367",
+  "9": "372"
+};
+
+// Task IDs for character forum participation by achievement ID
+const CADET_CHARACTER_FORUM_TASKS = {
+  "2": "340",
+  "3": "345",
+  "4": "353",
+  "5": "358",
+  "6": "363",
+  "7": "368",
+  "8": "376",
+  "9": "400",
+  "10": "406",
+  "11": "412",
+  "12": "419",
+  "13": "424",
+  "14": "429",
+  "15": "434",
+  "16": "439"
+};
+
+// Task IDs for cadet oath by achievement ID
+const CADET_OATH_TASKS = {
+  "1": "450",
+  "2": "456",
+  "3": "459",
+  "4": "501",
+  "5": "465",
+  "6": "468",
+  "7": "471",
+  "8": "474",
+  "9": "477",
+  "10": "504",
+  "11": "483",
+  "12": "486",
+  "13": "489",
+  "14": "507",
+  "15": "495",
+  "16": "498",
+  "20": "510",
+  "21": "513"
+};
+
+// Task IDs for active participation by achievement ID
+const CADET_ACTIVE_PARTICIPATION_TASKS = {
+  "1": "449",
+  "2": "457",
+  "3": "460",
+  "4": "502",
+  "5": "466",
+  "6": "469",
+  "7": "472",
+  "8": "475",
+  "9": "478",
+  "10": "505",
+  "11": "484",
+  "12": "487",
+  "13": "490",
+  "14": "508",
+  "15": "496",
+  "16": "499",
+  "20": "511",
+  "21": "514"
+};
+
+// Task IDs for leadership feedback (once per phase)
+const CADET_PHASE_LEADERSHIP_FEEDBACK_TASKS = {
+  1: "452",
+  2: "453",
+  3: "454",
+  4: "455"
+};
+
+// Path IDs (PL_Paths) for cadet achievements
+const CADET_ACHIEVEMENT_PATH_IDS = {
+  "1": "31",
+  "2": "32",
+  "3": "33",
+  "5": "35",
+  "6": "36",
+  "7": "37",
+  "8": "38",
+  "9": "39",
+  "11": "41",
+  "12": "42",
+  "13": "43",
+  "15": "45",
+  "16": "46",
+  "17": "47",
+  "18": "48",
+  "19": "49"
+};
+
+// Mapping of Achievement ID to Cadet Interactive Leadership Module Task IDs
+// This allows the system to check BOTH old (LeadLabDateP/LeadLabScore) and new (PL_MemberTaskCredit) systems
+const ACHIEVEMENT_LEADERSHIP_MODULE_TASKS = {
+  '1': ['325', '326'],  // Achievement 1: Module 0 (Cadet Welcome Course) + Module 1
+  '2': ['331'],         // Achievement 2: Module 2
+  '3': ['342'],         // Achievement 3: Module 3
+  '5': ['350'],         // Achievement 5: Module 4
+  '6': ['355'],         // Achievement 6: Module 5
+  '7': ['360'],         // Achievement 7: Module 6
+  '8': ['365'],         // Achievement 8: Module 7
+  '9': ['370'],         // Achievement 9: Module 8
+  '11': ['382'],        // Achievement 11: Module 9
+  '12': ['402'],        // Achievement 12: Module 10
+  '13': ['408'],        // Achievement 13: Module 11
+  // Note: Milestones (4, 10, 14, 20, 21) use comprehensive exams, handled separately
+};
+
+// Aerospace Dimensions modules (task IDs match PL_MemberTaskCredit)
+const AEROSPACE_DIMENSIONS_MODULES = [
+  { moduleNum: 1, taskId: '334', achievementId: '2', title: 'Aerospace Dimensions 1 - Introduction to Flight' },
+  { moduleNum: 2, taskId: '335', achievementId: '3', title: 'Aerospace Dimensions 2 - Aircraft Systems & Airports' },
+  { moduleNum: 3, taskId: '336', achievementId: '5', title: 'Aerospace Dimensions 3 - Air Environment' },
+  { moduleNum: 4, taskId: '337', achievementId: '6', title: 'Aerospace Dimensions 4 - Rockets' },
+  { moduleNum: 5, taskId: '338', achievementId: '7', title: 'Aerospace Dimensions 5 - Space Environment' },
+  { moduleNum: 6, taskId: '339', achievementId: '8', title: 'Aerospace Dimensions 6 - Spacecraft' },
+  { moduleNum: 7, taskId: '375', achievementId: '9', title: 'Aerospace Dimensions 7 - Cyber Security' }
+];
+
+// Mapping of Achievement ID to Cadet Interactive Aerospace Module Task IDs (derived from module list)
+const ACHIEVEMENT_AEROSPACE_MODULE_TASKS = AEROSPACE_DIMENSIONS_MODULES.reduce((acc, module) => {
+  if (!acc[module.achievementId]) acc[module.achievementId] = [];
+  acc[module.achievementId].push(module.taskId);
+  return acc;
+}, {});
+
+// Education & Training level definitions (splits Level 2 into two parts)
+const LEVELS = [
+  { id: 'L1', label: '1', name: 'Level 1', pathMatch: 'Level 1', baseLevel: 1, legacyKey: 'LV1' },
+  { id: 'L2P1', label: '2.1', name: 'Level 2 Part 1', pathMatch: 'Level 2 Part 1', baseLevel: 2 },
+  { id: 'L2P2', label: '2.2', name: 'Level 2 Part 2', pathMatch: 'Level 2 Part 2', fallbackMatch: 'Level 2', baseLevel: 2, legacyKey: 'LV2' },
+  { id: 'L3', label: '3', name: 'Level 3', pathMatch: 'Level 3', baseLevel: 3, legacyKey: 'LV3' },
+  { id: 'L4', label: '4', name: 'Level 4', pathMatch: 'Level 4', baseLevel: 4, legacyKey: 'LV4' },
+  { id: 'L5', label: '5', name: 'Level 5', pathMatch: 'Level 5', baseLevel: 5, legacyKey: 'LV5' }
+];
+const LEVEL_ORDER = LEVELS.map(l => l.id);
+const LEVEL_DISPLAY_MAP = LEVELS.reduce((acc, lvl) => { acc[lvl.id] = lvl; return acc; }, {});
+const normalizeTaskName = (name = "") => (name || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const MODERATED_MODULES = {
+  L2P1: [
+    "Accountability and Responsibility of the Adult Leader",
+    "Cadet Protection from the Senior Perspective",
+    "Choosing Your Duty Assignment and Specialty Track",
+    "Bringing Your Service to Civil Air Patrol"
+  ],
+  L2P2: [
+    "Communication Fundamentals",
+    "Civil Air Patrol Communication Fundamentals",
+    "Mentoring",
+    "Basic Drill",
+    "Leadership Fundamentals",
+    "Leading Volunteers"
+  ],
+  L3: [
+    "Compliance Requirements",
+    "Command Responsibility in Finance",
+    "Safety and Risk Management for Squadron Level Leaders",
+    "Stewardship and Risk Management",
+    "Advanced Civil Air Patrol Communications",
+    "Communication Skills for Command",
+    "The Care and Feeding of a Member",
+    "Developing Our Members",
+    "Motivating and Mentoring",
+    "Effective Volunteer Teams",
+    "Leading People and Managing Stuff",
+    "Customs, Courtesies, and Ceremonies",
+    "Taking Command",
+    "Squadrons and the Missions",
+    "Meetings and Meeting Planning",
+    "Data-Driven Decision Making",
+    "Public Affairs and Branding",
+    "Reaching Outside the Squadron",
+    "Commander's Intent",
+    "Appointing and Utilizing Staff",
+    "The Role and Responsibilities of the Squadron/Flight Commander"
+  ],
+  L4: [
+    "Developing Personal Leadership Philosophy",
+    "The Role and Responsibilities of the Group Commander",
+    "Maintaining High Performing Teams",
+    "Engaging and Working with the Cadet Advisory Council",
+    "Management Principles",
+    "Mentoring Skills and Program Development",
+    "Shaping Cultures of Trust and Innovation",
+    "Using New Media to Communicate",
+    "Boards and Board Leadership",
+    "The Civil Air Patrol Safety Program for Group or Wing Level Leader",
+    "Planning and Leading A Major Activity",
+    "Prioritization and Time Management",
+    "Recruiting and Retention",
+    "Staff Processes Group Staffing",
+    "Effective Communication with External Partners",
+    "Leadership Challenges Today Membership Issues",
+    "Group Staffing",
+    "Role of the Group"
+  ],
+  L5: [
+    "Local to the Global: A Broadened View of Civil Air Patrol",
+    "Emerging Leadership Trends",
+    "Committees and Teams",
+    "Boards at the Region and National Level",
+    "Strategic Engagement with the Cadet Advisory Council",
+    "Ethical Leadership",
+    "Mentoring Programs",
+    "Developing Staff and Succession Planning",
+    "Preparing to Serve on Region or National Staff",
+    "Region Commander Roles and Responsibilities",
+    "Civil Air Patrol Governance",
+    "Selecting Members of the Board of Governors",
+    "The Chief Operating Officer and CAP-USAF Commander Perspectives",
+    "The National Commander's Perspective",
+    "Operations at a Strategic Level",
+    "Safety and Risk Management for Region and National Leaders",
+    "Marketing and Strategic Communications",
+    "Logistics and Property Management",
+    "Fleet Management",
+    "Logistics at the Region Level",
+    "Leading Change",
+    "Government Relations",
+    "Financial Management",
+    "Finances at the Region Level",
+    "The Civil Air Patrol Strategic Plan",
+    "Linking the Region to the Strategic Plan",
+    "Strategic Leadership",
+    "Challenging Situations and Region Command",
+    "Civil Air Patrol Culture and Its Unique Challenges",
+    "Capstone Project"
+  ]
+};
+const MODERATED_LOOKUP = Object.fromEntries(
+  Object.entries(MODERATED_MODULES).map(([lvl, list]) => [
+    lvl,
+    new Set(list.map(normalizeTaskName))
+  ])
+);
+
+// Level 2 track selection and track-specific modules
+const LEVEL2_TRACK_CHOICES = { "190": "CADET", "268": "MILITARY", "269": "NEW", "270": "PROFESSIONAL" };
+const LEVEL2_TASK_TRACKS = {
+  "16": ["ALL"], "17": ["ALL"], "18": ["ALL"], "19": ["MILITARY"], "20": ["ALL"], "21": ["NEW", "PROFESSIONAL"],
+  "22": ["ALL"], "23": ["NEW", "PROFESSIONAL"], "24": ["MILITARY"], "25": ["CADET"], "26": ["NEW", "MILITARY", "PROFESSIONAL"],
+  "27": ["CADET"], "28": ["NEW", "PROFESSIONAL"], "29": ["MILITARY"], "30": ["NEW"], "31": ["MILITARY"], "32": ["CADET"],
+  "33": ["PROFESSIONAL"], "34": ["NEW", "PROFESSIONAL"], "35": ["CADET"], "36": ["NEW", "CADET"], "37": ["ALL"], "38": ["ALL"],
+  "39": ["ALL"], "40": ["ALL"], "41": ["ALL"], "42": ["ALL"], "43": ["ALL"], "44": ["NEW", "PROFESSIONAL"], "45": ["MILITARY"],
+  "46": ["ALL"], "47": ["ALL"], "49": ["ALL"], "50": ["ALL"], "51": ["MILITARY", "PROFESSIONAL"], "52": ["CADET"], "53": ["ALL"],
+  "54": ["ALL"], "186": ["ALL"], "190": ["CADET"], "250": ["ALL"], "268": ["MILITARY"], "269": ["NEW"], "270": ["PROFESSIONAL"],
+  "280": ["ALL"], "281": ["ALL"], "290": ["PROFESSIONAL", "MILITARY"]
+};
+
+// --- DATA CONSTANTS ---
+// Configuration values for data caching, pagination, and API settings
+const DATA_CONSTANTS = {
+  CACHE_KEY: 'cap_data_cache_v5',
+  CACHE_MAX_AGE_MS: 6 * 60 * 60 * 1000, // 6 hours in milliseconds
+  ITEMS_PER_PAGE: 50,
+};
+
+// --- QUALITY UNIT AWARD (QUA) CONSTANTS ---
+// Great Lakes Region Quality Unit Award for Groups, Senior Squadrons, and Composite Squadrons
+// Award cycle: Fiscal Year (1 October - 30 September)
+// Requirement: 7 of 10 criteria must be met (3 required + 4 from mission-specific)
+
+// ES Operational Qualifications for QUA criterion #4
+// Includes: UDF, GTM3, MS, or above (field, air, mission base, advanced)
+const QUA_OPERATIONAL_ES_ACHIEVEMENT_IDS = new Set([
+  // Field Operations
+  '70',   // GTM3 - Ground Team Member 3
+  '71',   // UDF - Unit Deputy Field
+  '69',   // GTL - Ground Team Leader
+  '126',  // GTM2 - Ground Team Member 2
+  '127',  // GTM1 - Ground Team Member 1
+  '68',   // GBD - Ground Branch Director
+  '258',  // UAST - sUAS Technician
+  '257',  // UASMP - sUAS Mission Pilot
+  // Air Operations
+  '55',   // MS - Mission Scanner
+  '81',   // MO - Mission Observer
+  '193',  // AP - Airborne Photographer
+  '56',   // TMP - Transport Mission Pilot
+  '57',   // MP - SAR/DR Mission Pilot
+  '67',   // AOBD - Air Operations Branch Director
+  // Mission Base Operations
+  '80',   // MSA - Mission Staff Assistant
+  '76',   // MRO - Mission Radio Operator
+  '75',   // CUL - Communications Unit Leader
+  '74',   // FLM - Flight Line Marshaller
+  '73',   // FLS - Flight Line Supervisor
+  '72',   // PIO - Public Information Officer
+  '66',   // FASC - Finance/Admin Section Chief
+  '78',   // LO - Liaison Officer
+  '77',   // MSO - Mission Safety Officer
+  '65',   // LSC - Logistics Section Chief
+  // Advanced Leadership
+  '64',   // PSC - Planning Section Chief
+  '63',   // OSC - Operations Section Chief
+  '61',   // IC3 - Incident Commander Level 3
+  '125',  // IC2 - Incident Commander Level 2
+  '128'   // IC1 - Incident Commander Level 1
+]);
+
+// Senior ranks that qualify as Captain or higher for QUA criterion #5
+const QUA_CAPTAIN_OR_HIGHER_RANKS = new Set([
+  'CAPT', 'CPT', 'CAPTAIN',
+  'MAJ', 'MAJOR',
+  'LT COL', 'LTCOL', 'LTC', 'LIEUTENANT COLONEL',
+  'COL', 'COLONEL',
+  'BRIG GEN', 'BG', 'BRIGADIER GENERAL',
+  'MAJ GEN', 'MG', 'MAJOR GENERAL',
+  'LT GEN', 'LTG', 'LIEUTENANT GENERAL',
+  'GEN', 'GENERAL'
+]);
+
+// NCO ranks for SM->NCO promotion check (alternative to officer path)
+const QUA_NCO_RANKS = new Set([
+  'CMSGT', 'CHIEF MASTER SERGEANT', 'CHIEF MASTER SGT',
+  'SMSGT', 'SENIOR MASTER SERGEANT', 'SENIOR MASTER SGT',
+  'MSGT', 'MASTER SERGEANT', 'MASTER SGT',
+  'TSGT', 'TECHNICAL SERGEANT', 'TECHNICAL SGT',
+  'SSGT', 'STAFF SERGEANT', 'STAFF SGT',
+  'SGT', 'SERGEANT'
+]);
+
+// Unit types that are eligible for QUA (Groups, Senior Squadrons, Composite Squadrons)
+const QUA_ELIGIBLE_UNIT_TYPES = {
+  GROUP: { type: 'GROUP', threshold: 15, label: 'Group' },
+  SENIOR_SQUADRON: { type: 'SENIOR', threshold: 10, label: 'Senior Squadron' },
+  COMPOSITE_SQUADRON: { type: 'COMPOSITE', threshold: 10, label: 'Composite Squadron' }
+};
+
+// Cadet Protection Training course identifiers (check within 1 year)
+const QUA_CADET_PROTECTION_COURSES = [
+  'Cadet Protection Basic Course',
+  'Cadet Protection',
+  'CPPT',
+  'Cadet Protection Program Training'
+];
+
+// Yeager Award identifier for senior awards
+const QUA_YEAGER_AWARD_NAME = 'YEAGER';
+
+</script>

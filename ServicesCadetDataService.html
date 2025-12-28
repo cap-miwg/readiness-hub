@@ -1,0 +1,882 @@
+<script type="text/babel">
+function createCadetDataService() {
+  let _rawData = {
+    members: [], cadetRank: [], cadetAchv: [], cadetAchvAprs: [], cadetAchvFullReport: [],
+    cadetPhase: [], cadetAwards: [], cadetHFZ: [], cadetActivities: [], cadetDuty: [],
+    organization: [], cadetAchvEnum: [], memberTasks: [], memberPaths: [], oFlights: [],
+    // ES Data
+    esMbrAchievements: [], esMbrTasks: []
+  };
+  let _rawConfig = {
+    cadetAchvEnum: [],
+    // ES Config
+    esAchievements: [], esTasks: [], esAchvStepTasks: [], esAchvStepAchv: []
+  };
+  let _esService = null;
+
+  const parsePayload = (payload) => {
+    // Accept already-parsed data from dataFiles (not raw CSV strings)
+    _rawData = {
+      members: payload?.data?.members || [],
+      cadetRank: payload?.data?.cadetRank || [],
+      cadetAchv: payload?.data?.cadetAchv || [],
+      cadetAchvAprs: payload?.data?.cadetAchvAprs || [],
+      cadetAchvFullReport: payload?.data?.cadetAchvFullReport || [],
+      cadetPhase: payload?.data?.cadetPhase || [],
+      cadetAwards: payload?.data?.cadetAwards || [],
+      cadetHFZ: payload?.data?.cadetHFZ || [],
+      cadetActivities: payload?.data?.cadetActivities || [],
+      cadetDuty: payload?.data?.cadetDuty || [],
+      organization: payload?.data?.organization || [],
+      memberTasks: payload?.data?.memberTasks || [],
+      memberPaths: payload?.data?.memberPaths || [],
+      oFlights: payload?.data?.oFlights || [],
+      // ES Data
+      esMbrAchievements: payload?.data?.esMbrAchievements || [],
+      esMbrTasks: payload?.data?.esMbrTasks || []
+    };
+    _rawConfig = {
+      cadetAchvEnum: payload?.config?.cadetAchvEnum || [],
+      // ES Config
+      esAchievements: payload?.config?.esAchievements || [],
+      esTasks: payload?.config?.esTasks || [],
+      esAchvStepTasks: payload?.config?.esAchvStepTasks || [],
+      esAchvStepAchv: payload?.config?.esAchvStepAchv || []
+    };
+    // Initialize ES service with config and data
+    _esService = createESDataService(_rawConfig, _rawData);
+  };
+
+  const getCurrentRank = (capid) => {
+    const ranks = _rawData.cadetRank.filter(r => r.CAPID === capid);
+    if (!ranks.length) return null;
+    ranks.sort((a, b) => new Date(b.RankDate) - new Date(a.RankDate));
+    return ranks[0];
+  };
+
+  const getApprovedAchievements = (capid) => {
+    return _rawData.cadetAchvAprs
+      .filter(a => a.CAPID === capid && a.Status === 'APR')
+      .map(a => parseInt(a.CadetAchvID))
+      .sort((a, b) => a - b);
+  };
+
+  const getTimeInGrade = (rankDate) => {
+    if (!rankDate || rankDate === '01/01/1900') return { days: 0, weeks: 0, isEligible: false, eligibleDate: null };
+    const days = calculateDaysSince(rankDate);
+    const weeks = Math.floor(days / 7);
+    const isEligible = days >= CADET_TIME_IN_GRADE_DAYS;
+
+    // Calculate the date eligible for promotion (rank date + 56 days)
+    const rankDateObj = new Date(rankDate);
+    const eligibleDate = new Date(rankDateObj);
+    eligibleDate.setDate(eligibleDate.getDate() + CADET_TIME_IN_GRADE_DAYS);
+
+    return {
+      days,
+      weeks,
+      isEligible,
+      eligibleDate: eligibleDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    };
+  };
+
+  const checkHFZStatus = (capid, achievementID) => {
+    const achvID = parseInt(achievementID);
+    const requiresPassing = achvID >= 4; // Wright Brothers (achievement 4) and beyond require passing HFZ
+    const requiresWithin180Days = achvID <= 3; // First 3 achievements only need attempt within 180 days
+
+    // Normalize CAPID for comparison (ensure string and trim)
+    const normalizedCapid = String(capid || '').trim();
+
+    // Get all HFZ records for this cadet, sorted by date (newest first)
+    // Filter out invalid dates and ensure CAPID matches
+    const allHFZRecords = _rawData.cadetHFZ
+      .filter(h => {
+        const hfzCapid = String(h.CAPID || '').trim();
+        const hasValidDate = h.DateTaken && h.DateTaken !== '01/01/1900' && h.DateTaken !== '';
+        return hfzCapid === normalizedCapid && hasValidDate;
+      })
+      .map(h => ({
+        ...h,
+        isPassed: h.IsPassed === 'True' || h.IsPassed === '1' || h.IsPassed === true,
+        date: h.DateTaken
+      }))
+      .sort((a, b) => {
+        try {
+          return new Date(b.DateTaken) - new Date(a.DateTaken);
+        } catch (e) {
+          return 0;
+        }
+      });
+
+    if (allHFZRecords.length === 0) {
+      return { status: 'NOT_ATTEMPTED', message: 'No HFZ record found', date: null };
+    }
+
+    const today = new Date();
+    const daysAgo180 = new Date(today.getTime() - (180 * 24 * 60 * 60 * 1000));
+
+    // Find valid HFZ based on achievement requirements
+    let validHFZ = null;
+
+    if (requiresWithin180Days) {
+      // For achievements 1-3: Find any HFZ attempt within 180 days
+      validHFZ = allHFZRecords.find(h => {
+        try {
+          const hfzDate = new Date(h.DateTaken);
+          return !isNaN(hfzDate.getTime()) && hfzDate >= daysAgo180;
+        } catch (e) {
+          return false;
+        }
+      });
+    } else if (requiresPassing) {
+      // For achievement 4+: Find passing HFZ within 180 days
+      validHFZ = allHFZRecords.find(h => {
+        try {
+          const hfzDate = new Date(h.DateTaken);
+          return h.isPassed && !isNaN(hfzDate.getTime()) && hfzDate >= daysAgo180;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
+
+    // If we found a valid HFZ, return it
+    if (validHFZ) {
+      return {
+        status: validHFZ.isPassed ? 'PASSED' : 'ATTEMPTED',
+        message: validHFZ.isPassed
+          ? `HFZ Passed on ${validHFZ.DateTaken}`
+          : `HFZ Attempted on ${validHFZ.DateTaken}`,
+        date: validHFZ.DateTaken,
+        details: validHFZ
+      };
+    }
+
+    // No valid HFZ found - show most recent passing or most recent attempt
+    const mostRecentPassing = allHFZRecords.find(h => h.isPassed);
+    const mostRecentAttempt = allHFZRecords[0]; // Already sorted newest first
+
+    if (mostRecentPassing) {
+      try {
+        const daysSince = Math.floor((today - new Date(mostRecentPassing.DateTaken)) / (1000 * 60 * 60 * 24));
+        return {
+          status: 'EXPIRED',
+          message: `Last passing HFZ: ${mostRecentPassing.DateTaken} (${daysSince} days ago)`,
+          date: mostRecentPassing.DateTaken,
+          details: mostRecentPassing
+        };
+      } catch (e) {
+        return { status: 'EXPIRED', message: `Last passing HFZ: ${mostRecentPassing.DateTaken}`, date: mostRecentPassing.DateTaken };
+      }
+    } else if (mostRecentAttempt) {
+      try {
+        const daysSince = Math.floor((today - new Date(mostRecentAttempt.DateTaken)) / (1000 * 60 * 60 * 24));
+        return {
+          status: 'EXPIRED',
+          message: `Last HFZ attempt: ${mostRecentAttempt.DateTaken} (${daysSince} days ago)`,
+          date: mostRecentAttempt.DateTaken,
+          details: mostRecentAttempt
+        };
+      } catch (e) {
+        return { status: 'EXPIRED', message: `Last HFZ attempt: ${mostRecentAttempt.DateTaken}`, date: mostRecentAttempt.DateTaken };
+      }
+    }
+
+    return { status: 'NOT_ATTEMPTED', message: 'No HFZ record found', date: null };
+  };
+
+  const checkEncampment = (capid) => {
+    const encampments = _rawData.cadetActivities.filter(a =>
+      a.CAPID === capid && a.Type === 'ENCAMP' && a.Completed && a.Completed !== '01/01/1900'
+    );
+    return {
+      completed: encampments.length > 0,
+      dates: encampments.map(e => e.Completed),
+      locations: encampments.map(e => e.Location)
+    };
+  };
+
+  const checkCLS = (capid) => {
+    const clsTypes = ['RCLS', 'COS', 'COS STAFF'];
+    const activities = _rawData.cadetActivities.filter(a => {
+      const activityType = String(a.Type || '').toUpperCase();
+      const isCLS = clsTypes.includes(activityType) || activityType.startsWith('COS');
+      return a.CAPID === capid && isCLS && a.Completed && a.Completed !== '01/01/1900';
+    });
+    return {
+      completed: activities.length > 0,
+      activities: activities.map(a => ({ type: a.Type, date: a.Completed, location: a.Location }))
+    };
+  };
+
+  const getAchievementRequirements = (capid, achievementID, timeInGrade = null) => {
+    const achvData = _rawData.cadetAchv.find(a => a.CAPID === capid && a.CadetAchvID === achievementID);
+
+    // Helper function to check if a PL task is completed
+    const isTaskCompleted = (taskId) => {
+      return _rawData.memberTasks.some(mt =>
+        mt.CAPID === capid && mt.TaskID === taskId && mt.StatusID === "8"
+      );
+    };
+
+    const achvID = parseInt(achievementID);
+    const requirementKeys = CADET_ACHIEVEMENT_REQUIREMENTS[achievementID] || CADET_DEFAULT_REQUIREMENTS;
+    const getAchievementBaseName = (id) => CADET_ACHIEVEMENT_NAMES[id] || `Achievement ${id}`;
+    const getRequirementLabel = (key) => {
+      if (key === 'physicalFitness') {
+        return achvID <= 3
+          ? CADET_REQUIREMENT_LABELS.physicalFitness.early
+          : CADET_REQUIREMENT_LABELS.physicalFitness.standard;
+      }
+
+      const achievementScopedLabels = {
+        activeParticipation: 'Active Participation',
+        cadetOath: 'Cadet Oath',
+        leadershipExpectations: 'Leadership Expectations',
+        uniformWear: 'Uniform'
+      };
+
+      if (achievementScopedLabels[key]) {
+        return `${getAchievementBaseName(achievementID)} - ${achievementScopedLabels[key]}`;
+      }
+
+      if (key === 'leadershipFeedback') {
+        const phaseLabels = {
+          1: 'Phase I Leadership Feedback',
+          2: 'Phase II Leadership Feedback',
+          3: 'Phase III Leadership Feedback',
+          4: 'Phase IV Leadership Feedback'
+        };
+        const phaseId = determinePhaseFromAchievement(achievementID);
+        return phaseLabels[phaseId] || CADET_REQUIREMENT_LABELS.leadershipFeedback;
+      }
+
+      return CADET_REQUIREMENT_LABELS[key] || key;
+    };
+
+    const requirements = requirementKeys.reduce((acc, key) => {
+      acc[key] = { label: getRequirementLabel(key), completed: false, value: null };
+      return acc;
+    }, {});
+
+    const getTaskCompletion = (taskMap, id) => {
+      const taskId = taskMap[id];
+      return taskId ? isTaskCompleted(taskId) : false;
+    };
+    const taskActiveParticipation = requirements.activeParticipation
+      ? getTaskCompletion(CADET_ACTIVE_PARTICIPATION_TASKS, achievementID)
+      : false;
+    const taskCadetOath = requirements.cadetOath
+      ? getTaskCompletion(CADET_OATH_TASKS, achievementID)
+      : false;
+    const taskDrillTest = requirements.drillTest
+      ? getTaskCompletion(CADET_DRILL_TASKS, achievementID)
+      : false;
+    const taskCharacterForum = requirements.characterDevelopment
+      ? getTaskCompletion(CADET_CHARACTER_FORUM_TASKS, achievementID)
+      : false;
+
+    // Check Time in Grade (if provided)
+    if (timeInGrade && requirements.timeInGrade) {
+      // Special cases: no time in grade requirement
+      // 1. New cadets (achievement 0 → 1): no TIG requirement until C/Amn
+      // 2. C/Lt Col to C/Col (achievement 20 → 21): immediately eligible
+      const noTigRequired = (achievementID === '1') || (achievementID === '21');
+
+      if (noTigRequired) {
+        requirements.timeInGrade.completed = true;
+        requirements.timeInGrade.value = 'No time in grade requirement';
+      } else {
+        requirements.timeInGrade.completed = timeInGrade.isEligible;
+        requirements.timeInGrade.value = timeInGrade.isEligible
+          ? `${timeInGrade.days} days (${timeInGrade.weeks} weeks) ✓`
+          : `${timeInGrade.days} days (need ${CADET_TIME_IN_GRADE_DAYS - timeInGrade.days} more days)`;
+      }
+    }
+
+    // Check Physical Fitness - ALWAYS check HFZ regardless of achievement record
+    // This ensures HFZ shows as complete even if the cadet hasn't started the next achievement
+    if (requirements.physicalFitness) {
+      const hfzStatus = checkHFZStatus(capid, achievementID);
+      requirements.physicalFitness.completed = hfzStatus.status === 'PASSED' || hfzStatus.status === 'ATTEMPTED';
+      requirements.physicalFitness.value = hfzStatus.message;
+    }
+
+    if (requirements.leadershipExpectations) {
+      const taskId = CADET_LEADERSHIP_EXPECTATIONS_TASKS[achievementID];
+      const completed = taskId ? isTaskCompleted(taskId) : false;
+      requirements.leadershipExpectations.completed = completed;
+      requirements.leadershipExpectations.value = completed ? 'Completed' : 'Not completed';
+    }
+
+    if (requirements.uniformWear) {
+      const taskId = CADET_UNIFORM_TASKS[achievementID];
+      const completed = taskId ? isTaskCompleted(taskId) : false;
+      requirements.uniformWear.completed = completed;
+      requirements.uniformWear.value = completed ? 'Completed' : 'Not completed';
+    }
+
+    if (requirements.leadershipFeedback) {
+      const phaseId = determinePhaseFromAchievement(achievementID);
+      const taskId = CADET_PHASE_LEADERSHIP_FEEDBACK_TASKS[phaseId];
+      const completed = taskId ? isTaskCompleted(taskId) : false;
+      requirements.leadershipFeedback.completed = completed;
+      requirements.leadershipFeedback.value = completed ? 'Completed' : 'Not completed';
+    }
+
+    // Only check achievement data if record exists
+    if (achvData) {
+      // Check Leadership Test (only if not using comprehensive exam)
+      // NEW: Check BOTH old system (LeadLabDateP/LeadLabScore) and new system (Cadet Interactive Modules in PL_MemberTaskCredit)
+      if (requirements.leadershipTest) {
+        let leadershipCompleted = false;
+        let leadershipValue = 'Not started';
+
+        // PRIORITY 1: Check NEW system (Cadet Interactive Leadership Modules via PL_MemberTaskCredit)
+        const leadershipModuleTasks = ACHIEVEMENT_LEADERSHIP_MODULE_TASKS[achievementID];
+        if (leadershipModuleTasks && leadershipModuleTasks.length > 0) {
+          // Check if ALL required leadership module tasks are completed
+          const allModulesCompleted = leadershipModuleTasks.every(taskId => isTaskCompleted(taskId));
+          if (allModulesCompleted) {
+            leadershipCompleted = true;
+            if (leadershipModuleTasks.length === 1) {
+              leadershipValue = 'Completed via Cadet Interactive Module';
+            } else {
+              leadershipValue = `Completed via ${leadershipModuleTasks.length} Cadet Interactive Modules`;
+            }
+          } else {
+            // Some modules completed, show which ones
+            const completedCount = leadershipModuleTasks.filter(taskId => isTaskCompleted(taskId)).length;
+            if (completedCount > 0) {
+              leadershipValue = `${completedCount}/${leadershipModuleTasks.length} modules completed`;
+            }
+          }
+        }
+
+        // PRIORITY 2: If not found in new system, check OLD system (Learn to Lead via CadetAchv table)
+        if (!leadershipCompleted && achvData.LeadLabDateP && achvData.LeadLabDateP !== '01/01/1900') {
+          const score = parseInt(achvData.LeadLabScore) || 0;
+          leadershipCompleted = score >= CADET_MIN_TEST_SCORE;
+          leadershipValue = `${score}% on ${achvData.LeadLabDateP} (Learn to Lead)`;
+        }
+
+        requirements.leadershipTest.completed = leadershipCompleted;
+        requirements.leadershipTest.value = leadershipValue;
+      }
+
+      // Check Aerospace Test (only if not using comprehensive exam)
+      // NEW: Check BOTH old system (AEDateP/AEScore) and new system (Cadet Interactive Aerospace Modules in PL_MemberTaskCredit)
+      if (requirements.aerospaceTest) {
+        let aerospaceCompleted = false;
+        let aerospaceValue = 'Not started';
+
+        // PRIORITY 1: Check NEW system (Cadet Interactive Aerospace Modules via PL_MemberTaskCredit)
+        const aerospaceModuleTasks = ACHIEVEMENT_AEROSPACE_MODULE_TASKS[achievementID];
+        if (aerospaceModuleTasks && aerospaceModuleTasks.length > 0) {
+          // Check if ALL required aerospace module tasks are completed
+          const allModulesCompleted = aerospaceModuleTasks.every(taskId => isTaskCompleted(taskId));
+          if (allModulesCompleted) {
+            aerospaceCompleted = true;
+            aerospaceValue = 'Completed via Cadet Interactive Module';
+          } else {
+            // Some modules completed, show which ones
+            const completedCount = aerospaceModuleTasks.filter(taskId => isTaskCompleted(taskId)).length;
+            if (completedCount > 0) {
+              aerospaceValue = `${completedCount}/${aerospaceModuleTasks.length} modules completed`;
+            }
+          }
+        }
+
+        // PRIORITY 2: If not found in new system, check OLD system (Written Aerospace Test via CadetAchv table)
+        if (!aerospaceCompleted && achvData && achvData.AEDateP && achvData.AEDateP !== '01/01/1900') {
+          const score = parseInt(achvData.AEScore) || 0;
+          aerospaceCompleted = score >= CADET_MIN_TEST_SCORE;
+          aerospaceValue = `${score}% on ${achvData.AEDateP} (Written Test)`;
+        }
+
+        requirements.aerospaceTest.completed = aerospaceCompleted;
+        requirements.aerospaceTest.value = aerospaceValue;
+      }
+
+      // Check Drill Test (only for pre-Billy Mitchell non-milestone achievements)
+      if (requirements.drillTest && achvData.DrillDate && achvData.DrillDate !== '01/01/1900') {
+        const score = parseInt(achvData.DrillScore) || 0;
+        const drillCompleted = score > 0 || taskDrillTest;
+        requirements.drillTest.completed = drillCompleted;
+        requirements.drillTest.value = `Score: ${score} on ${achvData.DrillDate}`;
+      } else if (requirements.drillTest) {
+        requirements.drillTest.completed = taskDrillTest;
+        requirements.drillTest.value = taskDrillTest ? 'Completed' : 'Not started';
+      }
+
+      // Check Staff Duty Analysis (post-Billy Mitchell requirement) - three parts
+      if (requirements.sdaService) {
+        if (achvData.StaffServiceDate && achvData.StaffServiceDate !== '01/01/1900') {
+          requirements.sdaService.completed = true;
+          requirements.sdaService.value = `Completed on ${achvData.StaffServiceDate}`;
+        }
+      }
+      if (requirements.sdaPresentation) {
+        if (achvData.OralPresentationDate && achvData.OralPresentationDate !== '01/01/1900') {
+          requirements.sdaPresentation.completed = true;
+          requirements.sdaPresentation.value = `Completed on ${achvData.OralPresentationDate}`;
+        }
+      }
+      if (requirements.sdaWriting) {
+        if (achvData.TechnicalWritingAssignmentDate && achvData.TechnicalWritingAssignmentDate !== '01/01/1900') {
+          requirements.sdaWriting.completed = true;
+          requirements.sdaWriting.value = `Completed on ${achvData.TechnicalWritingAssignmentDate}`;
+        }
+      }
+
+      // Check Active Participation
+      if (requirements.activeParticipation) {
+        const achvActive = achvData.ActivePart === 'True' || achvData.ActivePart === '1';
+        requirements.activeParticipation.completed = achvActive || taskActiveParticipation;
+        requirements.activeParticipation.value = requirements.activeParticipation.completed ? 'Yes' : 'No';
+      }
+
+      // Check Cadet Oath
+      if (requirements.cadetOath) {
+        const achvOath = achvData.CadetOath === 'True' || achvData.CadetOath === '1';
+        requirements.cadetOath.completed = achvOath || taskCadetOath;
+        requirements.cadetOath.value = requirements.cadetOath.completed ? 'Recited' : 'Not Recited';
+      }
+
+      // Check Character Development Forum (if required for this achievement)
+      if (requirements.characterDevelopment) {
+        if (achvData.MoralLDateP && achvData.MoralLDateP !== '01/01/1900') {
+          requirements.characterDevelopment.completed = true;
+          requirements.characterDevelopment.value = `Completed on ${achvData.MoralLDateP}`;
+        } else if (taskCharacterForum) {
+          requirements.characterDevelopment.completed = true;
+          requirements.characterDevelopment.value = 'Completed';
+        } else {
+          requirements.characterDevelopment.completed = false;
+          requirements.characterDevelopment.value = 'Not completed';
+        }
+      }
+    } else {
+      // No achievement record yet - still check NEW system (Cadet Interactive Modules) in case cadet completed modules
+      // before starting the achievement in the old system
+      if (requirements.leadershipTest) {
+        const leadershipModuleTasks = ACHIEVEMENT_LEADERSHIP_MODULE_TASKS[achievementID];
+        if (leadershipModuleTasks && leadershipModuleTasks.length > 0) {
+          const allModulesCompleted = leadershipModuleTasks.every(taskId => isTaskCompleted(taskId));
+          if (allModulesCompleted) {
+            requirements.leadershipTest.completed = true;
+            if (leadershipModuleTasks.length === 1) {
+              requirements.leadershipTest.value = 'Completed via Cadet Interactive Module';
+            } else {
+              requirements.leadershipTest.value = `Completed via ${leadershipModuleTasks.length} Cadet Interactive Modules`;
+            }
+          } else {
+            const completedCount = leadershipModuleTasks.filter(taskId => isTaskCompleted(taskId)).length;
+            if (completedCount > 0) {
+              requirements.leadershipTest.value = `${completedCount}/${leadershipModuleTasks.length} modules completed`;
+            } else {
+              requirements.leadershipTest.value = 'Not started';
+            }
+          }
+        } else {
+          requirements.leadershipTest.value = 'Not started';
+        }
+      }
+
+      // Check NEW system for Aerospace modules (even if no achievement record exists)
+      if (requirements.aerospaceTest) {
+        const aerospaceModuleTasks = ACHIEVEMENT_AEROSPACE_MODULE_TASKS[achievementID];
+        if (aerospaceModuleTasks && aerospaceModuleTasks.length > 0) {
+          const allModulesCompleted = aerospaceModuleTasks.every(taskId => isTaskCompleted(taskId));
+          if (allModulesCompleted) {
+            requirements.aerospaceTest.completed = true;
+            requirements.aerospaceTest.value = 'Completed via Cadet Interactive Module';
+          } else {
+            const completedCount = aerospaceModuleTasks.filter(taskId => isTaskCompleted(taskId)).length;
+            if (completedCount > 0) {
+              requirements.aerospaceTest.value = `${completedCount}/${aerospaceModuleTasks.length} modules completed`;
+            } else {
+              requirements.aerospaceTest.value = 'Not started';
+            }
+          }
+        } else {
+          requirements.aerospaceTest.value = 'Not started';
+        }
+      }
+
+      // Show default "Not started" values for other requirements
+      if (requirements.drillTest) {
+        requirements.drillTest.completed = taskDrillTest;
+        requirements.drillTest.value = taskDrillTest ? 'Completed' : 'Not started';
+      }
+      if (requirements.sdaService) requirements.sdaService.value = 'Not started';
+      if (requirements.sdaPresentation) requirements.sdaPresentation.value = 'Not started';
+      if (requirements.sdaWriting) requirements.sdaWriting.value = 'Not started';
+      // Note: physicalFitness value is already set above from HFZ check
+      if (requirements.activeParticipation) {
+        requirements.activeParticipation.completed = taskActiveParticipation;
+        requirements.activeParticipation.value = taskActiveParticipation ? 'Yes' : 'No';
+      }
+      if (requirements.cadetOath) {
+        requirements.cadetOath.completed = taskCadetOath;
+        requirements.cadetOath.value = taskCadetOath ? 'Recited' : 'Not recited';
+      }
+      if (requirements.characterDevelopment) {
+        requirements.characterDevelopment.completed = taskCharacterForum;
+        requirements.characterDevelopment.value = taskCharacterForum ? 'Completed' : 'Not completed';
+      }
+    }
+
+    // Add milestone-specific requirements from PL_MemberTaskCredit
+    if (requirements.cadetWingmanCourse) { // Achievement 1 (C/Amn)
+      const cadetWingman = isTaskCompleted('329');
+      requirements.cadetWingmanCourse.completed = cadetWingman;
+      requirements.cadetWingmanCourse.value = cadetWingman ? 'Completed' : 'Not completed';
+    }
+    if (requirements.wrightBrothersLeadershipExam) { // Wright Brothers
+      const learnToLeadExam = isTaskCompleted('347');
+      requirements.wrightBrothersLeadershipExam.completed = learnToLeadExam;
+      requirements.wrightBrothersLeadershipExam.value = learnToLeadExam ? 'Passed' : 'Not passed';
+    }
+    if (requirements.mitchellLeadershipExam || requirements.mitchellAerospaceExam || requirements.encampment) { // Billy Mitchell
+      const learnToLeadExam = isTaskCompleted('378');
+      const aerospaceExam = isTaskCompleted('379');
+      const encampmentData = checkEncampment(capid);
+      const encampment = isTaskCompleted('381') || encampmentData.completed;
+
+      if (requirements.mitchellLeadershipExam) {
+        requirements.mitchellLeadershipExam.completed = learnToLeadExam;
+        requirements.mitchellLeadershipExam.value = learnToLeadExam ? 'Passed' : 'Not passed';
+      }
+      if (requirements.mitchellAerospaceExam) {
+        requirements.mitchellAerospaceExam.completed = aerospaceExam;
+        requirements.mitchellAerospaceExam.value = aerospaceExam ? 'Passed' : 'Not passed';
+      }
+
+      // Build encampment value with date and location if available
+      let encampmentValue = 'Not completed';
+      if (encampment && encampmentData.completed) {
+        const date = encampmentData.dates[0];
+        const location = encampmentData.locations[0];
+        encampmentValue = location ? `Completed on ${date} at ${location}` : `Completed on ${date}`;
+      } else if (encampment) {
+        encampmentValue = 'Completed';
+      }
+
+      if (requirements.encampment) {
+        requirements.encampment.completed = encampment;
+        requirements.encampment.value = encampmentValue;
+      }
+    }
+    if (requirements.earhartLeadershipExam) { // Amelia Earhart
+      const learnToLeadExam = isTaskCompleted('414');
+      requirements.earhartLeadershipExam.completed = learnToLeadExam;
+      requirements.earhartLeadershipExam.value = learnToLeadExam ? 'Passed' : 'Not passed';
+    }
+    if (requirements.eakerSpeech || requirements.eakerEssay || requirements.cls) { // Eaker
+      const speech = isTaskCompleted('441');
+      const essay = isTaskCompleted('442');
+      const cos = isTaskCompleted('444') || checkCLS(capid).completed;
+
+      if (requirements.eakerSpeech) {
+        requirements.eakerSpeech.completed = speech;
+        requirements.eakerSpeech.value = speech ? 'Passed' : 'Not passed';
+      }
+      if (requirements.eakerEssay) {
+        requirements.eakerEssay.completed = essay;
+        requirements.eakerEssay.value = essay ? 'Passed' : 'Not passed';
+      }
+      if (requirements.cls) {
+        requirements.cls.completed = cos;
+        requirements.cls.value = cos ? 'Completed' : 'Not completed';
+      }
+    }
+    if (requirements.spaatzLeadershipExam || requirements.spaatzJOFExam || requirements.spaatzEssay || requirements.spaatzCFA) { // Spaatz
+      const learnToLeadExam = isTaskCompleted('445');
+      const jofExam = isTaskCompleted('446');
+      const essay = isTaskCompleted('447');
+      const cfa = isTaskCompleted('448');
+
+      if (requirements.spaatzLeadershipExam) {
+        requirements.spaatzLeadershipExam.completed = learnToLeadExam;
+        requirements.spaatzLeadershipExam.value = learnToLeadExam ? 'Passed' : 'Not passed';
+      }
+      if (requirements.spaatzJOFExam) {
+        requirements.spaatzJOFExam.completed = jofExam;
+        requirements.spaatzJOFExam.value = jofExam ? 'Passed' : 'Not passed';
+      }
+      if (requirements.spaatzEssay) {
+        requirements.spaatzEssay.completed = essay;
+        requirements.spaatzEssay.value = essay ? 'Passed' : 'Not passed';
+      }
+      if (requirements.spaatzCFA) {
+        requirements.spaatzCFA.completed = cfa;
+        requirements.spaatzCFA.value = cfa ? 'Passed' : 'Not passed';
+      }
+    }
+
+    const completed = Object.values(requirements).filter(r => r.completed);
+    const pending = Object.values(requirements).filter(r => !r.completed);
+
+    return { requirements, completed, pending, completionPercent: Math.round((completed.length / Object.keys(requirements).length) * 100) };
+  };
+
+  // Check if a cadet has earned Honor Credit for a specific achievement
+  // Honor Credit is earned when ExtraCreditEarned.CreditEarned is true in PL_MemberPathCredit
+  const checkHonorCredit = (capid, achievementID) => {
+    if (CADET_MILESTONE_ACHIEVEMENTS.includes(parseInt(achievementID))) {
+      return { earned: false, reason: 'N/A - Milestone Award' };
+    }
+
+    const pathId = CADET_ACHIEVEMENT_PATH_IDS[achievementID];
+    if (!pathId) {
+      return { earned: false, reason: 'N/A - No Path Mapping' };
+    }
+
+    const parseExtraCredit = (raw) => {
+      const text = String(raw || '');
+      const earned = /CreditEarned\s*:\s*true/i.test(text);
+      const dateMatch = text.match(/EarnedDate\s*:\s*([0-9-]+)/i);
+      return { earned, earnedDate: dateMatch ? dateMatch[1] : null };
+    };
+
+    const normalizedCapid = String(capid || '').trim();
+    const normalizedPathId = String(pathId || '').trim();
+    const pathCredits = _rawData.memberPaths
+      .filter(mp => String(mp.CAPID || '').trim() === normalizedCapid &&
+        String(mp.PathID || '').trim() === normalizedPathId &&
+        String(mp.StatusID || '').trim() === "8");
+
+    const earnedCredits = pathCredits
+      .map(mp => parseExtraCredit(mp.ExtraCreditEarned))
+      .filter(ec => ec.earned);
+
+    if (earnedCredits.length > 0) {
+      const latest = earnedCredits.find(ec => ec.earnedDate) || earnedCredits[0];
+      return { earned: true, earnedDate: latest.earnedDate || null };
+    }
+    if (pathCredits.length > 0) {
+      return { earned: false, reason: 'Extra credit not earned' };
+    }
+
+    const achvData = _rawData.cadetAchv.find(a => a.CAPID === capid && a.CadetAchvID === achievementID);
+
+    // Helper function to check if a PL task is completed
+    const isTaskCompleted = (taskId) => {
+      return _rawData.memberTasks.some(mt =>
+        mt.CAPID === capid && mt.TaskID === taskId && mt.StatusID === "8"
+      );
+    };
+
+    // Check if BOTH interactive modules completed
+    const leadershipModuleTasks = ACHIEVEMENT_LEADERSHIP_MODULE_TASKS[achievementID];
+    const aerospaceModuleTasks = ACHIEVEMENT_AEROSPACE_MODULE_TASKS[achievementID];
+
+    const leadershipModuleComplete = leadershipModuleTasks &&
+      leadershipModuleTasks.every(taskId => isTaskCompleted(taskId));
+    const aerospaceModuleComplete = aerospaceModuleTasks &&
+      aerospaceModuleTasks.every(taskId => isTaskCompleted(taskId));
+
+    // Check if BOTH written tests passed
+    const leadershipTestPassed = achvData && achvData.LeadLabDateP &&
+      achvData.LeadLabDateP !== '01/01/1900' &&
+      parseInt(achvData.LeadLabScore) >= CADET_MIN_TEST_SCORE;
+    const aerospaceTestPassed = achvData && achvData.AEDateP &&
+      achvData.AEDateP !== '01/01/1900' &&
+      parseInt(achvData.AEScore) >= CADET_MIN_TEST_SCORE;
+
+    // Honor Credit earned if ALL FOUR conditions met
+    const earned = leadershipModuleComplete && aerospaceModuleComplete &&
+                   leadershipTestPassed && aerospaceTestPassed;
+
+    return {
+      earned,
+      details: {
+        leadershipModule: leadershipModuleComplete,
+        aerospaceModule: aerospaceModuleComplete,
+        leadershipTest: leadershipTestPassed,
+        aerospaceTest: aerospaceTestPassed
+      }
+    };
+  };
+
+  const calculatePromotionReadiness = (capid, currentAchievement, timeInGrade) => {
+    const nextAchievement = currentAchievement + 1;
+    if (nextAchievement > 21) return { status: 'SPAATZ_COMPLETE', message: 'Spaatz Award achieved!' };
+
+    const reqData = getAchievementRequirements(capid, nextAchievement.toString(), timeInGrade);
+    const tigReady = timeInGrade.isEligible;
+
+    // Check only cadet-controllable requirements (exclude activeParticipation and cadetOath)
+    const cadetControllableReqs = Object.entries(reqData.requirements).filter(([key, _]) =>
+      key !== 'activeParticipation' && key !== 'cadetOath'
+    );
+    const cadetControllableCompleted = cadetControllableReqs.filter(([_, req]) => req.completed).length;
+    const reqsReady = cadetControllableCompleted === cadetControllableReqs.length;
+
+    // Check for READY: everything cadet can control is complete
+    if (tigReady && reqsReady) return { status: 'READY', message: 'Ready for promotion!' };
+
+    // Check for TIME_PENDING: everything done but not eligible due to time in grade
+    if (reqsReady && !tigReady) return { status: 'TIME_PENDING', message: `${CADET_TIME_IN_GRADE_DAYS - timeInGrade.days} days until eligible` };
+
+    // Check for NEARLY_READY: 2 of 3 hard requirements (leadership, fitness, aerospace) complete
+    // Hard requirements have lower priority value since manual checkboxes are lower priority
+    const reqs = reqData.requirements;
+    const hardReqsCompleted = [
+      // Leadership
+      reqs.leadershipTest?.completed || reqs.wrightBrothersLeadershipExam?.completed ||
+      reqs.mitchellLeadershipExam?.completed || reqs.earhartLeadershipExam?.completed ||
+      reqs.spaatzLeadershipExam?.completed,
+      // Fitness
+      reqs.physicalFitness?.completed || reqs.spaatzCFA?.completed,
+      // Aerospace
+      reqs.aerospaceTest?.completed || reqs.mitchellAerospaceExam?.completed || reqs.spaatzJOFExam?.completed
+    ].filter(Boolean).length;
+
+    if (hardReqsCompleted >= 2) return { status: 'NEARLY_READY', message: 'Nearly ready!' };
+    // Only consider "In Progress" if cadet has completed at least one controllable requirement
+    // (time in grade alone doesn't count as having started)
+    if (cadetControllableCompleted > 0) return { status: 'IN_PROGRESS', message: 'In progress' };
+    return { status: 'NOT_STARTED', message: 'Not started' };
+  };
+
+  const getMilestoneAwards = (capid) => {
+    return _rawData.cadetAwards
+      .filter(a => a.CAPID === capid && a.Completed && a.Completed !== '01/01/1900')
+      .map(a => ({ award: a.Award, awardNo: a.AwardNo, completed: a.Completed }));
+  };
+
+  const getDescendantOrgIds = (rootId) => {
+    const root = String(rootId).trim();
+    let results = [root];
+    const queue = [root];
+    const visited = new Set([root]);
+
+    // Build children map
+    const childrenMap = new Map();
+    _rawData.organization.forEach(o => {
+      const parentId = String(o.NextLevel).trim();
+      const childId = String(o.ORGID).trim();
+      if (parentId && parentId !== childId) {
+        if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
+        childrenMap.get(parentId).push(childId);
+      }
+    });
+
+    // BFS to get all descendants
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      const kids = childrenMap.get(curr) || [];
+      kids.forEach(k => {
+        if (!visited.has(k)) {
+          visited.add(k);
+          results.push(k);
+          queue.push(k);
+        }
+      });
+    }
+    return results;
+  };
+
+  const getProcessedCadets = (unitFilter, includeDescendants = false) => {
+    // Get valid org IDs
+    const validOrgIds = includeDescendants ? getDescendantOrgIds(unitFilter) : [String(unitFilter).trim()];
+
+    // Filter for cadets only with ACTIVE status
+    const cadets = _rawData.members.filter(m => {
+      const type = String(m.Type || m.TYPE || "").toUpperCase();
+      const status = String(m.MbrStatus || "").toUpperCase();
+      const isActive = status === "ACTIVE";
+      return type === "CADET" && isActive && validOrgIds.includes(String(m.ORGID).trim());
+    });
+
+    return cadets.map(cadet => {
+      const currentRank = getCurrentRank(cadet.CAPID);
+      const approvedAchievements = getApprovedAchievements(cadet.CAPID);
+      const currentAchievement = approvedAchievements.length > 0 ? Math.max(...approvedAchievements) : 0;
+      const nextAchievement = currentAchievement + 1;
+      const phase = determinePhaseFromAchievement(currentAchievement);
+      const timeInGrade = currentRank ? getTimeInGrade(currentRank.RankDate) : { days: 0, weeks: 0, isEligible: false };
+      const promotionStatus = calculatePromotionReadiness(cadet.CAPID, currentAchievement, timeInGrade);
+      const nextRequirements = nextAchievement <= 21 ? getAchievementRequirements(cadet.CAPID, nextAchievement.toString(), timeInGrade) : null;
+      const milestoneAwards = getMilestoneAwards(cadet.CAPID);
+
+      // Check honor credit for all approved achievements
+      const honorCreditAchievements = approvedAchievements.map(achvId => {
+        const honorCredit = checkHonorCredit(cadet.CAPID, achvId.toString());
+        return { achievementId: achvId, honorCredit };
+      }).filter(a => a.honorCredit.earned);
+
+      // Check honor credit opportunity for next achievement
+      const nextHonorCreditStatus = nextAchievement <= 21 ? checkHonorCredit(cadet.CAPID, nextAchievement.toString()) : null;
+
+      // Build unit name from organization data
+      let memberUnitName = "Unknown";
+      if (_rawData.organization) {
+        const memOrg = _rawData.organization.find(o => o.ORGID === cadet.ORGID);
+        if (memOrg) {
+          const r = memOrg.Region || "";
+          const w = memOrg.Wing || "";
+          const u = memOrg.Unit ? memOrg.Unit.replace(/^0+/, '').padStart(3,'0') : "000";
+          memberUnitName = `${r}-${w}-${u}`;
+        }
+      }
+
+      // Get cadet duty positions
+      const cadetDuties = _rawData.cadetDuty
+        ? _rawData.cadetDuty
+            .filter(d => d.CAPID === cadet.CAPID && d.Duty && !d.Duty.toUpperCase().includes('#REF'))
+            .map(d => {
+              const org = _rawData.organization.find(o => o.ORGID === d.ORGID);
+              const orgString = org ? `${org.Region}-${org.Wing}-${org.Unit ? org.Unit.replace(/^0+/, '').padStart(3,'0') : '000'}` : "Unknown";
+              return { name: d.Duty, date: d.DateMod, orgString };
+            })
+        : [];
+
+      const esQualifications = _esService.buildESQualifications(cadet, { forDashboard: true, forCadet: true });
+      const esQualificationsAll = _esService.buildESQualifications(cadet, { forDashboard: false, forCadet: true });
+
+      return {
+        ...cadet,
+        memberUnitName,
+        cadetDuties,
+        currentRank: currentRank ? currentRank.Rank : 'N/A',
+        rankDate: currentRank ? currentRank.RankDate : null,
+        currentAchievement,
+        nextAchievement: nextAchievement <= 21 ? nextAchievement : null,
+        phase,
+        timeInGrade,
+        promotionStatus,
+        approvedAchievements,
+        nextRequirements,
+        milestoneAwards,
+        honorCreditAchievements,
+        nextHonorCreditStatus,
+        esQualifications,
+        esQualificationsAll
+      };
+    });
+  };
+
+  return {
+    initialize: parsePayload,
+    rawData: () => _rawData,
+    getProcessedCadets,
+    getCurrentRank,
+    getApprovedAchievements,
+    getAchievementRequirements,
+    checkHFZStatus,
+    checkEncampment,
+    checkCLS,
+    getMilestoneAwards,
+    checkHonorCredit,
+    // ES Helper Methods
+    getESAchievementTasks: (achvID, capid) => _esService.getESAchievementTasks(achvID, capid),
+    buildESPrerequisiteTree: (achvID, ancestry) => _esService.buildESPrerequisiteTree(achvID, ancestry),
+    checkESQualificationEligibility: (achvID, member) => _esService.checkESQualificationEligibility(achvID, member),
+    getAllESAchievements: () => _esService.getAllESAchievements()
+  };
+}
+</script>

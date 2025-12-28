@@ -1,0 +1,51 @@
+<script type="text/babel">
+const FilterButton = ({ label, active, onClick, children }) => (
+  <div className="relative inline-block text-left">
+      <button 
+          onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+          }}
+          className={`flex items-center px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${active ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+      >
+          {label} <Icon name="ChevronDown" className={`w-3 h-3 ml-1.5 transition-transform ${active ? 'rotate-180' : ''}`} />
+      </button>
+      {active && (
+          <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 shadow-xl rounded-lg z-50 p-2 grid gap-1 max-h-60 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              {children}
+          </div>
+      )}
+  </div>
+);
+
+// New Filter Header Component for columns
+const FilterHeader = ({ label, active, onClick, children }) => (
+  <div className="relative inline-block text-left ml-2">
+      <button 
+          onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+          }}
+          className={`p-1 rounded hover:bg-slate-200 transition-colors ${active ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}
+          title={`Filter by ${label}`}
+      >
+          <Icon name="Filter" className="w-3 h-3" />
+      </button>
+      {active && (
+          <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-slate-200 shadow-xl rounded-lg z-50 p-2 grid gap-1 max-h-60 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">{label} Filter</div>
+              {children}
+          </div>
+      )}
+  </div>
+);
+
+{/*
+═══════════════════════════════════════════════════════════════
+CADET DASHBOARD UI COMPONENTS
+═══════════════════════════════════════════════════════════════
+Specialized components for the Cadet Promotion Tracker dashboard.
+*/}
+
+// Component-based Progress Bar - Shows requirement completion as individual segments
+</script>

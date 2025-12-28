@@ -1,0 +1,552 @@
+<script type="text/babel">
+// Senior Member Profile Modal
+// Comprehensive view of senior member's qualifications, training, duties, and ES quals
+const SeniorProfileModal = ({
+  isOpen,
+  onClose,
+  member,
+  // Helper functions
+  getMemberEmail,
+  getCadetProtectionStatus,
+  getTlcStatus,
+  getPromotionDetails,
+  normalizeTrackDisplayName,
+  // Data
+  dataFiles,
+  trainingCourseIndex,
+  voluInstructorIndex,
+  // Constants
+  LEVELS,
+  PME_COURSE_DEFS,
+  CAP_LEADERSHIP_COURSE_DEFS,
+  LEGACY_LEADERSHIP_COURSE_DEFS,
+  ES_FUNCTIONAL_AREAS,
+  // Modal state setters
+  setSelectedMember,
+  setDetailLevel,
+  setSelectedESQualification,
+  setShowESTreeModal
+}) => {
+  if (!isOpen || !member) return null;
+
+  // Helper function to get level status display properties
+  const getLevelStatusDisplay = (meta = {}) => {
+    const status = meta.status || 'not-started';
+    const statusMap = {
+      completed: { label: 'Completed', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', bar: 'bg-emerald-500' },
+      pending: { label: 'Submitted', badge: 'bg-amber-100 text-amber-700 border-amber-200', bar: 'bg-amber-500' },
+      ready: { label: 'Ready to Submit', badge: 'bg-amber-100 text-amber-700 border-amber-200', bar: 'bg-amber-500' },
+      'in-progress': { label: 'In Progress', badge: 'bg-blue-100 text-blue-700 border-blue-200', bar: 'bg-blue-500' },
+      'not-started': { label: 'Not Started', badge: 'bg-slate-100 text-slate-600 border-slate-200', bar: 'bg-slate-400' }
+    };
+    return statusMap[status] || statusMap['not-started'];
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Member Profile" maxWidthClass="max-w-5xl">
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg">
+          <div className="text-2xl font-bold">{member.Rank} {member.NameLast}, {member.NameFirst}</div>
+          <div className="text-sm text-slate-600 mt-1">CAPID: {member.CAPID}</div>
+          <div className="text-sm text-slate-600">Unit: {member.memberUnitName}</div>
+          <div className="text-sm text-slate-600 mt-1">
+            Email:{' '}
+            {getMemberEmail(member.CAPID) ? (
+              <a href={`mailto:${getMemberEmail(member.CAPID)}`} className="text-blue-600 hover:underline">
+                {getMemberEmail(member.CAPID)}
+              </a>
+            ) : (
+              <span className="text-slate-400 italic">Not available</span>
+            )}
+          </div>
+        </div>
+
+        {/* Education and Training */}
+        <div className="border-t pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="font-bold flex items-center gap-2">
+              <Icon name="BookOpen" className="w-4 h-4 text-green-600" />
+              Education and Training
+            </h4>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                Current Level: {member.currentLevel ? `Level ${member.currentLevel}` : 'Not Started'}
+              </span>
+              {(!member.currentLevel || member.currentLevel < 3) && (
+                <span className="text-[11px] font-semibold uppercase text-slate-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                  Level 2 Track: {member.level2Track || 'Not Selected'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {LEVELS.map(lvl => {
+              const meta = member.levelsProgress[lvl.id] || { percent: 0, status: 'not-started' };
+              const display = getLevelStatusDisplay(meta);
+              const percent = Math.min(100, Math.max(0, meta.percent || 0));
+              return (
+                <button
+                  key={lvl.id}
+                  className="text-left border border-slate-200 rounded-lg p-3 bg-white hover:border-blue-300 hover:shadow-sm transition-all"
+                  onClick={() => {
+                    setSelectedMember(member);
+                    setDetailLevel(lvl.id);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide font-bold text-slate-500">Level {lvl.label}</div>
+                      <div className="text-sm font-semibold text-slate-800">{lvl.name}</div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${display.badge}`}>{display.label}</span>
+                  </div>
+                  <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${display.bar}`} style={{ width: `${percent}%` }}></div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">{percent}% complete</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Cadet Protection & TLC */}
+          {(() => {
+            const cadetProtection = getCadetProtectionStatus ? getCadetProtectionStatus(member) : null;
+            const cadetProtectionCourses = cadetProtection ? cadetProtection.displayCourses : [];
+            const tlcStatus = getTlcStatus ? getTlcStatus(member) : null;
+            if (!cadetProtection && !tlcStatus) return null;
+
+            const cpStatusKey = cadetProtection?.indicator?.status || (cadetProtectionCourses.length ? 'current' : 'not-required');
+            const cpBorderClassMap = {
+              current: 'border-emerald-200',
+              'due-soon': 'border-amber-200',
+              overdue: 'border-rose-200',
+              missing: 'border-rose-200',
+              eligible: 'border-blue-200',
+              'not-required': 'border-slate-200'
+            };
+            const cpBorderClass = cpBorderClassMap[cpStatusKey] || 'border-slate-200';
+
+            const tlcTitle = (() => {
+              if (!tlcStatus?.course) return 'TLC';
+              const suffix = tlcStatus.course.replace(/^TLC\s*-?\s*/i, '');
+              return suffix ? `TLC - ${suffix}` : 'TLC';
+            })();
+
+            return (
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3 items-stretch">
+                {cadetProtection && (
+                  <div className={`border ${cpBorderClass} rounded-lg p-3 bg-white h-full min-h-[160px] flex flex-col`}>
+                    {cadetProtectionCourses.length === 0 ? (
+                      <div className="text-sm text-slate-400 italic mt-2">No cadet protection requirement on file</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {cadetProtectionCourses.map((course, idx) => {
+                          const courseLabel = (course.label || '').replace(/^Cadet Protection\s*-\s*/i, '');
+                          const courseTitle = courseLabel ? `Cadet Protection - ${courseLabel}` : (course.label || 'Cadet Protection');
+                          return (
+                            <div key={course.id} className={`${idx > 0 ? 'border-t border-slate-100 pt-3' : ''}`}>
+                              <div className="flex items-center justify-between font-semibold text-slate-800">
+                                <span>{courseTitle}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${course.badgeClass}`}>{course.statusLabel}</span>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-600 space-y-1">
+                                <div>Last completion: {course.lastCompleted ? course.lastCompleted.toLocaleDateString() : 'Not completed'}</div>
+                                <div>Expiration: {course.expirationDate ? course.expirationDate.toLocaleDateString() : 'N/A'}</div>
+                                <div>Days: {course.daysText}</div>
+                                {cadetProtection.requiredCourses.length > 0 && (
+                                  <div>Required courses: {cadetProtection.summaryLabel}</div>
+                                )}
+                              </div>
+                              {course.note && <div className="text-[11px] text-slate-500 mt-2">{course.note}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tlcStatus && (
+                  <div className={`border ${tlcStatus.borderClass} rounded-lg p-3 bg-white h-full min-h-[160px] flex flex-col`}>
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-slate-800">{tlcTitle}</div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tlcStatus.badgeClass}`}>{tlcStatus.statusLabel}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-600 space-y-1">
+                      <div>Completed: {tlcStatus.completed ? tlcStatus.completed.toLocaleDateString() : 'N/A'}</div>
+                      <div>Expiration: {tlcStatus.expirationDate ? tlcStatus.expirationDate.toLocaleDateString() : 'N/A'}</div>
+                      <div>Days: {tlcStatus.daysText}</div>
+                      <div>Renewal: every 36 months</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* PME & Leadership Courses */}
+          {(() => {
+            const capid = String(member.CAPID || '').trim();
+            const summary = trainingCourseIndex.get(capid) || { pme: {}, leadership: {}, legacyLeadership: {} };
+            const pmeCourses = PME_COURSE_DEFS.map(def => ({
+              key: def.key,
+              label: def.label,
+              completed: summary.pme[def.key]?.raw || null
+            }));
+            const leadershipCourses = CAP_LEADERSHIP_COURSE_DEFS.map(def => ({
+              key: def.key,
+              label: def.label,
+              completed: summary.leadership[def.key]?.raw || null
+            }));
+            const legacyLeadershipCourses = LEGACY_LEADERSHIP_COURSE_DEFS.map(def => ({
+              key: def.key,
+              label: def.label,
+              completed: summary.legacyLeadership[def.key]?.raw || null
+            })).filter(course => course.completed);
+            const completedPme = pmeCourses.filter(course => course.completed);
+            const completedLeadership = leadershipCourses.filter(course => course.completed);
+            const showPme = completedPme.length > 0;
+            const courseBoxBase = 'rounded-lg border p-2';
+            const courseBoxActive = 'bg-indigo-50 border-indigo-300 text-indigo-800 ring-1 ring-indigo-200 shadow-sm';
+            const courseBoxInactive = 'bg-slate-50 border-slate-200 text-slate-500';
+
+            return (
+              <div className={`mt-4 grid grid-cols-1 ${showPme ? 'lg:grid-cols-2' : ''} gap-3`}>
+                {showPme && (
+                  <div className="border border-slate-200 rounded-lg p-3 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-slate-800 flex items-center gap-2">
+                        <Icon name="BookOpen" className="w-4 h-4 text-slate-600" />
+                        Professional Military Education
+                      </div>
+                      <span className="text-[10px] font-semibold uppercase text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                        {completedPme.length} / {pmeCourses.length}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {completedPme.map(course => (
+                        <span
+                          key={course.key}
+                          className="text-[11px] font-semibold px-2 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700"
+                          title={`Completed: ${course.completed}`}
+                        >
+                          {course.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="border border-slate-200 rounded-lg p-3 bg-white">
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold text-slate-800 flex items-center gap-2">
+                      <Icon name="Award" className="w-4 h-4 text-slate-600" />
+                      Command and Instructor Development
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                      {completedLeadership.length} / {leadershipCourses.length}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {leadershipCourses.map(course => {
+                      const isComplete = !!course.completed;
+                      return (
+                        <div
+                          key={course.key}
+                          className={`${courseBoxBase} ${isComplete ? courseBoxActive : courseBoxInactive}`}
+                          title={isComplete ? `Completed: ${course.completed}` : 'Not completed'}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-[11px] uppercase tracking-wide font-semibold">{course.label}</span>
+                            {isComplete && <Icon name="CheckCircle" className="w-4 h-4 text-indigo-600" />}
+                          </div>
+                          <div className="mt-1 text-[10px] uppercase tracking-wide">
+                            {isComplete ? 'Completed' : 'Not completed'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {legacyLeadershipCourses.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Legacy or Role-Specific</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {legacyLeadershipCourses.map(course => (
+                          <span
+                            key={course.key}
+                            className="text-[10px] font-semibold px-2 py-1 rounded border border-slate-200 bg-slate-100 text-slate-600"
+                            title={`Completed: ${course.completed}`}
+                          >
+                            {course.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* VOLU Instructor Qualifications */}
+                  {(() => {
+                    const instructorData = voluInstructorIndex?.get(capid);
+                    if (!instructorData || instructorData.courses.size === 0) return null;
+
+                    // Define display order for courses
+                    const courseOrder = [
+                      'Level 1', 'Level 2 Part 1', 'Level 2 Part 2', 'Level 3', 'Level 4', 'Level 5',
+                      'Squadron Commander Training', 'Group Commander Training', 'Region Commander Training'
+                    ];
+
+                    // Convert Map to sorted array
+                    const sortedCourses = Array.from(instructorData.courses.entries())
+                      .sort((a, b) => {
+                        const idxA = courseOrder.indexOf(a[0]);
+                        const idxB = courseOrder.indexOf(b[0]);
+                        if (idxA === -1 && idxB === -1) return a[0].localeCompare(b[0]);
+                        if (idxA === -1) return 1;
+                        if (idxB === -1) return -1;
+                        return idxA - idxB;
+                      });
+
+                    return (
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon name="GraduationCap" className="w-4 h-4 text-amber-600" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                            VOLU Instructor Qualifications
+                          </span>
+                          {instructorData.isChair && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                              CHAIR
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                          {sortedCourses.map(([courseName, modes]) => {
+                            const hasOnline = modes.online;
+                            const hasFaceToFace = modes.faceToFace;
+                            return (
+                              <div
+                                key={courseName}
+                                className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-amber-50 border border-amber-200"
+                              >
+                                <span className="text-[11px] font-medium text-amber-800 truncate">{courseName}</span>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {hasFaceToFace && (
+                                    <span
+                                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200"
+                                      title="Face-to-Face Instructor"
+                                    >
+                                      F2F
+                                    </span>
+                                  )}
+                                  {hasOnline && (
+                                    <span
+                                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200"
+                                      title="Online Instructor"
+                                    >
+                                      OL
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Specialty Tracks */}
+          <div className="mt-4">
+            <h5 className="font-bold text-sm mb-2 flex items-center gap-2 text-slate-700">
+              <Icon name="Award" className="w-4 h-4 text-purple-600" />
+              Specialty Tracks
+            </h5>
+            {member.tracks.length > 0 ? (
+              member.tracks.map((t, i) => {
+                const badgeClass = t.level==='MASTER'?'bg-purple-100 text-purple-700':t.level==='SENIOR'?'bg-blue-100 text-blue-700': t.level==='TECHNICIAN'?'bg-green-100 text-green-700' : 'text-slate-400 font-normal';
+                return (
+                <div key={i} className="text-sm mb-2 p-2 bg-slate-50 rounded border border-slate-100">
+                  <div className="font-medium flex justify-between items-center">
+                    <span>{normalizeTrackDisplayName(t.name)}</span>
+                    <span className={`text-xs font-bold px-1.5 rounded ${badgeClass}`}>{t.level}</span>
+                  </div>
+                  <div className="text-xs text-slate-500">Awarded: {t.date}</div>
+                </div>
+                )
+              })
+            ) : (
+              <div className="text-sm text-slate-400 italic">No specialty tracks</div>
+            )}
+          </div>
+        </div>
+
+        {/* Promotion Eligibility */}
+        <div className="border-t pt-4">
+          <h4 className="font-bold mb-2 flex items-center gap-2">
+            <Icon name="TrendingUp" className="w-4 h-4 text-amber-600" />
+            Promotion Eligibility
+          </h4>
+          {(() => {
+            const promoDetails = getPromotionDetails(member);
+            if (!promoDetails) {
+              return <div className="text-sm text-slate-400 italic">No promotion pathway available for current rank</div>;
+            }
+
+            const isEligibleNow = promoDetails.isTigMet && promoDetails.isLevelMet && promoDetails.isDutyMet;
+
+            return (
+              <div className="space-y-2">
+                <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-3 rounded-lg border border-slate-200">
+                  <div className="text-sm font-medium text-slate-600 mb-1">Next Rank</div>
+                  <div className="text-lg font-bold text-slate-900">{promoDetails.nextRank}</div>
+                  {isEligibleNow ? (
+                    <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">
+                      <Icon name="CheckCircle" className="w-3.5 h-3.5" />
+                      ELIGIBLE NOW
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-amber-600 font-medium">
+                      Eligible: {promoDetails.eligibleDate}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <div className={`p-2 rounded border text-xs ${promoDetails.isTigMet ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-slate-700">Time in Grade</span>
+                      {promoDetails.isTigMet ? (
+                        <Icon name="CheckCircle" className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Icon name="Clock" className="w-4 h-4 text-amber-600" />
+                      )}
+                    </div>
+                    <div className={`mt-1 ${promoDetails.isTigMet ? 'text-green-700' : 'text-amber-700'}`}>
+                      {promoDetails.tigMonthsCurrent} / {promoDetails.tigMonthsRequired} months
+                    </div>
+                  </div>
+
+                  <div className={`p-2 rounded border text-xs ${promoDetails.isLevelMet ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-slate-700">Education & Training</span>
+                      {promoDetails.isLevelMet ? (
+                        <Icon name="CheckCircle" className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Icon name="AlertCircle" className="w-4 h-4 text-amber-600" />
+                      )}
+                    </div>
+                    <div className={`mt-1 ${promoDetails.isLevelMet ? 'text-green-700' : 'text-amber-700'}`}>
+                      Required: {promoDetails.levelRequired}
+                    </div>
+                    <div className="text-slate-600 text-[11px]">
+                      Current: {promoDetails.levelCurrent}
+                    </div>
+                  </div>
+
+                  {promoDetails.dutyReq && (
+                    <div className={`p-2 rounded border text-xs ${promoDetails.isDutyMet ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-slate-700">Duty Requirement</span>
+                        {promoDetails.isDutyMet ? (
+                          <Icon name="CheckCircle" className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <Icon name="AlertCircle" className="w-4 h-4 text-amber-600" />
+                        )}
+                      </div>
+                      <div className={`mt-1 ${promoDetails.isDutyMet ? 'text-green-700' : 'text-amber-700'}`}>
+                        Required: {promoDetails.dutyReq}
+                      </div>
+                      <div className="text-slate-600 text-[11px]">
+                        {promoDetails.dutyStatusString}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Duty Assignments */}
+        <div className="border-t pt-4">
+          <h4 className="font-bold mb-2 flex items-center gap-2">
+            <Icon name="Briefcase" className="w-4 h-4 text-indigo-600" />
+            Duty Assignments
+          </h4>
+          {member.duties.length > 0 ? (
+            member.duties.map((d, i) => {
+              const isCrossUnit = d.orgString !== member.memberUnitName;
+              return (
+                <div key={i} className={`text-sm mb-2 p-2 rounded border ${isCrossUnit ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-100'}`}>
+                  <div className="font-medium flex items-center gap-2">
+                    {d.displayName}
+                    {isCrossUnit && (
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">CROSS-UNIT</span>
+                    )}
+                  </div>
+                  <div className={`text-xs mt-1 ${isCrossUnit ? 'text-blue-700 font-medium' : 'text-slate-500'}`}>
+                    Unit: {d.orgString} - Assigned: {d.date}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-sm text-slate-400 italic">No duty assignments</div>
+          )}
+        </div>
+
+        {/* Committee Assignments */}
+        <div className="border-t pt-4">
+          <h4 className="font-bold mb-2 flex items-center gap-2">
+            <Icon name="Users" className="w-4 h-4 text-emerald-600" />
+            Committee Assignments
+          </h4>
+          {(() => {
+            const memberCommittees = dataFiles.committees ? dataFiles.committees.filter(c => c.CAPID === member.CAPID) : [];
+            return memberCommittees.length > 0 ? (
+              memberCommittees.map((c, i) => {
+                const position = (c.Position || c.Role || c.Title || 'Member').trim();
+                const isChair = c.Chair === "1" || position.toUpperCase().includes('CHAIR');
+                return (
+                  <div key={i} className={`text-sm mb-2 p-2 rounded border ${isChair ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
+                    <div className="font-medium flex items-center gap-2">
+                      {c.Committee}
+                      {isChair && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">CHAIR</span>
+                      )}
+                    </div>
+                    <div className={`text-xs mt-1 ${isChair ? 'text-emerald-700 font-medium' : 'text-slate-500'}`}>
+                      Position: {position}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-sm text-slate-400 italic">No committee assignments</div>
+            );
+          })()}
+        </div>
+
+        {/* Emergency Services Qualifications - Using shared component */}
+        <div className="border-t pt-4">
+          <ESQualificationsSection
+            qualifications={member.esQualificationsAll || []}
+            onQualificationClick={setSelectedESQualification}
+            onViewSkillTree={() => setShowESTreeModal(true)}
+            showSkillTreeButton={true}
+            showSkillsEvaluator={true}
+            ES_FUNCTIONAL_AREAS={ES_FUNCTIONAL_AREAS}
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+};
+</script>

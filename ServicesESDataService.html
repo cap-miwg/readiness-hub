@@ -1,0 +1,820 @@
+<script type="text/babel">
+/**
+ * ServicesESDataService.html
+ *
+ * Centralized Emergency Services (ES) qualification data processing service.
+ * Provides shared ES logic for both senior and cadet data services.
+ *
+ * Dependencies:
+ * - ConfigConstants.html (ES_*, COMMUNICATIONS_DUTY_POSITIONS)
+ * - UtilsDataParsing.html
+ */
+
+function createESDataService(rawConfig, rawData) {
+  const _rawConfig = rawConfig;
+  const _rawData = rawData;
+
+  // ES Helper: Check if member is Skills Evaluator for a qualification
+  const checkSkillsEvaluator = (capid, achv, functionalArea, member) => {
+    // Skills Evaluator: Member holds qual for 1+ year AND has active SET achievement
+    // AND the qualification is in an allowed functional area (not badges, patches, pilot ratings, etc.)
+    // AND the qualification is ACTIVE (not expired or training)
+    // AND NOT GES or SET itself
+
+    // Only ES qualifications can have Skills Evaluators
+    if (!ES_SKILLS_EVALUATOR_ALLOWED_FUNCTIONAL_AREAS.has(functionalArea)) {
+      return false;
+    }
+
+    // Cannot be SE for GES, SET, or other restricted qualifications
+    if (ES_NO_SKILLS_EVALUATOR_IDS.has(achv.AchvID)) {
+      return false;
+    }
+
+    // Qualification must be ACTIVE (not expired or training)
+    const statusUpper = String(achv.Status || '').toUpperCase();
+    if (statusUpper !== 'ACTIVE') {
+      return false;
+    }
+
+    // Check if qualification held for 1+ year
+    const completedDate = achv.Completed && achv.Completed !== '01/01/1900'
+      ? new Date(achv.Completed)
+      : null;
+
+    if (!completedDate) return false;
+
+    const today = new Date();
+    const oneYearAgo = new Date(today);
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const heldForOneYear = completedDate <= oneYearAgo;
+    if (!heldForOneYear) return false;
+
+    // Check for active SET (Skills Evaluator Training) achievement
+    // SET is AchvID 124 in the ES system
+    const SET_ACHV_ID = '124';
+
+    const hasActiveSET = (_rawData.esMbrAchievements || []).some(a =>
+      a.CAPID === capid &&
+      a.AchvID === SET_ACHV_ID &&
+      String(a.Status || '').toUpperCase() === 'ACTIVE'
+    );
+
+    if (!hasActiveSET) return false;
+
+    // Special requirement for ICUT: Must also be in a communications duty position
+    if (achv.AchvID === '217') { // ICUT
+      const memberDuties = (_rawData.duty || [])
+        .filter(d => d.CAPID === capid)
+        .map(d => String(d.Duty || '').toUpperCase().trim());
+
+      const hasCommDuty = memberDuties.some(duty =>
+        COMMUNICATIONS_DUTY_POSITIONS.has(duty)
+      );
+
+      if (!hasCommDuty) return false;
+    }
+
+    return true;
+  };
+
+  // ES Core: Build ES qualifications for a member
+  const buildESQualifications = (member, options = {}) => {
+    const {
+      forDashboard = false,  // Apply dashboard-specific filtering
+      forCadet = false,      // Use cadet-specific logic
+      forSenior = false      // Use senior-specific logic (default if neither cadet nor senior specified)
+    } = options;
+
+    const capid = member.CAPID;
+    const today = new Date();
+
+    // Get member's ES achievements (all statuses)
+    const memberAchievements = (_rawData.esMbrAchievements || [])
+      .filter(a => a.CAPID === capid);
+
+    // Build qualification objects with full details
+    const qualifications = memberAchievements.map(achv => {
+      const achvDef = (_rawConfig.esAchievements || [])
+        .find(def => def.AchvID === achv.AchvID);
+
+      if (!achvDef) return null;
+
+      const functionalArea = achvDef.FunctionalArea;
+
+      // FILTER OUT: Exclude badges, patches, IS/ICS courses, ET-Senior levels, BCUT/ACUT, CAPPILOT_OLD, and Cadet Programs
+      // Check both achievement ID and functional area
+      if (ES_EXCLUDED_ACHIEVEMENT_IDS.has(achv.AchvID) || ES_EXCLUDED_FUNCTIONAL_AREAS.has(functionalArea)) {
+        return null; // Skip this qualification
+      }
+
+      // Calculate status and color
+      let status, colorClass;
+      const statusUpper = String(achv.Status || '').toUpperCase();
+
+      if (statusUpper === 'ACTIVE') {
+        status = 'Active';
+        colorClass = 'es-active'; // green
+      } else if (statusUpper === 'TRAINING') {
+        status = 'Training';
+        colorClass = 'es-training'; // amber
+      } else if (statusUpper === 'EXPIRED') {
+        status = 'Expired';
+        colorClass = 'es-expired'; // red
+      } else {
+        status = 'Not Approved';
+        colorClass = 'es-not-approved'; // gray
+      }
+
+      // Calculate expiration info (only for senior members or full profile views)
+      let expirationDate = null;
+      let daysTilExpiration = null;
+      let isExpiringSoon = false;
+
+      if (!forCadet || !forDashboard) {
+        expirationDate = achv.Expiration && achv.Expiration !== '01/01/1900'
+          ? new Date(achv.Expiration)
+          : null;
+
+        if (expirationDate) {
+          const timeDiff = expirationDate - today;
+          daysTilExpiration = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+
+          if (status === 'Active' && daysTilExpiration <= 90 && daysTilExpiration >= 0) {
+            isExpiringSoon = true; // Expiring within 3 months
+          }
+
+          if (status === 'Expired') {
+            const daysSinceExpiration = Math.abs(daysTilExpiration);
+            if (forDashboard && daysSinceExpiration > 180) {
+              return null; // Skip if expired for more than 6 months (dashboard only)
+            }
+            if (!forDashboard && daysSinceExpiration > 730) {
+              return null; // Skip if expired for more than 2 years (profile)
+            }
+          }
+        }
+
+        // Filter out non-expiring qualifications (except GES which is special)
+        if (!expirationDate && achv.AchvID !== ES_DASHBOARD_SPECIAL.GES) {
+          if (ES_NON_EXPIRING_EXCLUSIONS.has(achv.AchvID)) {
+            return null;
+          }
+        }
+
+        // Dashboard-specific filtering (for seniors)
+        if (forDashboard && !forCadet) {
+          // Hide SET (SE Training) on senior dashboard
+          if (achv.AchvID === ES_DASHBOARD_SPECIAL.SE_TRAINING) return null;
+
+          // Hide CD - Counterdrug only when expired (doesn't have expiration date, relies on status)
+          if (achv.AchvID === ES_DASHBOARD_SPECIAL.CD_COUNTERDRUG && status === 'Expired') return null;
+
+          // Hide completed GES and OPSEC on dashboard (show only if missing/training)
+          if ((achv.AchvID === ES_DASHBOARD_SPECIAL.GES || achv.AchvID === ES_DASHBOARD_SPECIAL.OPSEC) &&
+              status === 'Active') {
+            return null;
+          }
+        }
+      }
+
+      // Check if member holds qual for 1+ year AND has active SET achievement
+      // Pass member object for duty checking
+      // Cadets typically don't qualify as Skills Evaluators
+      const isSkillsEvaluator = forCadet ? false : checkSkillsEvaluator(capid, achv, functionalArea, member);
+
+      return {
+        achvID: achv.AchvID,
+        name: achvDef.Achv,
+        functionalArea: functionalArea,
+        status: status,
+        statusRaw: achv.Status,
+        colorClass: colorClass,
+        completed: achv.Completed,
+        expiration: achv.Expiration,
+        expirationDate: expirationDate,
+        daysTilExpiration: daysTilExpiration,
+        isExpiringSoon: isExpiringSoon,
+        isSkillsEvaluator: isSkillsEvaluator,
+        // For detail modal
+        originallyAccomplished: achv.OriginallyAccomplished,
+        authByCAPID: achv.AuthByCAPID,
+        authDate: achv.AuthDate,
+        source: achv.Source
+      };
+    }).filter(Boolean); // Remove null entries (filtered qualifications)
+
+    // Handle duplicates (only for senior members or detailed views): If a member has both expired and training status for same qual, keep only the most recent (preferably training)
+    let uniqueQualifications;
+    if (!forCadet || !forDashboard) {
+      const qualMap = new Map();
+      qualifications.forEach(qual => {
+        const existing = qualMap.get(qual.name);
+        if (!existing) {
+          qualMap.set(qual.name, qual);
+        } else {
+          // Priority: Training > Active > Not Approved > Expired
+          const statusPriority = { 'Training': 1, 'Active': 2, 'Not Approved': 3, 'Expired': 4 };
+          const existingPriority = statusPriority[existing.status] || 999;
+          const currentPriority = statusPriority[qual.status] || 999;
+
+          if (currentPriority < existingPriority) {
+            qualMap.set(qual.name, qual);
+          } else if (currentPriority === existingPriority) {
+            // If same priority, keep the most recently completed one
+            const existingDate = existing.completed ? new Date(existing.completed) : new Date(0);
+            const currentDate = qual.completed ? new Date(qual.completed) : new Date(0);
+            if (currentDate > existingDate) {
+              qualMap.set(qual.name, qual);
+            }
+          }
+        }
+      });
+
+      // Convert map back to array
+      uniqueQualifications = Array.from(qualMap.values());
+    } else {
+      // For cadet dashboard, no duplicate handling
+      uniqueQualifications = qualifications;
+    }
+
+    // Dashboard-specific: Add missing GES and OPSEC if not present at all (only for seniors)
+    if (forDashboard && !forCadet) {
+      const hasGES = memberAchievements.some(a => a.AchvID === ES_DASHBOARD_SPECIAL.GES);
+      const hasOPSEC = memberAchievements.some(a => a.AchvID === ES_DASHBOARD_SPECIAL.OPSEC);
+
+      // Add GES if missing
+      if (!hasGES) {
+        const gesDef = (_rawConfig.esAchievements || []).find(a => a.AchvID === ES_DASHBOARD_SPECIAL.GES);
+        if (gesDef) {
+          uniqueQualifications.push({
+            achvID: ES_DASHBOARD_SPECIAL.GES,
+            name: gesDef.Achv,
+            functionalArea: gesDef.FunctionalArea,
+            status: 'Missing',
+            statusRaw: null,
+            colorClass: 'es-expired', // Use red styling
+            completed: null,
+            expiration: null,
+            expirationDate: null,
+            daysTilExpiration: null,
+            isExpiringSoon: false,
+            isSkillsEvaluator: false,
+            originallyAccomplished: null,
+            authByCAPID: null,
+            authDate: null,
+            source: null
+          });
+        }
+      }
+
+      // Add OPSEC if missing
+      if (!hasOPSEC) {
+        const opsecDef = (_rawConfig.esAchievements || []).find(a => a.AchvID === ES_DASHBOARD_SPECIAL.OPSEC);
+        if (opsecDef) {
+          uniqueQualifications.push({
+            achvID: ES_DASHBOARD_SPECIAL.OPSEC,
+            name: opsecDef.Achv,
+            functionalArea: opsecDef.FunctionalArea,
+            status: 'Missing',
+            statusRaw: null,
+            colorClass: 'es-expired', // Use red styling
+            completed: null,
+            expiration: null,
+            expirationDate: null,
+            daysTilExpiration: null,
+            isExpiringSoon: false,
+            isSkillsEvaluator: false,
+            originallyAccomplished: null,
+            authByCAPID: null,
+            authDate: null,
+            source: null
+          });
+        }
+      }
+    }
+
+    // Sort: Active first, then Training, then Expired, then Missing, then Not Approved
+    // Within each group, sort alphabetically by name
+    const statusOrder = { 'Active': 1, 'Training': 2, 'Expired': 3, 'Missing': 4, 'Not Approved': 5 };
+    uniqueQualifications.sort((a, b) => {
+      const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    return uniqueQualifications;
+  };
+
+  // ES Helper: Build prerequisite tree for a qualification
+  const buildESPrerequisiteTree = (achvID, ancestry = []) => {
+    const buildNode = (currentAchvID, currentAncestry = []) => {
+      // Get achievement definition
+      const achvDef = (_rawConfig.esAchievements || [])
+        .find(a => a.AchvID === currentAchvID);
+
+      if (!achvDef) return null;
+
+      // Prevent infinite recursion - if we've already seen this ID in our ancestry chain, stop
+      if (currentAncestry.includes(currentAchvID)) {
+        return {
+          achvID: currentAchvID,
+          name: achvDef.Achv,
+          functionalArea: achvDef.FunctionalArea,
+          prerequisites: [], // Don't recurse further
+          note: 'Already shown above'
+        };
+      }
+
+      // Add current ID to ancestry for this branch
+      const newAncestry = [...currentAncestry, currentAchvID];
+
+      // Get prerequisite achievements from AchvStepAchv
+      const prereqLinks = (_rawConfig.esAchvStepAchv || [])
+        .filter(link => link.AchvID === currentAchvID);
+
+      // Build all prerequisite nodes
+      const prereqs = prereqLinks
+        .map(link => buildNode(link.OrigAchvID, newAncestry))
+        .filter(Boolean);
+
+      // Collect all transitive prerequisite IDs (prerequisites of prerequisites, recursively)
+      const collectTransitivePrereqIDs = (node) => {
+        const ids = new Set();
+        if (node && node.prerequisites) {
+          node.prerequisites.forEach(prereq => {
+            ids.add(prereq.achvID);
+            // Recursively collect IDs from this prerequisite's prerequisites
+            const transitiveIDs = collectTransitivePrereqIDs(prereq);
+            transitiveIDs.forEach(id => ids.add(id));
+          });
+        }
+        return ids;
+      };
+
+      // Collect all transitive prerequisite IDs from all direct prerequisites
+      const allTransitiveIDs = new Set();
+      prereqs.forEach(prereq => {
+        const transitiveIDs = collectTransitivePrereqIDs(prereq);
+        transitiveIDs.forEach(id => allTransitiveIDs.add(id));
+      });
+
+      // Filter out direct prerequisites that appear transitively through other prerequisites
+      // Keep a prerequisite if it's NOT found in the transitive set of OTHER prerequisites
+      const filteredPrereqs = prereqs.filter(prereq => {
+        // For each prereq, check if it appears in the transitive dependencies of OTHER prereqs
+        const otherPrereqs = prereqs.filter(p => p.achvID !== prereq.achvID);
+        const otherTransitiveIDs = new Set();
+        otherPrereqs.forEach(otherPrereq => {
+          const transitiveIDs = collectTransitivePrereqIDs(otherPrereq);
+          transitiveIDs.forEach(id => otherTransitiveIDs.add(id));
+        });
+
+        // Keep this prereq if it's NOT in the other prereqs' transitive dependencies
+        return !otherTransitiveIDs.has(prereq.achvID);
+      });
+
+      return {
+        achvID: currentAchvID,
+        name: achvDef.Achv,
+        functionalArea: achvDef.FunctionalArea,
+        prerequisites: filteredPrereqs
+      };
+    };
+
+    return buildNode(achvID, ancestry);
+  };
+
+  // ES Helper: Get meaningful step name based on StepID and task content
+  const getESStepName = (stepID, tasks = []) => {
+    const sid = String(stepID);
+
+    // Standard ES qualification step structure
+    const stepNames = {
+      '1': 'Prerequisites',
+      '2': 'Commander Approval for Prerequisites',
+      '3': 'Familiarization and Preparatory Training',
+      '4': 'Commander Approval for F&P Training',
+      '5': 'Advanced Training',
+      '6': 'Additional Requirements',
+      '7': 'Exercise Participation',
+      '8': 'Continuing Education',
+      '9': 'Final Approval',
+      '10': 'Recertification'
+    };
+
+    // Use standard name if available
+    if (stepNames[sid]) {
+      return stepNames[sid];
+    }
+
+    // Fall back to analyzing task names for context
+    if (tasks.length > 0) {
+      const firstTaskName = tasks[0].taskName || '';
+      if (firstTaskName.includes('Commander Approval')) {
+        return 'Commander Approval';
+      }
+      if (firstTaskName.includes('Exercise Participation')) {
+        return 'Exercise Participation';
+      }
+      if (firstTaskName.includes('Continuing Education')) {
+        return 'Continuing Education';
+      }
+      if (firstTaskName.includes('Age Eligibility') || firstTaskName.includes('Age eligibility')) {
+        return 'Prerequisites & Age Eligibility';
+      }
+    }
+
+    // Generic fallback
+    return `Step ${stepID}`;
+  };
+
+  // ES Helper: Get tasks required for an achievement, grouped by step
+  const getESAchievementTasks = (achvID, capid) => {
+    // Normalize IDs to strings for comparison
+    const targetAchvID = String(achvID || '').trim();
+    const targetCAPID = String(capid || '').trim();
+
+    // Get all task links for this achievement
+    const taskLinks = (_rawConfig.esAchvStepTasks || [])
+      .filter(link => String(link.AchvID || '').trim() === targetAchvID);
+
+    // Get member's completed tasks
+    const memberTasks = (_rawData.esMbrTasks || [])
+      .filter(t => String(t.CAPID || '').trim() === targetCAPID);
+
+    // Group by StepID
+    const stepMap = {};
+
+    taskLinks.forEach(link => {
+      const stepID = link.StepID;
+
+      if (!stepMap[stepID]) {
+        stepMap[stepID] = {
+          stepID: stepID,
+          stepName: null, // Will be set after all tasks are collected
+          tasks: []
+        };
+      }
+
+      // Get task definition
+      const taskDef = (_rawConfig.esTasks || [])
+        .find(t => String(t.TaskID || '').trim() === String(link.TaskID || '').trim());
+
+      if (!taskDef) {
+        console.warn(`Task definition not found for TaskID: ${link.TaskID}`);
+        return;
+      }
+
+      // Check if member has completed this task
+      const memberTask = memberTasks.find(mt =>
+        String(mt.TaskID || '').trim() === String(link.TaskID || '').trim()
+      );
+      const isCompleted = memberTask &&
+        String(memberTask.Status || '').toUpperCase() === 'ACTIVE';
+
+      stepMap[stepID].tasks.push({
+        taskID: link.TaskID,
+        taskName: taskDef.TaskName,
+        functionalArea: taskDef.FunctionalArea,
+        completed: isCompleted,
+        completedDate: memberTask ? memberTask.Completed : null,
+        expiration: memberTask ? memberTask.Expiration : null,
+        status: memberTask ? memberTask.Status : null
+      });
+    });
+
+    // Set step names based on collected tasks
+    Object.keys(stepMap).forEach(stepID => {
+      stepMap[stepID].stepName = getESStepName(stepID, stepMap[stepID].tasks);
+    });
+
+    // Convert to array and sort by stepID
+    return Object.values(stepMap).sort((a, b) =>
+      parseInt(a.stepID) - parseInt(b.stepID)
+    );
+  };
+
+  // ES Helper: Check special prerequisite cases (OR logic, conditional requirements)
+  const checkSpecialPrerequisites = (achvID, member) => {
+    const capid = member.CAPID;
+    const memberType = String(member.Type || member.TYPE || '').toUpperCase();
+    const missing = [];
+    const satisfiedPrereqs = [];
+
+    // Check age requirement first (if applicable)
+    const requiredAge = ES_AGE_REQUIREMENTS[achvID];
+    if (requiredAge) {
+      const memberAge = member.DOB ? Math.floor((new Date() - new Date(member.DOB)) / (1000 * 60 * 60 * 24 * 365.25)) : null;
+
+      if (memberAge === null) {
+        missing.push('Date of birth required for age verification');
+      } else if (memberAge < requiredAge) {
+        missing.push(`Age eligibility: ${requiredAge} years (member is ${memberAge} years old)`);
+      } else {
+        satisfiedPrereqs.push(`Age requirement: ${requiredAge}+ years`);
+      }
+    }
+
+    // Check other special prerequisites
+    const specialCase = ES_PREREQUISITE_SPECIAL_CASES[achvID];
+    if (!specialCase) {
+      // No special case, but return age check results
+      return {
+        eligible: missing.length === 0,
+        missing: missing,
+        satisfiedPrereqs: satisfiedPrereqs
+      };
+    }
+
+    specialCase.specialPrereqs.forEach(prereq => {
+      if (prereq.type === 'OR') {
+        // OR logic: Member needs at least ONE of the options
+        const hasAny = prereq.options.some(optionID =>
+          (_rawData.esMbrAchievements || []).some(a =>
+            a.CAPID === capid &&
+            a.AchvID === optionID &&
+            String(a.Status || '').toUpperCase() === 'ACTIVE'
+          )
+        );
+        if (!hasAny) {
+          // Get names of the options for display
+          const optionNames = prereq.options.map(optID => {
+            const achvDef = (_rawConfig.esAchievements || []).find(a => a.AchvID === optID);
+            return achvDef ? achvDef.Achv : optID;
+          });
+          missing.push(`One of: ${optionNames.join(' OR ')}`);
+        } else {
+          satisfiedPrereqs.push('OR requirement');
+        }
+      } else if (prereq.type === 'CONDITIONAL_MEMBER_TYPE') {
+        // Conditional: Requirement depends on member type
+        // Senior members are anyone who is NOT a cadet (includes SENIOR, LIFE, SM, PATRON, etc.)
+        const isCadet = memberType === 'CADET';
+        const isSenior = !isCadet;
+        const requiredAchvID = isSenior ? prereq.senior : prereq.cadet;
+
+        let hasRequired = false;
+
+        if (isSenior) {
+          // For senior members, check Level 1 completion in seniorLevels (E&T data)
+          // Level 1 is Achievement ID '96' but it's NOT in esMbrAchievements - it's in seniorLevels
+          hasRequired = (_rawData.seniorLevels || []).some(sl =>
+            sl.CAPID === capid &&
+            sl.Lvl === 'LV1' &&
+            sl.Completed && sl.Completed !== '01/01/1900'
+          );
+
+          // Also check memberPaths for Level 1 completion (search for Level 1 path dynamically)
+          if (!hasRequired) {
+            // Find Level 1 PathID by searching for 'Level 1' in path names
+            const level1Path = (_rawConfig.paths || []).find(p =>
+              (p.PathName || '').includes('Level 1')
+            );
+
+            if (level1Path) {
+              hasRequired = (_rawData.memberPaths || []).some(mp =>
+                mp.CAPID === capid &&
+                mp.PathID === level1Path.PathID &&
+                mp.StatusID === '8' // Approved/Completed
+              );
+            }
+          }
+        } else {
+          // For cadets, check Achievement 1 (Curry) in esMbrAchievements
+          hasRequired = (_rawData.esMbrAchievements || []).some(a =>
+            a.CAPID === capid &&
+            a.AchvID === requiredAchvID &&
+            String(a.Status || '').toUpperCase() === 'ACTIVE'
+          );
+        }
+
+        if (!hasRequired) {
+          // Only show the requirement that applies to this member type
+          const reqName = isSenior ? 'Level 1' : 'Achievement 1 (Curry)';
+          missing.push(reqName);
+        } else {
+          satisfiedPrereqs.push(isSenior ? 'Level 1' : 'Achievement 1');
+        }
+      } else if (prereq.type === 'TASK') {
+        // Task requirement: Member must have completed a specific task
+        // Check both general member tasks (PL_MemberTaskCredit) and ES member tasks (MbrTasks)
+        let hasTask = (_rawData.memberTasks || []).some(mt =>
+          mt.CAPID === capid &&
+          mt.TaskID === prereq.taskID &&
+          mt.StatusID === '8' // Completed/Active
+        );
+
+        // Also check ES member tasks (esMbrTasks) for ES-specific tasks
+        if (!hasTask) {
+          hasTask = (_rawData.esMbrTasks || []).some(mt =>
+            String(mt.CAPID || '').trim() === String(capid || '').trim() &&
+            String(mt.TaskID || '').trim() === String(prereq.taskID || '').trim() &&
+            String(mt.Status || '').toUpperCase() === 'ACTIVE'
+          );
+        }
+
+        // Special case: ICS 100 requirement (TaskID 131) can also be satisfied by IS-100 course (AchvID 176)
+        if (!hasTask && prereq.taskID === '131') {
+          const hasIS100 = (_rawData.esMbrAchievements || []).some(a =>
+            a.CAPID === capid &&
+            a.AchvID === '176' && // IS-100 achievement ID
+            String(a.Status || '').toUpperCase() === 'ACTIVE'
+          );
+          hasTask = hasIS100;
+        }
+
+        if (!hasTask) {
+          const taskDef = (_rawConfig.esTasks || _rawConfig.tasks || []).find(t =>
+            String(t.TaskID || '').trim() === String(prereq.taskID || '').trim()
+          );
+          missing.push(taskDef ? taskDef.TaskName : `Task ${prereq.taskID}`);
+        } else {
+          const taskDef = (_rawConfig.esTasks || _rawConfig.tasks || []).find(t =>
+            String(t.TaskID || '').trim() === String(prereq.taskID || '').trim()
+          );
+          satisfiedPrereqs.push(taskDef ? taskDef.TaskName : `Task ${prereq.taskID}`);
+        }
+      } else if (prereq.type === 'OR_WITH_CROSS_TRAINING') {
+        // Complex OR: One of the options plus cross-training requirements
+        const hasAny = prereq.options.some(option => {
+          const hasMain = (_rawData.esMbrAchievements || []).some(a =>
+            a.CAPID === capid &&
+            a.AchvID === option.achvID &&
+            String(a.Status || '').toUpperCase() === 'ACTIVE'
+          );
+          if (!hasMain) return false;
+
+          // Check cross-training requirements
+          const hasCrossTraining = option.crossTraining.some(ctID =>
+            (_rawData.esMbrAchievements || []).some(a =>
+              a.CAPID === capid &&
+              a.AchvID === ctID &&
+              String(a.Status || '').toUpperCase() === 'ACTIVE'
+            )
+          );
+          return hasCrossTraining;
+        });
+        if (!hasAny) {
+          missing.push('Cross-training requirement');
+        } else {
+          satisfiedPrereqs.push('Cross-training');
+        }
+      }
+    });
+
+    return {
+      eligible: missing.length === 0,
+      missing: missing,
+      satisfiedPrereqs: satisfiedPrereqs
+    };
+  };
+
+  // ES Helper: Check eligibility for a qualification
+  const checkESQualificationEligibility = (achvID, member) => {
+    const capid = member.CAPID;
+
+    // Check special prerequisite cases first
+    const specialCheck = checkSpecialPrerequisites(achvID, member);
+    if (!specialCheck.eligible) {
+      return {
+        eligible: false,
+        reasons: specialCheck.missing,
+        prereqTree: null
+      };
+    }
+
+    // Get prerequisite tree
+    const prereqTree = buildESPrerequisiteTree(achvID);
+
+    // Build list of achievement IDs that are handled by special cases
+    // These should be excluded from tree-based checking to avoid duplicates
+    const specialCase = ES_PREREQUISITE_SPECIAL_CASES[achvID];
+    const specialCaseAchvIDs = new Set();
+    if (specialCase && specialCase.specialPrereqs) {
+      specialCase.specialPrereqs.forEach(prereq => {
+        if (prereq.type === 'CONDITIONAL_MEMBER_TYPE') {
+          // Both senior and cadet achievement IDs are handled by special case
+          specialCaseAchvIDs.add(prereq.senior);
+          specialCaseAchvIDs.add(prereq.cadet);
+        }
+      });
+    }
+
+    // Check if all prerequisites are met
+    const checkPrereqs = (node) => {
+      if (!node) return { eligible: true, missing: [] };
+
+      // Skip if this is a repeated node (already shown above in tree)
+      if (node.note) {
+        return { eligible: true, missing: [] };
+      }
+
+      // Skip if this achievement is handled by special case logic
+      if (specialCaseAchvIDs.has(node.achvID)) {
+        return { eligible: true, missing: [] };
+      }
+
+      // SPECIAL HANDLING: Achievement 1 (Curry) vs Level 1
+      // Achievement 1 (ID '95') is for cadets, Level 1 (ID '96') is for seniors
+      // These are equivalent prerequisites but for different member types
+      const memberType = String(member.Type || member.TYPE || '').toUpperCase();
+      const isCadet = memberType === 'CADET';
+      const isSenior = !isCadet;
+
+      if (node.achvID === '95' || node.achvID === '96') {
+        // '95' = Achievement 1 (Curry) for cadets
+        // '96' = Level 1 for seniors
+
+        if (isSenior) {
+          // For senior members, check Level 1 completion in seniorLevels (E&T data)
+          let hasLevel1 = (_rawData.seniorLevels || []).some(sl =>
+            sl.CAPID === capid &&
+            sl.Lvl === 'LV1' &&
+            sl.Completed && sl.Completed !== '01/01/1900'
+          );
+
+          // Also check memberPaths for Level 1 completion
+          if (!hasLevel1) {
+            const level1Path = (_rawConfig.paths || []).find(p =>
+              (p.PathName || '').includes('Level 1')
+            );
+
+            if (level1Path) {
+              hasLevel1 = (_rawData.memberPaths || []).some(mp =>
+                mp.CAPID === capid &&
+                mp.PathID === level1Path.PathID &&
+                mp.StatusID === '8' // Approved/Completed
+              );
+            }
+          }
+
+          if (!hasLevel1 && node.achvID !== achvID) {
+            return { eligible: false, missing: ['Level 1'] };
+          }
+        } else {
+          // For cadets, check Achievement 1 in esMbrAchievements
+          const hasAchv1 = (_rawData.esMbrAchievements || []).some(a =>
+            a.CAPID === capid &&
+            a.AchvID === '95' &&
+            String(a.Status || '').toUpperCase() === 'ACTIVE'
+          );
+
+          if (!hasAchv1 && node.achvID !== achvID) {
+            return { eligible: false, missing: ['Achievement 1 (Curry)'] };
+          }
+        }
+      } else {
+        // Regular achievement checking
+        const hasQual = (_rawData.esMbrAchievements || []).some(a =>
+          a.CAPID === capid &&
+          a.AchvID === node.achvID &&
+          String(a.Status || '').toUpperCase() === 'ACTIVE'
+        );
+
+        if (!hasQual && node.achvID !== achvID) {
+          return { eligible: false, missing: [node.name] };
+        }
+      }
+
+      // Recursively check prerequisites
+      const missing = [];
+      node.prerequisites.forEach(prereq => {
+        const result = checkPrereqs(prereq);
+        if (!result.eligible) {
+          missing.push(...result.missing);
+        }
+      });
+
+      return {
+        eligible: missing.length === 0,
+        missing: missing
+      };
+    };
+
+    const result = checkPrereqs(prereqTree);
+
+    return {
+      eligible: result.eligible,
+      reasons: result.missing,
+      prereqTree: prereqTree
+    };
+  };
+
+  // ES Helper: Get all ES achievement definitions
+  const getAllESAchievements = () => {
+    return _rawConfig.esAchievements || [];
+  };
+
+  // Public API
+  return {
+    // Core ES functions
+    buildESQualifications,
+    buildESPrerequisiteTree,
+    getESAchievementTasks,
+    checkESQualificationEligibility,
+    getAllESAchievements
+  };
+}
+</script>

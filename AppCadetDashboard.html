@@ -1,0 +1,531 @@
+<script type="text/babel">
+function CadetDashboard(props) {
+  const {
+    phaseFilter, setPhaseFilter, cadetSearchQuery, setCadetSearchQuery,
+    cadetData, setSelectedCadetProfile, selectedCadetProfile,
+    setSelectedMemberProfile, processedCadets, searchQuery, filterStatus,
+    setFilterStatus, filters, toggleFilter, setFilters, showCadetFilters,
+    setShowCadetFilters, getRankInsigniaUrl, getAchievementDisplayName,
+    filterPhase, setFilterPhase, filter90Days, setFilter90Days, isMobile,
+    activeFilterMenu, setActiveFilterMenu, dutySearchQuery, setDutySearchQuery,
+    setSelectedCadet, selectedCadet, CADET_ACHIEVEMENT_TO_RANK, dataFiles, cadetDataService,
+    getCadetProtectionStatus
+  } = props;
+
+  // Cadet duty position ranking for ordering
+  const CADET_DUTY_RANK = {
+    'CADET COMMANDER': 1,
+    'CADET DEPUTY COMMANDER FOR OPERATIONS': 2,
+    'CADET DEPUTY COMMANDER FOR SUPPORT': 3,
+    'CADET FIRST SERGEANT': 4,
+    'CADET FLIGHT COMMANDER': 5,
+    'CADET FLIGHT SERGEANT': 6,
+    'CADET ADMINISTRATIVE OFFICER': 10,
+    'CADET PUBLIC AFFAIRS OFFICER': 11,
+    'CADET COMMUNICATIONS OFFICER': 12,
+    'CADET SUPPLY OFFICER': 13,
+    'CADET SAFETY OFFICER': 14,
+    'CADET ELEMENT LEADER': 20
+  };
+
+  const getDutyRank = (dutyName) => {
+    const normalizedDuty = (dutyName || '').toUpperCase().trim();
+    return CADET_DUTY_RANK[normalizedDuty] || 99;
+  };
+
+  const TRAINING_INDICATOR_STYLES = {
+    good: 'border-l-4 border-l-transparent',
+    warn: 'border-l-4 border-l-amber-400',
+    bad: 'border-l-4 border-l-rose-500',
+    none: 'border-l-4 border-l-transparent'
+  };
+
+  const TRAINING_TONE_SEVERITY = { bad: 3, warn: 2, good: 1, none: 0 };
+
+  const getTrainingIndicatorSummary = (cadetProtectionStatus) => {
+    const indicators = [];
+    if (cadetProtectionStatus && cadetProtectionStatus.indicator && cadetProtectionStatus.indicator.tone !== 'none') {
+      indicators.push({
+        id: 'cp',
+        tone: cadetProtectionStatus.indicator?.tone || 'none',
+        title: cadetProtectionStatus.indicator?.title || 'Cadet Protection'
+      });
+    }
+
+    if (indicators.length === 0) {
+      return { tone: 'none', title: 'Training: Not required', indicators: [] };
+    }
+
+    const worst = indicators.reduce((current, item) => (
+      (TRAINING_TONE_SEVERITY[item.tone] || 0) > (TRAINING_TONE_SEVERITY[current.tone] || 0) ? item : current
+    ), indicators[0]);
+
+    return {
+      tone: worst.tone,
+      title: indicators.map(item => item.title).join('\n'),
+      indicators
+    };
+  };
+
+  const sortedCadets = [...processedCadets].sort((a, b) => (a.NameLast || '').localeCompare(b.NameLast || ''));
+  const promotionReady = processedCadets.filter(c => c.promotionStatus && c.promotionStatus.status === 'READY').length;
+  const nearlyReady = processedCadets.filter(c => c.promotionStatus && (c.promotionStatus.status === 'NEARLY_READY' || c.promotionStatus.status === 'TIME_PENDING')).length;
+  const totalHonorCredits = processedCadets.reduce((sum, c) => sum + (c.honorCreditAchievements?.length || 0), 0);
+
+  // Get unique cadet ranks and duty positions for filters
+  const uniqueRanks = [...new Set(sortedCadets.map(c => c.currentRank))].filter(Boolean).sort();
+  const uniqueDuties = [...new Set(sortedCadets.flatMap(c => c.cadetDuties?.map(d => d.name) || []))].filter(Boolean).sort();
+
+  // Apply filters
+  let filteredCadets = sortedCadets;
+
+  // Search filter
+  if (searchQuery) {
+    const search = searchQuery.toLowerCase();
+    filteredCadets = filteredCadets.filter(c => {
+      const nameMatch = ((c.NameLast || '') + (c.NameFirst || '') + (c.CAPID || '')).toLowerCase().includes(search);
+      const rankMatch = (c.currentRank || '').toLowerCase().includes(search);
+      const dutyMatch = (c.cadetDuties || []).some(d => (d.name || '').toLowerCase().includes(search));
+      return nameMatch || rankMatch || dutyMatch;
+    });
+  }
+
+  // Status filter
+  if (filterStatus !== 'ALL') {
+    filteredCadets = filteredCadets.filter(c => c.promotionStatus && c.promotionStatus.status === filterStatus);
+  }
+
+  // Rank filter (using filters.ranks from state)
+  if (filters.ranks.length > 0) {
+    filteredCadets = filteredCadets.filter(c => filters.ranks.includes(c.currentRank));
+  }
+
+  // Duty filter (using filters.duties from state)
+  if (filters.duties.length > 0) {
+    filteredCadets = filteredCadets.filter(c => {
+      return (c.cadetDuties || []).some(d => {
+        const cleanDuty = (d.name || '').toUpperCase().trim();
+        return filters.duties.some(filterDuty => cleanDuty.includes(filterDuty.toUpperCase()));
+      });
+    });
+  }
+
+  // Phase filter
+  if (filterPhase !== null) {
+    filteredCadets = filteredCadets.filter(c => c.phase === filterPhase);
+  }
+
+  // 90+ days without promotion filter
+  if (filter90Days) {
+    filteredCadets = filteredCadets.filter(c => c.timeInGrade?.days >= 90);
+  }
+
+  // Calculate stats for filtered results
+  const filteredStats = {
+    total: filteredCadets.length,
+    ready: filteredCadets.filter(c => c.promotionStatus?.status === 'READY').length,
+    nearlyReady: filteredCadets.filter(c => c.promotionStatus && (c.promotionStatus.status === 'NEARLY_READY' || c.promotionStatus.status === 'TIME_PENDING')).length,
+    honorCredits: filteredCadets.reduce((sum, c) => sum + (c.honorCreditAchievements?.length || 0), 0),
+    days90Plus: filteredCadets.filter(c => c.timeInGrade?.days >= 90).length,
+    phases: {
+      1: filteredCadets.filter(c => c.phase === 1).length,
+      2: filteredCadets.filter(c => c.phase === 2).length,
+      3: filteredCadets.filter(c => c.phase === 3).length,
+      4: filteredCadets.filter(c => c.phase === 4).length,
+      5: filteredCadets.filter(c => c.phase === 5).length,
+    }
+  };
+
+  const cadetProtectionStats = (() => {
+    if (!getCadetProtectionStatus) return null;
+    let requiredMembers = 0;
+    let compliant = 0;
+    let dueSoon = 0;
+    let overdue = 0;
+    let missing = 0;
+
+    filteredCadets.forEach(cadet => {
+      const status = getCadetProtectionStatus(cadet);
+      if (!status || status.requiredCourses.length === 0) return;
+      requiredMembers += 1;
+      if (status.isCompliant) {
+        compliant += 1;
+        if (status.indicator?.status === 'due-soon') {
+          dueSoon += 1;
+        }
+      } else if (status.indicator?.status === 'overdue') {
+        overdue += 1;
+      } else {
+        missing += 1;
+      }
+    });
+
+    const percent = requiredMembers ? Math.round((compliant / requiredMembers) * 100) : 100;
+    return {
+      requiredMembers,
+      compliant,
+      dueSoon,
+      overdue,
+      missing,
+      nonCompliant: requiredMembers - compliant,
+      percent
+    };
+  })();
+
+  const activeFiltersCount = filters.ranks.length + filters.duties.length + (filterStatus !== 'ALL' ? 1 : 0) + (filterPhase !== null ? 1 : 0) + (filter90Days ? 1 : 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Compact Toolbar - Similar to Senior Dashboard */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between">
+        {/* Filters Row */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase">Filters:</span>
+            <button
+              onClick={() => setShowCadetFilters(v => !v)}
+              className="text-xs px-2 py-1 rounded border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+            >
+              {showCadetFilters ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={() => {
+                setFilters({ ...filters, ranks: [], duties: [] });
+                setFilterStatus('ALL');
+                setFilterPhase(null);
+                setFilter90Days(false);
+              }}
+              className="text-xs text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap"
+            >
+              Reset All
+            </button>
+          )}
+
+          {showCadetFilters && (
+            <>
+              {/* Status Filter */}
+              <FilterButton label="Promotion Status" active={activeFilterMenu === 'cadetStatus'} onClick={() => setActiveFilterMenu(activeFilterMenu === 'cadetStatus' ? null : 'cadetStatus')}>
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 px-2">Status</div>
+                {['ALL', 'READY', 'TIME_PENDING', 'NEARLY_READY', 'IN_PROGRESS', 'NOT_STARTED'].map(status => (
+                  <div
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`px-2 py-1.5 rounded cursor-pointer flex justify-between items-center text-xs ${
+                      filterStatus === status ? 'bg-blue-50 text-blue-600 font-medium' : 'hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    {status.replace('_', ' ')} {filterStatus === status && <Icon name="Check" className="w-3 h-3 text-blue-600 inline-block" />}
+                  </div>
+                ))}
+              </FilterButton>
+
+              {/* Rank Filter */}
+              <FilterButton label="Cadet Rank" active={activeFilterMenu === 'cadetRank'} onClick={() => setActiveFilterMenu(activeFilterMenu === 'cadetRank' ? null : 'cadetRank')}>
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 px-2">Cadet Ranks</div>
+                <div className="max-h-48 overflow-y-auto">
+                  {uniqueRanks.map(rank => (
+                    <div
+                      key={rank}
+                      onClick={() => toggleFilter('ranks', rank)}
+                      className={`px-2 py-1.5 rounded cursor-pointer flex justify-between items-center text-xs ${
+                        filters.ranks.includes(rank) ? 'bg-blue-50 text-blue-600 font-medium' : 'hover:bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      {rank} {filters.ranks.includes(rank) && <Icon name="Check" className="w-3 h-3 text-blue-600 inline-block" />}
+                    </div>
+                  ))}
+                </div>
+              </FilterButton>
+
+              {/* Duty Position Filter */}
+              <FilterButton label="Duty Position" active={activeFilterMenu === 'cadetDuty'} onClick={() => setActiveFilterMenu(activeFilterMenu === 'cadetDuty' ? null : 'cadetDuty')}>
+                <div className="sticky top-0 bg-white z-10 pb-2 border-b border-slate-200 mb-2">
+                  <input
+                    type="text"
+                    placeholder="Search duties..."
+                    value={dutySearchQuery}
+                    onChange={(e) => setDutySearchQuery(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
+                  />
+                </div>
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 px-2">Cadet Positions</div>
+                <div className="max-h-48 overflow-y-auto">
+                  {uniqueDuties.filter(d => d.toLowerCase().includes(dutySearchQuery.toLowerCase())).map(duty => (
+                    <div
+                      key={duty}
+                      onClick={() => toggleFilter('duties', duty)}
+                      className={`px-2 py-1.5 rounded cursor-pointer flex justify-between items-center text-xs ${
+                        filters.duties.includes(duty) ? 'bg-indigo-50 text-indigo-600 font-medium' : 'hover:bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      {duty} {filters.duties.includes(duty) && <Icon name="Check" className="w-3 h-3 text-indigo-600 inline-block" />}
+                    </div>
+                  ))}
+                </div>
+              </FilterButton>
+            </>
+          )}
+
+          {/* Active filter pills */}
+          {filterStatus !== 'ALL' && (
+            <span
+              onClick={() => setFilterStatus('ALL')}
+              className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full cursor-pointer hover:bg-blue-200 flex items-center text-xs whitespace-nowrap"
+            >
+              {filterStatus.replace('_', ' ')} <span className="ml-1">x</span>
+            </span>
+          )}
+          {filterPhase !== null && (
+            <span
+              onClick={() => setFilterPhase(null)}
+              className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full cursor-pointer hover:bg-blue-200 flex items-center text-xs whitespace-nowrap"
+            >
+              Phase {filterPhase} <span className="ml-1">x</span>
+            </span>
+          )}
+          {filter90Days && (
+            <span
+              onClick={() => setFilter90Days(false)}
+              className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full cursor-pointer hover:bg-orange-200 flex items-center text-xs whitespace-nowrap"
+            >
+              90+ Days <span className="ml-1">x</span>
+            </span>
+          )}
+          {filters.ranks.map(r => (
+            <span
+              key={r}
+              onClick={() => toggleFilter('ranks', r)}
+              className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full cursor-pointer hover:bg-blue-200 flex items-center text-xs whitespace-nowrap"
+            >
+              {r} <span className="ml-1">x</span>
+            </span>
+          ))}
+          {filters.duties.map(d => (
+            <span
+              key={d}
+              onClick={() => toggleFilter('duties', d)}
+              className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full cursor-pointer hover:bg-indigo-200 flex items-center text-xs whitespace-nowrap"
+            >
+              {d.length > 20 ? d.substring(0, 20) + '...' : d} <span className="ml-1">x</span>
+            </span>
+          ))}
+        </div>
+
+        {/* Statistics Row */}
+        <div className="flex flex-wrap justify-center gap-4 text-sm flex-1">
+          <div className="flex flex-col items-center leading-tight">
+            <span className="font-bold text-xl text-slate-800">{filteredStats.total}</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
+          </div>
+          <div className="h-8 w-px bg-slate-100"></div>
+          <div
+            onClick={() => setFilterStatus(filterStatus === 'READY' ? 'ALL' : 'READY')}
+            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filterStatus === 'READY' ? 'bg-green-50' : 'hover:bg-slate-50'}`}
+          >
+            <span className="font-bold text-xl text-green-600 flex items-center">
+              {filteredStats.ready} {filterStatus === 'READY' && <Icon name="Check" className="w-3 h-3 ml-1" />}
+            </span>
+            <span className="text-[10px] uppercase font-bold text-slate-400">Ready</span>
+          </div>
+          <div
+            onClick={() => setFilterStatus(filterStatus === 'NEARLY_READY' ? 'ALL' : 'NEARLY_READY')}
+            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filterStatus === 'NEARLY_READY' ? 'bg-amber-50' : 'hover:bg-slate-50'}`}
+          >
+            <span className="font-bold text-xl text-amber-600 flex items-center">
+              {filteredStats.nearlyReady} {filterStatus === 'NEARLY_READY' && <Icon name="Check" className="w-3 h-3 ml-1" />}
+            </span>
+            <span className="text-[10px] uppercase font-bold text-slate-400">Close</span>
+          </div>
+          <div
+            onClick={() => setFilter90Days(!filter90Days)}
+            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filter90Days ? 'bg-orange-50' : 'hover:bg-slate-50'}`}
+          >
+            <span className="font-bold text-xl text-orange-600 flex items-center">
+              {filteredStats.days90Plus} {filter90Days && <Icon name="Check" className="w-3 h-3 ml-1" />}
+            </span>
+            <span className="text-[10px] uppercase font-bold text-slate-400">90+ Days</span>
+          </div>
+          <div className="flex flex-col items-center leading-tight cursor-help group relative">
+            <span className="font-bold text-xl text-purple-600">{filteredStats.honorCredits}</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400">Honor ⭐</span>
+            <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 max-w-xs bg-slate-800 text-white text-xs rounded py-2 px-3 shadow-lg">
+              <div className="font-bold mb-1">Total Honor Credits Earned</div>
+              <div className="text-[10px] opacity-90">Honor credit earned when PL_MemberPathCredit shows ExtraCreditEarned.CreditEarned = true for the achievement</div>
+            </div>
+          </div>
+          {cadetProtectionStats && (
+            <div className="flex flex-col items-center leading-tight cursor-help group relative" title="Cadet Protection Compliance">
+              <span className={`font-bold text-xl ${
+                cadetProtectionStats.nonCompliant > 0 ? 'text-rose-600' :
+                cadetProtectionStats.dueSoon > 0 ? 'text-amber-600' :
+                'text-emerald-600'
+              }`}>
+                {cadetProtectionStats.percent}%
+              </span>
+              <span className="text-[10px] uppercase font-bold text-slate-400">CP Compliant</span>
+              <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1 px-2 shadow-lg">
+                Compliant: {cadetProtectionStats.compliant} / {cadetProtectionStats.requiredMembers}
+                <div className="text-[10px] text-slate-300 mt-1 pt-1 border-t border-slate-600">
+                  Due Soon: {cadetProtectionStats.dueSoon} | Overdue: {cadetProtectionStats.overdue} | Missing: {cadetProtectionStats.missing}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="h-8 w-px bg-slate-100"></div>
+          {/* Phase Distribution */}
+          <div className="flex gap-2 items-center">
+            <span className="text-[9px] uppercase font-bold text-slate-400">Phases:</span>
+            <div className="flex gap-1.5 items-center">
+              {[1, 2, 3, 4, 5].map(phase => (
+                <div
+                  key={phase}
+                  onClick={() => setFilterPhase(filterPhase === phase ? null : phase)}
+                  className={`flex flex-col items-center cursor-pointer group transition-all ${filterPhase === phase ? 'scale-110' : ''}`}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm ${
+                    filterPhase === phase ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-blue-500 group-hover:bg-blue-600'
+                  }`}>
+                    {filteredStats.phases[phase] || 0}
+                  </div>
+                  <span className={`text-[9px] font-bold mt-0.5 ${
+                    filterPhase === phase ? 'text-blue-700' : 'text-slate-300 group-hover:text-slate-500'
+                  }`}>{['I', 'II', 'III', 'IV', 'V'][phase - 1]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Cadets Grid */}
+      {filteredCadets.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
+          <p className="text-slate-400 italic">No cadets found with selected filters.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {filteredCadets.map((cadet) => {
+            // Sort and limit duty positions
+            const sortedDuties = [...(cadet.cadetDuties || [])].sort((a, b) => {
+              const rankA = getDutyRank(a.name);
+              const rankB = getDutyRank(b.name);
+              return rankA - rankB;
+            });
+            const displayDuties = sortedDuties.slice(0, 3);
+            const hiddenDutiesCount = Math.max(0, sortedDuties.length - 3);
+            const cadetProtection = getCadetProtectionStatus ? getCadetProtectionStatus(cadet) : null;
+            const trainingIndicator = getTrainingIndicatorSummary(cadetProtection);
+            const trainingIndicatorClass = TRAINING_INDICATOR_STYLES[trainingIndicator.tone] || TRAINING_INDICATOR_STYLES.none;
+            const showCadetProtectionAlert = cadetProtection && cadetProtection.requiredCourses.length > 0 && !cadetProtection.isCompliant;
+            const cpStatus = showCadetProtectionAlert ? (cadetProtection.indicator?.status || 'missing') : null;
+            const cpTone = showCadetProtectionAlert ? (cadetProtection.indicator?.tone || 'bad') : null;
+            const cpBadgeClass = cpTone === 'warn'
+              ? 'bg-amber-100 text-amber-700 border-amber-200'
+              : 'bg-rose-100 text-rose-700 border-rose-200';
+            const cpStatusLabelMap = { overdue: 'Overdue', missing: 'Missing', 'due-soon': 'Due Soon' };
+            const cpBadgeText = cpStatusLabelMap[cpStatus] ? `CP: ${cpStatusLabelMap[cpStatus]}` : 'CP: Needs Attention';
+
+            return (
+              <div key={cadet.CAPID} className="cursor-pointer" onClick={() => setSelectedCadet(cadet)}>
+                {/* Redesigned Cadet Card */}
+                <div className={`border rounded-lg p-4 bg-white hover:shadow-md transition-shadow ${
+                  cadet.promotionStatus?.status === 'READY' ? 'border-green-200 bg-green-50' : 'border-slate-200'
+                } ${trainingIndicatorClass}`} title={trainingIndicator.title}>
+                  <div className="flex items-center gap-3 mb-3">
+                    {/* Left: Rank Image and Rank */}
+                    <div className="flex flex-col items-center shrink-0">
+                      {getRankInsigniaUrl(cadet.currentAchievement) && (
+                        <img
+                          src={getRankInsigniaUrl(cadet.currentAchievement)}
+                          alt={cadet.currentRank}
+                          className="h-12 w-auto object-contain"
+                        />
+                      )}
+                      <span className="text-[10px] font-bold text-slate-600 mt-1 text-center">{cadet.currentRank}</span>
+                    </div>
+
+                    {/* Left-Center: Name and Basic Info */}
+                    <div className="flex flex-col min-w-0 shrink-0">
+                      <h3 className="font-bold text-slate-900 truncate">{cadet.NameLast}, {cadet.NameFirst}</h3>
+                      <p className="text-xs text-slate-500 font-mono">CAPID: {cadet.CAPID}</p>
+                      {cadet.timeInGrade && (
+                        <p className={`text-xs font-semibold ${cadet.timeInGrade.isEligible ? 'text-green-600' : 'text-slate-600'}`}>
+                          Eligible: {cadet.timeInGrade.eligibleDate || 'N/A'}
+                          {cadet.timeInGrade.isEligible && ' ✓'}
+                          {cadet.timeInGrade.days >= 90 && (
+                            <span className="ml-1 inline-flex items-center" title="90+ days since last promotion">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Center-Right: Duty Positions */}
+                    {!isMobile && displayDuties.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 flex-1 min-w-0 items-center">
+                        {displayDuties.map((duty, idx) => (
+                          <Badge
+                            key={idx}
+                            color="gray"
+                            title={`${duty.orgString || 'Unknown'} - Assigned: ${duty.date || 'Unknown'}`}
+                          >
+                            {duty.name}
+                          </Badge>
+                        ))}
+                        {hiddenDutiesCount > 0 && (
+                          <span className="text-xs text-blue-600 font-semibold px-2 py-1 bg-blue-50 rounded border border-blue-200">
+                            +{hiddenDutiesCount} more
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {isMobile && displayDuties.length > 0 && (
+                      <div className="text-[11px] text-slate-600 font-medium ml-auto">
+                        Duties: {displayDuties.map(d => d.name).join(', ')}
+                        {hiddenDutiesCount > 0 && ` +${hiddenDutiesCount} more`}
+                      </div>
+                    )}
+
+                    {/* Right: Status Badge */}
+                    <div className="shrink-0 ml-auto flex flex-col items-end gap-1">
+                      {showCadetProtectionAlert && (
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${cpBadgeClass}`}>
+                          {cpBadgeText}
+                        </span>
+                      )}
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap ${
+                        cadet.promotionStatus?.status === 'READY' ? 'bg-green-100 text-green-700' :
+                        cadet.promotionStatus?.status === 'TIME_PENDING' ? 'bg-amber-100 text-amber-700' :
+                        cadet.promotionStatus?.status === 'NEARLY_READY' ? 'bg-blue-100 text-blue-700' :
+                        'bg-slate-100 text-slate-600'
+                      }`}>
+                        {cadet.promotionStatus?.message || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Next Achievement Progress */}
+                  {cadet.nextRequirements && (
+                    <div className="border-t border-slate-100 pt-3 mt-3">
+                      <div className="text-xs font-medium text-slate-700 mb-2">
+                        Next: {getAchievementDisplayName(cadet.nextAchievement)}
+                      </div>
+                      <ComponentProgressBar requirements={cadet.nextRequirements} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* All modals are now rendered at app level in Index.html */}
+    </div>
+  );
+}
+</script>

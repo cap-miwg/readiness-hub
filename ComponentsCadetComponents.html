@@ -1,0 +1,753 @@
+<script type="text/babel">
+const ComponentProgressBar = ({ requirements }) => {
+  if (!requirements || !requirements.requirements) return null;
+
+  const reqEntries = Object.entries(requirements.requirements);
+
+  // Define requirement categories with consistent colors and priority order
+  // Order: Leadership, D&C, Aerospace, Fitness, Character, Special Activity
+  const categoryMap = {
+    // Hard requirements - Leadership (priority 1)
+    leadershipTest: { short: 'Leadership', full: 'Leadership Test', color: 'bg-purple-500', priority: 1, type: 'hard' },
+    wrightBrothersLeadershipExam: { short: 'Leadership', full: 'Wright Bros Leadership', color: 'bg-purple-500', priority: 1, type: 'hard' },
+    mitchellLeadershipExam: { short: 'Leadership', full: 'Mitchell Leadership', color: 'bg-purple-500', priority: 1, type: 'hard' },
+    earhartLeadershipExam: { short: 'Leadership', full: 'Earhart Leadership', color: 'bg-purple-500', priority: 1, type: 'hard' },
+    spaatzLeadershipExam: { short: 'Leadership', full: 'Spaatz Leadership', color: 'bg-purple-500', priority: 1, type: 'hard' },
+
+    // Hard requirements - Drill & Ceremonies (priority 2)
+    drillTest: { short: 'D&C', full: 'Drill & Ceremonies', color: 'bg-rose-500', priority: 2, type: 'hard' },
+
+    // Hard requirements - Aerospace (priority 3)
+    aerospaceTest: { short: 'Aerospace', full: 'Aerospace Test', color: 'bg-indigo-500', priority: 3, type: 'hard' },
+    mitchellAerospaceExam: { short: 'Aerospace', full: 'Mitchell Aerospace', color: 'bg-indigo-500', priority: 3, type: 'hard' },
+    spaatzJOFExam: { short: 'Aerospace', full: 'Journey of Flight', color: 'bg-indigo-500', priority: 3, type: 'hard' },
+
+    // Hard requirements - Fitness (priority 4)
+    physicalFitness: { short: 'Fitness', full: 'Physical Fitness', color: 'bg-green-500', priority: 4, type: 'hard' },
+    spaatzCFA: { short: 'Fitness', full: 'CFA', color: 'bg-green-500', priority: 4, type: 'hard' },
+
+    // Character development - manual checkboxes (priority 5, lower priority than hard requirements)
+    cadetOath: { short: 'Oath', full: 'Oath', color: 'bg-amber-500', priority: 5, type: 'manual' },
+    activeParticipation: { short: 'Active', full: 'Active', color: 'bg-amber-500', priority: 5, type: 'manual' },
+    characterDevelopment: { short: 'Forum', full: 'Character Development', color: 'bg-amber-500', priority: 5, type: 'manual' },
+
+    // Special activities (priority 6, only shown if required)
+    cadetWingmanCourse: { short: 'Wingman', full: 'Cadet Wingman Course', color: 'bg-teal-500', priority: 6, type: 'special' },
+    encampment: { short: 'Encampment', full: 'Encampment', color: 'bg-teal-500', priority: 6, type: 'special' },
+    cls: { short: 'CLS', full: 'Cadet Leadership School', color: 'bg-teal-500', priority: 6, type: 'special' },
+    leadershipExpectations: { short: 'Expect', full: 'Leadership Expectations', color: 'bg-amber-500', priority: 5, type: 'manual' },
+    leadershipFeedback: { short: 'Feedback', full: 'Leadership Feedback', color: 'bg-amber-500', priority: 5, type: 'manual' },
+    uniformWear: { short: 'Uniform', full: 'Uniform', color: 'bg-amber-500', priority: 5, type: 'manual' },
+    eakerSpeech: { short: 'Speech', full: 'Speech', color: 'bg-orange-500', priority: 6, type: 'special' },
+    eakerEssay: { short: 'Essay', full: 'Essay', color: 'bg-orange-600', priority: 6, type: 'special' },
+    spaatzEssay: { short: 'Essay', full: 'Spaatz Essay', color: 'bg-orange-600', priority: 6, type: 'special' },
+
+    // Staff Duty Analysis (post-Billy Mitchell requirement) - three parts
+    sdaService: { short: 'Service', full: 'SDA: Service', color: 'bg-cyan-500', priority: 2.5, type: 'hard' },
+    sdaPresentation: { short: 'Present', full: 'SDA: Presentation', color: 'bg-cyan-600', priority: 2.5, type: 'hard' },
+    sdaWriting: { short: 'Writing', full: 'SDA: Writing', color: 'bg-cyan-700', priority: 2.5, type: 'hard' }
+  };
+
+  // Sort requirements by priority order
+  const sortedReqs = reqEntries
+    .map(([key, req]) => ({
+      key,
+      req,
+      category: categoryMap[key] || { short: key.slice(0, 4), full: key, color: 'bg-slate-500', priority: 99, type: 'other' }
+    }))
+    .sort((a, b) => a.category.priority - b.category.priority);
+
+  const totalCount = sortedReqs.length;
+  const completedCount = sortedReqs.filter(item => item.req.completed).length;
+
+  return (
+    <div className="space-y-1.5">
+      {/* Progress indicator */}
+      <div className="flex justify-between items-center text-xs font-medium text-slate-600">
+        <span>{completedCount} of {totalCount} completed</span>
+        <span className="text-slate-500">{Math.round((completedCount / totalCount) * 100)}%</span>
+      </div>
+
+      {/* Segmented progress bar with labels */}
+      <div className="space-y-0.5">
+        <div className="flex gap-0.5 h-4 rounded overflow-hidden border border-slate-200 bg-slate-100">
+          {sortedReqs.map(({ key, req, category }) => {
+            const isCompleted = req.completed;
+            const completedClass = isCompleted ? category.color : 'bg-slate-200';
+            const widthPercent = (1 / totalCount) * 100;
+
+            return (
+              <div
+                key={key}
+                className={`relative flex items-center justify-center transition-all group cursor-default ${completedClass}`}
+                style={{ width: `${widthPercent}%` }}
+                title={req.label}
+              >
+                {/* Checkmark for completed */}
+                {isCompleted && (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                )}
+
+                {/* Tooltip on hover */}
+                <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max max-w-xs bg-slate-800 text-white text-xs rounded py-2 px-3 shadow-lg pointer-events-none">
+                  <div className="font-bold mb-0.5">{category.full}</div>
+                  <div className="text-slate-300">{req.value || (isCompleted ? 'Completed' : 'Not completed')}</div>
+                  <div className={`mt-1 text-xs ${isCompleted ? 'text-green-300' : 'text-amber-300'}`}>
+                    {isCompleted ? '✓ Completed' : '○ Pending'}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Labels directly below each segment */}
+        <div className="flex gap-0.5">
+          {sortedReqs.map(({ key, req, category }) => {
+            const isCompleted = req.completed;
+            const widthPercent = (1 / totalCount) * 100;
+
+            return (
+              <div
+                key={`label-${key}`}
+                className="flex items-center justify-center"
+                style={{ width: `${widthPercent}%` }}
+              >
+                <span className={`text-[8px] font-semibold text-center leading-tight ${isCompleted ? 'text-slate-700' : 'text-slate-400'}`}>
+                  {category.short}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Promotion Status Card - Shows current rank, time in grade, and readiness
+const PromotionStatusCard = ({ cadet }) => {
+  const { currentRank, rankDate, currentAchievement, nextAchievement, timeInGrade, promotionStatus, nextRequirements } = cadet;
+
+  const statusColors = {
+    'READY': 'bg-green-50 border-green-200',
+    'TIME_PENDING': 'bg-amber-50 border-amber-200',
+    'NEARLY_READY': 'bg-blue-50 border-blue-200',
+    'IN_PROGRESS': 'bg-slate-50 border-slate-200',
+    'NOT_STARTED': 'bg-slate-50 border-slate-300',
+    'SPAATZ_COMPLETE': 'bg-purple-50 border-purple-200'
+  };
+
+  const statusTextColors = {
+    'READY': 'text-green-700',
+    'TIME_PENDING': 'text-amber-700',
+    'NEARLY_READY': 'text-blue-700',
+    'IN_PROGRESS': 'text-slate-700',
+    'NOT_STARTED': 'text-slate-600',
+    'SPAATZ_COMPLETE': 'text-purple-700'
+  };
+
+  const statusIcons = {
+    'READY': '✓',
+    'TIME_PENDING': '⏱',
+    'NEARLY_READY': '▶',
+    'IN_PROGRESS': '○',
+    'NOT_STARTED': '○',
+    'SPAATZ_COMPLETE': '★'
+  };
+
+  const completionPercent = nextRequirements ? nextRequirements.completionPercent : 0;
+  const nextRank = nextAchievement ? CADET_ACHIEVEMENT_TO_RANK[nextAchievement.toString()] : null;
+
+  return (
+    <div className={`border rounded-lg p-4 ${statusColors[promotionStatus.status]}`}>
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900">{cadet.NameLast}, {cadet.NameFirst}</h3>
+          <p className="text-sm text-slate-600">CAPID: {cadet.CAPID}</p>
+        </div>
+        <div className={`text-2xl ${statusTextColors[promotionStatus.status]}`}>
+          {statusIcons[promotionStatus.status]}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-3">
+        <div>
+          <p className="text-xs text-slate-500 uppercase">Current Rank</p>
+          <div className="flex items-center gap-2">
+            {getRankInsigniaUrl(currentAchievement) && (
+              <img src={getRankInsigniaUrl(currentAchievement)} alt={currentRank} className="h-8 w-auto object-contain" />
+            )}
+            <div>
+              <p className="text-lg font-semibold text-slate-900">{currentRank}</p>
+              <p className="text-xs text-slate-600">{getAchievementDisplayName(currentAchievement)}</p>
+            </div>
+          </div>
+        </div>
+        <div title={rankDate && rankDate !== '01/01/1900' ? `Date of Rank: ${rankDate}` : ''}>
+          <p className="text-xs text-slate-500 uppercase">Promotion Eligible</p>
+          <p className={`text-lg font-semibold ${timeInGrade.isEligible ? 'text-green-600' : 'text-slate-900'}`}>
+            {timeInGrade.eligibleDate || 'N/A'}
+          </p>
+          <p className="text-xs text-slate-600">
+            {timeInGrade.isEligible ? '✓ Eligible now' : `${timeInGrade.days} days (${CADET_TIME_IN_GRADE_DAYS - timeInGrade.days} more needed)`}
+          </p>
+        </div>
+      </div>
+
+      {nextAchievement && nextRank && (
+        <div className="border-t border-slate-200 pt-3 space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-sm font-medium text-slate-700">Next: {getAchievementDisplayName(nextAchievement)} → {nextRank}</p>
+            <span className={`text-xs font-bold px-2 py-1 rounded ${
+              promotionStatus.status === 'READY' ? 'bg-green-100 text-green-700' :
+              promotionStatus.status === 'TIME_PENDING' ? 'bg-amber-100 text-amber-700' :
+              promotionStatus.status === 'NEARLY_READY' ? 'bg-blue-100 text-blue-700' :
+              'bg-slate-100 text-slate-600'
+            }`}>
+              {promotionStatus.message}
+            </span>
+          </div>
+
+          {/* Component-based progress bar */}
+          <ComponentProgressBar requirements={nextRequirements} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Requirements Checklist - Detailed view of promotion requirements
+const RequirementsChecklist = ({ requirements }) => {
+  if (!requirements || !requirements.requirements) return null;
+
+  const reqEntries = Object.entries(requirements.requirements);
+
+  // Category map with priority order (same as progress bar)
+  const categoryMap = {
+    // Hard requirements - Leadership (priority 1)
+    leadershipTest: { priority: 1 },
+    wrightBrothersLeadershipExam: { priority: 1 },
+    mitchellLeadershipExam: { priority: 1 },
+    earhartLeadershipExam: { priority: 1 },
+    spaatzLeadershipExam: { priority: 1 },
+    spaatzJOFExam: { priority: 1 },
+
+    // Hard requirements - D&C and SDA (priority 2)
+    drillTest: { priority: 2 },
+    sdaService: { priority: 2.5 },
+    sdaPresentation: { priority: 2.5 },
+    sdaWriting: { priority: 2.5 },
+
+    // Hard requirements - Aerospace (priority 3)
+    aerospaceTest: { priority: 3 },
+    mitchellAerospaceExam: { priority: 3 },
+
+    // Hard requirements - Fitness (priority 4)
+    physicalFitness: { priority: 4 },
+    spaatzCFA: { priority: 4 },
+
+    // Character development (priority 5)
+    cadetOath: { priority: 5 },
+    activeParticipation: { priority: 5 },
+    characterDevelopment: { priority: 5 },
+
+    // Special activities (priority 6)
+    cadetWingmanCourse: { priority: 6 },
+    encampment: { priority: 6 },
+    cls: { priority: 6 },
+    leadershipExpectations: { priority: 5 },
+    leadershipFeedback: { priority: 5 },
+    uniformWear: { priority: 5 },
+    eakerSpeech: { priority: 6 },
+    eakerEssay: { priority: 6 },
+    spaatzEssay: { priority: 6 },
+
+    // Time in grade (priority 0 - always first)
+    timeInGrade: { priority: 0 }
+  };
+
+  // Sort requirements by priority order
+  const sortedReqs = reqEntries
+    .map(([key, req]) => ({
+      key,
+      req,
+      priority: categoryMap[key] ? categoryMap[key].priority : 99
+    }))
+    .sort((a, b) => a.priority - b.priority);
+
+  return (
+    <div className="space-y-2">
+      {sortedReqs.map(({ key, req }) => (
+        <div key={key} className="flex items-start justify-between p-2 rounded border border-slate-200 hover:bg-slate-50">
+          <div className="flex items-start space-x-2">
+            {req.completed ? <CheckCircleFilled /> : <CircleEmpty />}
+            <div>
+              <p className={`text-sm font-medium ${req.completed ? 'text-slate-900' : 'text-slate-600'}`}>
+                {req.label}
+              </p>
+              {req.value && (
+                <p className="text-xs text-slate-500 mt-0.5">{req.value}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const AchievementDetailPanel = ({ details, onClose }) => {
+  if (!details) return null;
+
+  const { id, isComplete, approvalDate, requirements, honorCreditEarned } = details;
+  const displayName = getAchievementDisplayName(id);
+  const publicNumber = getPublicAchievementNumber(id);
+  const showPublicNumber = publicNumber && !/^Achievement\s+\d+/i.test(displayName || '');
+
+  return (
+    <div className="border border-slate-200 rounded-lg bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h4 className="text-base font-bold text-slate-900">{displayName || `Achievement ${id}`}</h4>
+          {showPublicNumber && (
+            <div className="text-xs text-slate-500 mt-0.5">Achievement {publicNumber}</div>
+          )}
+          <div className="text-xs text-slate-500 mt-1">
+            {isComplete
+              ? (approvalDate ? `Approved on ${approvalDate}` : 'Approved (date not available)')
+              : 'Not yet approved'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 rounded px-2 py-1 bg-slate-50 hover:bg-slate-100"
+        >
+          Close details
+        </button>
+      </div>
+
+      {honorCreditEarned && (
+        <div className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex">
+          Honor credit earned
+        </div>
+      )}
+
+      {requirements && (
+        <div className="mt-4">
+          <div className="text-xs uppercase font-bold text-slate-500 mb-2">Requirements</div>
+          <RequirementsChecklist requirements={requirements} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Phase Progress Timeline - Visual representation of phase progression
+const PhaseProgressTimeline = ({ currentAchievement, approvedAchievements, honorCreditAchievements = [], cadet, cadetDataService, dataFiles }) => {
+  const [selectedAchievement, setSelectedAchievement] = React.useState(null);
+  const phases = Object.entries(CADET_PHASES || {})
+    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+    .map(([id, phase]) => {
+      const match = (phase.name || '').match(/^(Phase\s+[^()]+)\s*\(([^)]+)\)$/i);
+      return {
+        id: parseInt(id),
+        name: match ? match[1].trim() : phase.name,
+        subtitle: match ? match[2].trim() : '',
+        achievements: phase.achievements || [],
+        milestone: phase.milestoneAchv,
+        milestoneName: phase.milestoneName
+      };
+    });
+
+  const isAchievementComplete = (achvId) => approvedAchievements.includes(achvId);
+  const hasHonorCredit = (achvId) => honorCreditAchievements.some(h => h.achievementId === achvId);
+  const currentPhase = determinePhaseFromAchievement(currentAchievement);
+
+  const getApprovalDate = (achvId) => {
+    if (!cadet || !dataFiles) return null;
+    const capid = String(cadet.CAPID || '').trim();
+    const achvStr = String(achvId || '').trim();
+    const approvals = (dataFiles.cadetAchvAprs || [])
+      .filter(a =>
+        String(a.CAPID || '').trim() === capid &&
+        String(a.CadetAchvID || '').trim() === achvStr &&
+        String(a.Status || '').trim() === 'APR'
+      );
+    const pickDate = (record) => {
+      const created = String(record.DateCreated || '').trim();
+      const modified = String(record.DateMod || '').trim();
+      if (created && created !== '01/01/1900') return created;
+      if (modified && modified !== '01/01/1900') return modified;
+      return null;
+    };
+    if (approvals.length > 0) {
+      const dated = approvals.map(pickDate).filter(Boolean);
+      if (dated.length > 0) return dated[0];
+    }
+
+    const name = (CADET_ACHIEVEMENT_NAMES[String(achvId)] || '').toLowerCase();
+    if (name && dataFiles.cadetAchvFullReport) {
+      const match = dataFiles.cadetAchvFullReport.find(r =>
+        String(r.CAPID || '').trim() === capid &&
+        String(r.AchvName || '').trim().toLowerCase() === name
+      );
+      if (match && match.AprDate && match.AprDate !== '01/01/1900') {
+        return String(match.AprDate).trim();
+      }
+    }
+
+    return null;
+  };
+
+  const buildAchievementDetails = (achievementId) => {
+    if (!cadet) return null;
+    const isComplete = isAchievementComplete(achievementId);
+    const approvalDate = getApprovalDate(achievementId);
+    const honorCreditEarned = hasHonorCredit(achievementId);
+    const requirements = cadetDataService
+      ? cadetDataService.getAchievementRequirements(cadet.CAPID, achievementId.toString(), cadet.timeInGrade)
+      : null;
+
+    return {
+      id: achievementId,
+      isComplete,
+      approvalDate,
+      honorCreditEarned,
+      requirements
+    };
+  };
+
+  const handleSelectAchievement = (achievementId) => {
+    setSelectedAchievement((prev) => {
+      if (prev && prev.id === achievementId) return null;
+      return buildAchievementDetails(achievementId);
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-slate-500">Click an achievement to view completion dates and requirements.</div>
+      {phases.map((phase, idx) => {
+        const allAchievementsComplete = [...phase.achievements, phase.milestone].every(a => isAchievementComplete(a));
+        const milestoneComplete = isAchievementComplete(phase.milestone);
+        const isCurrent = phase.id === currentPhase;
+        const isPast = phase.id < currentPhase;
+
+        return (
+          <div key={phase.id} className="relative">
+            {idx < phases.length - 1 && (
+              <div className={`absolute left-4 top-12 w-0.5 h-full ${isPast ? 'bg-green-500' : 'bg-slate-200'}`} />
+            )}
+
+            <div className={`border rounded-lg p-4 ${isCurrent ? 'border-blue-500 bg-blue-50' : isPast ? 'border-green-200 bg-green-50' : 'border-slate-200'}`}>
+              <div className="flex items-start space-x-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  allAchievementsComplete ? 'bg-green-500 text-white' :
+                  isCurrent ? 'bg-blue-500 text-white' :
+                  'bg-slate-200 text-slate-600'
+                }`}>
+                  {allAchievementsComplete ? '✓' : phase.id}
+                </div>
+
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-900">
+                    {phase.subtitle ? `${phase.name} - ${phase.subtitle}` : phase.name}
+                  </h4>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {phase.achievements.map(achv => (
+                      <button
+                        type="button"
+                        key={achv}
+                        onClick={() => handleSelectAchievement(achv)}
+                        className={`relative px-2 py-1 rounded text-xs font-medium transition hover:shadow-sm ${
+                          isAchievementComplete(achv) ? "bg-green-100 text-green-800" :
+                          achv === currentAchievement + 1 ? "bg-blue-100 text-blue-800" :
+                          "bg-slate-100 text-slate-600"
+                        }`}
+                        title={`${getAchievementDisplayName(achv)}${hasHonorCredit(achv) ? " - Honor Credit Earned" : ""}`}
+                      >
+                        {getPublicAchievementNumber(achv)}
+                        {isAchievementComplete(achv) && hasHonorCredit(achv) && (
+                          <svg className="inline-block w-3 h-3 ml-1 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l2.4 7.4h7.6l-6 4.6 2.3 7-6.3-4.6-6.3 4.6 2.3-7-6-4.6h7.6z"/>
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAchievement(phase.milestone)}
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                      milestoneComplete ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    ★ {phase.milestoneName}
+                    {milestoneComplete && " ✓"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <Modal
+        isOpen={!!selectedAchievement}
+        onClose={() => setSelectedAchievement(null)}
+        title={selectedAchievement ? getAchievementDisplayName(selectedAchievement.id) : 'Achievement Details'}
+      >
+        <AchievementDetailPanel
+          details={selectedAchievement}
+          onClose={() => setSelectedAchievement(null)}
+        />
+      </Modal>
+    </div>
+  );
+};
+
+// Milestone Awards Card - Shows major awards progress
+const MilestoneAwardsCard = ({ milestoneAwards, currentAchievement }) => {
+  const milestones = [
+    { id: 4, name: 'Wright Brothers', rank: 'C/SSgt', phase: 1 },
+    { id: 10, name: 'Billy Mitchell', rank: 'C/2dLt', phase: 2 },
+    { id: 14, name: 'Amelia Earhart', rank: 'C/Capt', phase: 3 },
+    { id: 20, name: 'Ira C. Eaker', rank: 'C/LtCol', phase: 4 },
+    { id: 21, name: 'Carl A. Spaatz', rank: 'C/Col', phase: 5 }
+  ];
+
+  const getAwardStatus = (milestoneId) => {
+    const award = milestoneAwards.find(a => a.award && a.award.toUpperCase().includes(milestones.find(m => m.id === milestoneId)?.name.split(' ').pop().toUpperCase()));
+    if (award) return { status: 'EARNED', date: award.completed, awardNo: award.awardNo };
+    if (currentAchievement >= milestoneId) return { status: 'EARNED', date: null };
+    if (currentAchievement === milestoneId - 1) return { status: 'IN_PROGRESS' };
+    return { status: 'FUTURE' };
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      {milestones.map((milestone) => {
+        const status = getAwardStatus(milestone.id);
+
+        return (
+          <div key={milestone.id} className={`border rounded-lg p-4 text-center ${
+            status.status === 'EARNED' ? 'border-amber-500 bg-amber-50' :
+            status.status === 'IN_PROGRESS' ? 'border-blue-500 bg-blue-50' :
+            'border-slate-200 bg-white'
+          }`}>
+            <div className="relative mb-3">
+              {getRankInsigniaUrl(milestone.id) && (
+                <img src={getRankInsigniaUrl(milestone.id)} alt={milestone.rank} className="h-16 w-auto object-contain mx-auto" />
+              )}
+              <div className={`absolute -top-1 -right-1 text-2xl ${
+                status.status === 'EARNED' ? 'text-amber-500' :
+                status.status === 'IN_PROGRESS' ? 'text-blue-500' :
+                'text-slate-300'
+              }`}>
+                {status.status === 'EARNED' ? '★' : '☆'}
+              </div>
+            </div>
+            <h4 className="font-bold text-sm text-slate-900 mb-1">{milestone.name}</h4>
+            <p className="text-xs text-slate-600 mb-1">{milestone.rank}</p>
+            <p className="text-xs text-slate-500">{getAchievementDisplayName(milestone.id)}</p>
+            {status.date && (
+              <p className="text-xs text-amber-700 mt-2 font-medium">Earned: {status.date}</p>
+            )}
+            {status.awardNo && (
+              <p className="text-xs text-slate-500">#{status.awardNo}</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// Orientation Flights Card - Shows powered O-Flight progress for cadets
+// Syllabus 6-10 are the five powered orientation flight syllabi
+// Syllabus 99 is a back seat ride
+const OrientationFlightsCard = ({ oFlights = [], capid }) => {
+  // Filter flights for this cadet
+  const cadetFlights = oFlights.filter(f => String(f.CAPID || '').trim() === String(capid || '').trim());
+
+  // Powered flight syllabi (6-10) with their descriptions
+  const poweredSyllabi = [
+    { num: 6, name: 'Ground Handling, Preflight, Takeoff & Landing', short: 'Ground' },
+    { num: 7, name: 'Normal Flight Maneuvers', short: 'Normal' },
+    { num: 8, name: 'Advanced Flight Maneuvers', short: 'Advanced' },
+    { num: 9, name: 'Use of Instruments in Flight', short: 'Instruments' },
+    { num: 10, name: 'Weather', short: 'Weather' }
+  ];
+
+  // Get completed syllabi with dates
+  const getSyllabusFlights = (syllabusNum) => {
+    return cadetFlights
+      .filter(f => {
+        const syllabus = parseInt(f.Syllabus);
+        return syllabus === syllabusNum;
+      })
+      .sort((a, b) => new Date(b.FltDate) - new Date(a.FltDate));
+  };
+
+  // Count total powered flights (syllabus 6-10)
+  const poweredFlights = cadetFlights.filter(f => {
+    const syllabus = parseInt(f.Syllabus);
+    return syllabus >= 6 && syllabus <= 10;
+  });
+
+  // Count back seat rides (syllabus 99)
+  const backSeatRides = cadetFlights.filter(f => parseInt(f.Syllabus) === 99);
+
+  const hasAnyFlights = cadetFlights.length > 0;
+  const completedSyllabiCount = poweredSyllabi.filter(s => getSyllabusFlights(s.num).length > 0).length;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Stats */}
+      <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <Icon name="Plane" className="w-4 h-4 text-sky-600" />
+          <span className="text-slate-600">
+            <span className="font-semibold text-slate-900">{poweredFlights.length}</span> powered flight{poweredFlights.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        {backSeatRides.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Icon name="Users" className="w-4 h-4 text-slate-500" />
+            <span className="text-slate-600">
+              <span className="font-semibold text-slate-900">{backSeatRides.length}</span> back seat ride{backSeatRides.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Syllabus Progress Circles */}
+      <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+        {poweredSyllabi.map((syllabus) => {
+          const flights = getSyllabusFlights(syllabus.num);
+          const isCompleted = flights.length > 0;
+          const latestFlight = flights[0];
+          const flightDate = latestFlight?.FltDate || null;
+          const aircraft = latestFlight?.AcftTailNum || null;
+
+          // Build tooltip text
+          let tooltipText = `Syllabus ${syllabus.num}: ${syllabus.name}`;
+          if (isCompleted) {
+            tooltipText += `\nCompleted: ${flightDate}`;
+            if (aircraft) tooltipText += `\nAircraft: ${aircraft}`;
+            if (flights.length > 1) tooltipText += `\n(${flights.length} total flights)`;
+          } else {
+            tooltipText += '\nNot yet completed';
+          }
+
+          return (
+            <div
+              key={syllabus.num}
+              className="group relative flex flex-col items-center gap-1"
+            >
+              {/* Circle indicator */}
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all cursor-default ${
+                  isCompleted
+                    ? 'bg-emerald-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-400 border-2 border-slate-200'
+                }`}
+                title={tooltipText}
+              >
+                {syllabus.num}
+                {isCompleted && flights.length > 1 && (
+                  <span className="absolute -top-1 -right-1 bg-sky-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-medium">
+                    {flights.length}
+                  </span>
+                )}
+              </div>
+
+              {/* Label */}
+              <span className={`text-[10px] font-medium text-center leading-tight max-w-[60px] ${
+                isCompleted ? 'text-slate-700' : 'text-slate-400'
+              }`}>
+                {syllabus.short}
+              </span>
+
+              {/* Checkmark for completed */}
+              {isCompleted && (
+                <div className="absolute -top-1 -left-1 bg-white rounded-full">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-emerald-500">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                </div>
+              )}
+
+              {/* Hover tooltip */}
+              <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max max-w-xs bg-slate-800 text-white text-xs rounded py-2 px-3 shadow-lg pointer-events-none whitespace-pre-line">
+                {tooltipText}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress indicator */}
+      <div className="text-xs text-slate-500 text-center md:text-left">
+        {completedSyllabiCount === 5 ? (
+          <span className="text-emerald-600 font-semibold">All 5 powered O-Flight syllabi completed!</span>
+        ) : completedSyllabiCount > 0 ? (
+          <span>{completedSyllabiCount} of 5 powered O-Flight syllabi completed</span>
+        ) : (
+          <span className="text-slate-400">No powered O-Flights recorded yet</span>
+        )}
+      </div>
+
+      {/* Flight History (collapsible if many flights) */}
+      {hasAnyFlights && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-sky-600 hover:text-sky-800 font-medium">
+            View flight history ({cadetFlights.length} total)
+          </summary>
+          <div className="mt-2 max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 sticky top-0">
+                <tr className="text-left text-slate-600">
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Syllabus</th>
+                  <th className="px-3 py-2 font-medium">Aircraft</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cadetFlights
+                  .sort((a, b) => new Date(b.FltDate) - new Date(a.FltDate))
+                  .map((flight, idx) => {
+                    const syllabusNum = parseInt(flight.Syllabus);
+                    const syllabusInfo = poweredSyllabi.find(s => s.num === syllabusNum);
+                    const syllabusName = syllabusNum === 99 ? 'Back Seat' : (syllabusInfo?.short || `#${syllabusNum}`);
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 text-slate-700">{flight.FltDate}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                            syllabusNum === 99
+                              ? 'bg-slate-100 text-slate-600'
+                              : 'bg-sky-100 text-sky-700'
+                          }`}>
+                            {syllabusName}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-600 font-mono">{flight.AcftTailNum || '-'}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+};
+
+</script>

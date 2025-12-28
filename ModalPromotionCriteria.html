@@ -1,0 +1,81 @@
+<script type="text/babel">
+// Promotion Eligibility Check Modal
+// Shows detailed promotion criteria and member's current status toward next rank
+const PromotionCriteriaModal = ({
+  isOpen,
+  onClose,
+  member,
+  // Helper functions
+  getPromotionDetails
+}) => {
+  if (!isOpen || !member) return null;
+
+  const d = getPromotionDetails(member);
+
+  if (!d) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Promotion Eligibility Check">
+        <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+          No promotion criteria found for {member.Rank}
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Promotion Eligibility Check">
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100 flex justify-between items-center shadow-sm">
+          <div>
+            <div className="text-xs uppercase text-blue-600 font-bold tracking-wider mb-1">Current Rank</div>
+            <div className="text-3xl font-bold text-slate-800">{d.currentRank}</div>
+            <div className="text-xs text-slate-500 mt-1">Date of Rank: {d.rankDate}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs uppercase text-indigo-600 font-bold tracking-wider mb-1">Next Rank</div>
+            <div className="text-3xl font-bold text-slate-800">{d.nextRank}</div>
+            <div className={`text-xs font-bold mt-1 px-2 py-0.5 rounded-full inline-block ${d.isTigMet && d.isLevelMet && (!d.dutyReq || d.isDutyMet) ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>
+              {d.isTigMet && d.isLevelMet && (!d.dutyReq || d.isDutyMet) ? "ELIGIBLE NOW" : `Earliest: ${d.eligibleDate}`}
+            </div>
+          </div>
+        </div>
+
+        <div className={`grid grid-cols-1 ${d.dutyReq ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+          <div className={`p-4 rounded-lg border-l-4 shadow-sm ${d.isTigMet ? 'bg-green-50 border-green-500' : 'bg-amber-50 border-amber-500'}`}>
+            <div className="flex items-center mb-2">
+              <Icon name={d.isTigMet ? "CheckCircle" : "Clock"} className={`w-5 h-5 mr-2 ${d.isTigMet ? 'text-green-600' : 'text-amber-600'}`} />
+              <h4 className={`font-bold ${d.isTigMet ? 'text-green-800' : 'text-amber-800'}`}>Time in Grade</h4>
+            </div>
+            <p className="text-sm text-slate-600 mb-1">Required: {d.tigMonthsRequired} Months</p>
+            <p className="text-xs font-bold text-slate-500">{d.isTigMet ? "Completed" : `${d.tigMonthsCurrent} / ${d.tigMonthsRequired} Months accrued`}</p>
+          </div>
+
+          <div className={`p-4 rounded-lg border-l-4 shadow-sm ${d.isLevelMet ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+            <div className="flex items-center mb-2">
+              <Icon name={d.isLevelMet ? "CheckCircle" : "TrendingUp"} className={`w-5 h-5 mr-2 ${d.isLevelMet ? 'text-green-600' : 'text-red-600'}`} />
+              <h4 className={`font-bold ${d.isLevelMet ? 'text-green-800' : 'text-red-800'}`}>Education & Training</h4>
+            </div>
+            <p className="text-sm text-slate-600 mb-1">Required: {d.levelRequired}</p>
+            <p className="text-xs font-bold text-slate-500">{d.isLevelMet ? `Requirement Met` : `Current: ${d.levelCurrent}`}</p>
+          </div>
+
+          {d.dutyReq && (
+            <div className={`p-4 rounded-lg border-l-4 shadow-sm ${d.isDutyMet ? 'bg-green-50 border-green-500' : 'bg-amber-50 border-amber-500'}`}>
+              <div className="flex items-center mb-2">
+                <Icon name={d.isDutyMet ? "CheckCircle" : "Briefcase"} className={`w-5 h-5 mr-2 ${d.isDutyMet ? 'text-green-600' : 'text-amber-600'}`} />
+                <h4 className={`font-bold ${d.isDutyMet ? 'text-green-800' : 'text-amber-800'}`}>Duty Tenure</h4>
+              </div>
+              <p className="text-sm text-slate-600 mb-1">Req: {d.dutyReq}</p>
+              <p className="text-xs font-bold text-slate-500">{d.dutyStatusString}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-slate-50 p-4 text-xs text-slate-500 italic rounded-lg border border-slate-100">
+          Note: This tracker calculates basic TIG and ET requirements based on CAPR 35-5. It does not track commander approval, board reviews, or specialty specific requirements (e.g. Mission Pilot ratings).
+        </div>
+      </div>
+    </Modal>
+  );
+};
+</script>

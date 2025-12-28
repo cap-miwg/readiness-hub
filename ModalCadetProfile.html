@@ -1,0 +1,365 @@
+<script type="text/babel">
+// Cadet Profile Modal
+// Comprehensive view of cadet's rank, requirements, phase progress, and ES quals
+const CadetProfileModal = ({
+  isOpen,
+  onClose,
+  cadet,
+  // Helper functions
+  getRankInsigniaUrl,
+  getAchievementDisplayName,
+  getCadetProtectionStatus,
+  // Data
+  dataFiles,
+  configFiles,
+  cadetDataService,
+  esDataService,
+  // Constants
+  CADET_ACHIEVEMENT_TO_RANK,
+  ES_FUNCTIONAL_AREAS
+}) => {
+  if (!isOpen || !cadet) return null;
+
+  // State for ES modals
+  const [selectedQualification, setSelectedQualification] = React.useState(null);
+  const [showSkillTree, setShowSkillTree] = React.useState(false);
+
+  // Handlers for ES qualifications
+  const handleQualificationClick = (qualification) => {
+    setSelectedQualification(qualification);
+  };
+
+  const handleViewSkillTree = () => {
+    setShowSkillTree(true);
+  };
+
+  const handleCloseQualificationModal = () => {
+    setSelectedQualification(null);
+  };
+
+  const handleCloseSkillTreeModal = () => {
+    setShowSkillTree(false);
+  };
+
+  // Helper function to get duty position rank for sorting (command positions first)
+  const CADET_DUTY_RANK = {
+    'CADET COMMANDER': 1,
+    'CADET DEPUTY COMMANDER FOR OPERATIONS': 2,
+    'CADET DEPUTY COMMANDER FOR SUPPORT': 3,
+    'CADET FIRST SERGEANT': 4,
+    'CADET FLIGHT COMMANDER': 5,
+    'CADET FLIGHT SERGEANT': 6,
+    'CADET ADMINISTRATIVE OFFICER': 10,
+    'CADET PUBLIC AFFAIRS OFFICER': 11,
+    'CADET COMMUNICATIONS OFFICER': 12,
+    'CADET SUPPLY OFFICER': 13,
+    'CADET SAFETY OFFICER': 14,
+    'CADET ELEMENT LEADER': 20
+  };
+
+  const getDutyRank = (dutyName) => {
+    const normalizedDuty = (dutyName || '').toUpperCase().trim();
+    return CADET_DUTY_RANK[normalizedDuty] || 99;
+  };
+
+  const nextRank = cadet.nextAchievement ? CADET_ACHIEVEMENT_TO_RANK[cadet.nextAchievement.toString()] : null;
+  const cadetMember = dataFiles.members.find(m => m.CAPID === cadet.CAPID);
+  const cadetAge = cadetMember && cadetMember.DOB ? Math.floor((new Date() - new Date(cadetMember.DOB)) / (1000 * 60 * 60 * 24 * 365.25)) : null;
+  const isUnder18 = cadetAge !== null && cadetAge < 18;
+  const cadetProtection = getCadetProtectionStatus ? getCadetProtectionStatus(cadetMember || cadet) : null;
+  const cadetProtectionCourses = cadetProtection ? cadetProtection.displayCourses : [];
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`${cadet.NameLast}, ${cadet.NameFirst}`}>
+      <div className="space-y-6">
+        {/* Header with Current and Next Rank */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex-1">
+              <div className="text-xs uppercase text-blue-600 font-bold tracking-wider mb-2">Current Rank</div>
+              <div className="flex items-center gap-3">
+                {getRankInsigniaUrl(cadet.currentAchievement) && (
+                  <img src={getRankInsigniaUrl(cadet.currentAchievement)} alt={cadet.currentRank} className="h-16 w-auto object-contain" />
+                )}
+                <div>
+                  <div className="text-2xl font-bold text-slate-800">{cadet.currentRank}</div>
+                  <div className="text-sm text-slate-600">{getAchievementDisplayName(cadet.currentAchievement)}</div>
+                  {cadet.rankDate && cadet.rankDate !== '01/01/1900' && (
+                    <div className="text-xs text-slate-500 mt-1">Date of Rank: {cadet.rankDate}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            {cadet.nextAchievement && nextRank && (
+              <div className="flex-1 text-right">
+                <div className="text-xs uppercase text-indigo-600 font-bold tracking-wider mb-2">Next Rank</div>
+                <div className="flex items-center gap-3 justify-end">
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-slate-800">{nextRank}</div>
+                    <div className="text-sm text-slate-600">{getAchievementDisplayName(cadet.nextAchievement)}</div>
+                    <div className={`text-xs font-bold mt-1 px-2 py-0.5 rounded-full inline-block ${
+                      cadet.promotionStatus.status === 'READY' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {cadet.promotionStatus.status === 'READY' ? 'READY' : cadet.nextRequirements ? `${cadet.nextRequirements.completionPercent}% Complete` : 'In Progress'}
+                    </div>
+                  </div>
+                  {getRankInsigniaUrl(cadet.nextAchievement) && (
+                    <img src={getRankInsigniaUrl(cadet.nextAchievement)} alt={nextRank} className="h-16 w-auto object-contain" />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Cadet Info */}
+          <div className="border-t border-blue-200 pt-3 mt-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <div className="text-xs text-slate-500 font-bold">CAPID</div>
+                <div className="text-slate-700">{cadet.CAPID}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 font-bold">Phase</div>
+                <div className="text-slate-700">Phase {cadet.phase}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 font-bold">Time in Grade</div>
+                <div className="text-slate-700">{cadet.timeInGrade.weeks}w {cadet.timeInGrade.days % 7}d ({cadet.timeInGrade.days} days)</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 font-bold">Promotion Eligible</div>
+                <div className={`font-semibold ${cadet.timeInGrade.isEligible ? 'text-green-600' : 'text-slate-700'}`}>
+                  {cadet.timeInGrade.eligibleDate || 'N/A'}
+                  {cadet.timeInGrade.isEligible && ' ✓'}
+                </div>
+              </div>
+            </div>
+            {/* Contact Information and Age */}
+            {(cadetAge !== null || (dataFiles.contacts && dataFiles.contacts.length > 0)) && (() => {
+              // Get cadet's primary email
+              const cadetContacts = dataFiles.contacts ? dataFiles.contacts.filter(c => String(c.CAPID).trim() === String(cadet.CAPID).trim()) : [];
+              const cadetPrimaryEmail = cadetContacts.find(c =>
+                (c.Type || '').toUpperCase() === 'EMAIL' &&
+                (c.Priority || '').toUpperCase() === 'PRIMARY'
+              );
+              const cadetEmail = cadetPrimaryEmail ? cadetPrimaryEmail.Contact : null;
+
+              // Get parent/guardian email for cadets under 18
+              let parentEmail = null;
+              if (isUnder18) {
+                const parentEmailContact = cadetContacts.find(c =>
+                  (c.Type || '').toUpperCase() === 'CADET PARENT EMAIL' &&
+                  (c.Priority || '').toUpperCase() === 'PRIMARY'
+                );
+                parentEmail = parentEmailContact ? parentEmailContact.Contact : null;
+                // Don't show parent email if it's the same as cadet email
+                if (parentEmail === cadetEmail) {
+                  parentEmail = null;
+                }
+              }
+
+              if (cadetEmail || parentEmail || cadetAge !== null) {
+                return (
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Left side - Contact Information */}
+                      <div>
+                        {cadetEmail && (
+                          <div className="mb-2">
+                            <div className="text-xs text-slate-500 font-bold mb-0.5">Cadet Email</div>
+                            <a href={`mailto:${cadetEmail}`} className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                              {cadetEmail}
+                            </a>
+                          </div>
+                        )}
+                        {parentEmail && (
+                          <div>
+                            <div className="text-xs text-slate-500 font-bold mb-0.5">Parent/Guardian Email</div>
+                            <a href={`mailto:${parentEmail}`} className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                              {parentEmail}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                      {/* Right side - Age */}
+                      {cadetAge !== null && (
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500 font-bold mb-1">Age</div>
+                          <div className="text-2xl font-bold text-slate-800">{cadetAge} years</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </div>
+
+        {/* Cadet Protection Training */}
+        {cadetProtection && cadetProtectionCourses.length > 0 && (
+          <div>
+            <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <Icon name="Shield" className="w-4 h-4 text-emerald-600" />
+              Cadet Protection Training
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {cadetProtectionCourses.map(course => (
+                <div key={course.id} className={`border ${course.borderClass} rounded-lg p-3 bg-white`}>
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold text-slate-800">{course.label}</div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${course.badgeClass}`}>{course.statusLabel}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-600 space-y-1">
+                    <div>Last completion: {course.lastCompleted ? course.lastCompleted.toLocaleDateString() : 'Not completed'}</div>
+                    <div>Expiration: {course.expirationDate ? course.expirationDate.toLocaleDateString() : 'N/A'}</div>
+                    <div>Days: {course.daysText}</div>
+                  </div>
+                  {course.note && <div className="text-[11px] text-slate-500 mt-2">{course.note}</div>}
+                </div>
+              ))}
+            </div>
+            {cadetProtection.requiredCourses.length > 0 && (
+              <div className="text-xs text-slate-500 mt-2">Required courses: {cadetProtection.summaryLabel}</div>
+            )}
+          </div>
+        )}
+
+        {/* Duty Positions */}
+        {cadet.cadetDuties && cadet.cadetDuties.length > 0 && (() => {
+          // Sort duty positions with command positions first (using same logic as card)
+          const sortedDuties = [...cadet.cadetDuties].sort((a, b) => {
+            const rankA = getDutyRank(a.name);
+            const rankB = getDutyRank(b.name);
+            return rankA - rankB;
+          });
+
+          return (
+            <div>
+              <h3 className="font-bold text-slate-900 mb-3">Duty Positions</h3>
+              <div className="flex flex-wrap gap-2">
+                {sortedDuties.map((duty, idx) => (
+                  <Badge
+                    key={idx}
+                    color="gray"
+                    title={`Assigned: ${duty.date || 'Unknown'}`}
+                  >
+                    {duty.name} ({duty.orgString || 'Unknown'})
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Next Achievement Requirements */}
+        {cadet.nextRequirements && (
+          <div>
+            <h3 className="font-bold text-slate-900 mb-3">Next Achievement Requirements</h3>
+            <RequirementsChecklist requirements={cadet.nextRequirements} />
+          </div>
+        )}
+
+        {/* Honor Credit Opportunity */}
+        {cadet.nextHonorCreditStatus && !cadet.nextHonorCreditStatus.earned && !String(cadet.nextHonorCreditStatus.reason || '').startsWith('N/A') && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2l2.4 7.4h7.6l-6 4.6 2.3 7-6.3-4.6-6.3 4.6 2.3-7-6-4.6h7.6z"/>
+              </svg>
+              <h4 className="font-bold text-amber-900">Honor Credit Opportunity</h4>
+            </div>
+            <p className="text-sm text-amber-800 mb-3">
+              Complete BOTH interactive modules AND written tests for your next achievement to earn a silver star on your achievement ribbon!
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className={`flex items-center gap-1 ${cadet.nextHonorCreditStatus.details.leadershipModule ? 'text-green-700 font-semibold' : 'text-slate-600'}`}>
+                {cadet.nextHonorCreditStatus.details.leadershipModule ? '✓' : '○'} Leadership Module
+              </div>
+              <div className={`flex items-center gap-1 ${cadet.nextHonorCreditStatus.details.aerospaceModule ? 'text-green-700 font-semibold' : 'text-slate-600'}`}>
+                {cadet.nextHonorCreditStatus.details.aerospaceModule ? '✓' : '○'} Aerospace Module
+              </div>
+              <div className={`flex items-center gap-1 ${cadet.nextHonorCreditStatus.details.leadershipTest ? 'text-green-700 font-semibold' : 'text-slate-600'}`}>
+                {cadet.nextHonorCreditStatus.details.leadershipTest ? '✓' : '○'} Leadership Test (80%+)
+              </div>
+              <div className={`flex items-center gap-1 ${cadet.nextHonorCreditStatus.details.aerospaceTest ? 'text-green-700 font-semibold' : 'text-slate-600'}`}>
+                {cadet.nextHonorCreditStatus.details.aerospaceTest ? '✓' : '○'} Aerospace Test (80%+)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Phase Progress */}
+        <div>
+          <h3 className="font-bold text-slate-900 mb-3">Phase Progression</h3>
+          <PhaseProgressTimeline
+            currentAchievement={cadet.currentAchievement}
+            approvedAchievements={cadet.approvedAchievements}
+            honorCreditAchievements={cadet.honorCreditAchievements || []}
+            cadet={cadet}
+            cadetDataService={cadetDataService}
+            dataFiles={dataFiles}
+          />
+        </div>
+
+        {/* Milestone Awards */}
+        <div>
+          <h3 className="font-bold text-slate-900 mb-3">Milestone Awards</h3>
+          <MilestoneAwardsCard
+            milestoneAwards={cadet.milestoneAwards}
+            currentAchievement={cadet.currentAchievement}
+          />
+        </div>
+
+        {/* Orientation Flights */}
+        <div>
+          <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+            <Icon name="Plane" className="w-4 h-4 text-sky-600" />
+            Orientation Flights
+          </h3>
+          <OrientationFlightsCard
+            oFlights={dataFiles.oFlights || []}
+            capid={cadet.CAPID}
+          />
+        </div>
+
+        {/* Emergency Services Qualifications - Using shared component */}
+        <div>
+          <ESQualificationsSection
+            qualifications={cadet.esQualifications || []}
+            onQualificationClick={handleQualificationClick}
+            onViewSkillTree={handleViewSkillTree}
+            showSkillTreeButton={true}
+            showSkillsEvaluator={true}
+            ES_FUNCTIONAL_AREAS={ES_FUNCTIONAL_AREAS}
+            headerClassName="font-bold text-slate-900 mb-3 flex items-center justify-between"
+          />
+        </div>
+      </div>
+
+      {/* ES Qualification Detail Modal */}
+      {selectedQualification && esDataService && (
+        <ESQualificationDetailModal
+          isOpen={!!selectedQualification}
+          onClose={handleCloseQualificationModal}
+          qualification={selectedQualification}
+          member={cadet}
+          dataService={esDataService}
+        />
+      )}
+
+      {/* ES Skill Tree Modal */}
+      {esDataService && configFiles && configFiles.esAchievements && (
+        <ESQualificationTreeModal
+          isOpen={showSkillTree}
+          onClose={handleCloseSkillTreeModal}
+          member={cadet}
+          dataService={esDataService}
+          allQualifications={configFiles.esAchievements}
+        />
+      )}
+    </Modal>
+  );
+};
+</script>

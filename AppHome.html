@@ -1,0 +1,72 @@
+<script type="text/babel">
+// Home Section
+// Landing page with welcome banner and quick access cards
+function HomeSection({
+  activeTab,
+  setActiveTab,
+  baseUnitStats,
+  showAllDescendants
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl p-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-wide opacity-80">Welcome to Michigan Wing Readiness Hub</p>
+          <h1 className="text-2xl font-bold">Michigan Wing Readiness Hub</h1>
+          <p className="text-sm text-blue-100 max-w-xl">
+            One place for commanders, senior members, and cadets to monitor readiness, training, and staffing.
+          </p>
+          <div className="mt-4 flex gap-3 flex-wrap">
+            <button onClick={() => setActiveTab('senior')} className="px-4 py-2 bg-white text-blue-700 rounded-lg font-semibold hover:shadow">
+              Senior Dashboard
+            </button>
+            <button onClick={() => setActiveTab('cadet')} className="px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold border border-white/30 hover:bg-blue-400">
+              Cadet Dashboard
+            </button>
+            <button onClick={() => setActiveTab('unit')} className="px-4 py-2 bg-indigo-500 text-white rounded-lg font-semibold border border-white/30 hover:bg-indigo-400">
+              Unit Overview
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 min-w-[240px]">
+          {[
+            { label: 'Total Strength', value: baseUnitStats ? baseUnitStats.total : 0 },
+            { label: 'Senior Members', value: baseUnitStats ? baseUnitStats.seniors : 0 },
+            { label: 'Cadets', value: baseUnitStats ? baseUnitStats.cadets : 0 },
+            { label: 'Units in Scope', value: showAllDescendants ? 'Unit + Sub' : 'This Unit' },
+          ].map(card => (
+            <div key={card.label} className="bg-white/10 rounded-lg p-3">
+              <div className="text-xs uppercase opacity-80">{card.label}</div>
+              <div className="text-xl font-bold">{card.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <h3 className="font-bold text-slate-900">For Commanders</h3>
+          <p className="text-sm text-slate-600 mt-1">Snapshot of readiness, staffing, and upcoming expirations.</p>
+          <button onClick={() => setActiveTab('unit')} className="mt-3 text-blue-600 text-sm font-semibold hover:underline">
+            Open Unit Overview
+          </button>
+        </div>
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <h3 className="font-bold text-slate-900">Senior Members</h3>
+          <p className="text-sm text-slate-600 mt-1">Education & training, promotions, duty coverage.</p>
+          <button onClick={() => setActiveTab('senior')} className="mt-3 text-blue-600 text-sm font-semibold hover:underline">
+            Go to Senior Dashboard
+          </button>
+        </div>
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <h3 className="font-bold text-slate-900">Cadets</h3>
+          <p className="text-sm text-slate-600 mt-1">Milestones, leadership billets, participation.</p>
+          <button onClick={() => setActiveTab('cadet')} className="mt-3 text-blue-600 text-sm font-semibold hover:underline">
+            Go to Cadet Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+</script>
