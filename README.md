@@ -14,6 +14,37 @@ Designed primarily for Wings and below, this tool provides dashboards and analyt
 - **Org Chart** - Visual organizational hierarchy with metrics overlay
 - **Reports & Export** - PDF and data exports for unit analysis
 
+## Screenshots
+
+### Home Dashboard
+![Home Dashboard](screenshots/Home.png)
+
+### Unit Overview
+![Unit Overview](screenshots/Unit%20Overview.png)
+
+### Senior Member Dashboard
+![Senior Dashboard](screenshots/Senior%20Dashboard.png)
+
+### Senior Member Profile
+![Senior Profile](screenshots/Senior%20Profile.png)
+![Senior Profile Details](screenshots/Senior%20Profile%202.png)
+
+### Cadet Dashboard
+![Cadet Dashboard](screenshots/Cadet%20Dashboard.png)
+
+### Cadet Profile
+![Cadet Profile](screenshots/Cadet%20Profile.png)
+![Cadet Profile Details](screenshots/Cadet%20Profile%202.png)
+
+### ES Skill Tree
+![ES Skill Tree](screenshots/ES%20Skill%20Tree.png)
+
+### Org Chart
+![Org Chart](screenshots/Org%20Chart.png)
+
+### Reports
+![Reports](screenshots/Reports.png)
+
 ## Prerequisites
 
 - Google Workspace account
