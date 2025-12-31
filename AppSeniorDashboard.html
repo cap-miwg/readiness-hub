@@ -158,10 +158,6 @@ function SeniorDashboard(props) {
                   <span className="font-bold text-xl text-blue-600">{baseUnitStats.seniors}</span>
                   <span className="text-[10px] uppercase font-bold text-slate-400">Seniors</span>
                </div>
-               <div className="flex flex-col items-center leading-tight">
-                  <span className="font-bold text-xl text-slate-600">{baseUnitStats.cadets}</span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Cadets</span>
-               </div>
                <div className="h-8 w-px bg-slate-100"></div>
              </>
            )}
@@ -176,9 +172,12 @@ function SeniorDashboard(props) {
              </>
            )}
 
-           <div onClick={()=>setFilterPromoReady(!filterPromoReady)} className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filterPromoReady ? 'bg-green-50' : 'hover:bg-slate-50'}`}>
+           <div onClick={()=>setFilterPromoReady(!filterPromoReady)} className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded group relative ${filterPromoReady ? 'bg-green-50' : 'hover:bg-slate-50'}`}>
               <span className="font-bold text-xl text-green-600 flex items-center">{unitStats.promoReady} {filterPromoReady && <Icon name="Check" className="w-3 h-3 ml-1" />}</span>
               <span className="text-[10px] uppercase font-bold text-slate-400">Promotable</span>
+              <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1.5 px-2.5 shadow-lg pointer-events-none">
+                Members who meet all promotion requirements (TIG, level, duty)
+              </div>
            </div>
 
            <div className="h-8 w-px bg-slate-100"></div>
@@ -200,36 +199,6 @@ function SeniorDashboard(props) {
                   </div>
                 )
               })}
-           </div>
-
-           <div className="h-8 w-px bg-slate-100"></div>
-
-           {/* Enhanced Statistics */}
-           <div className="flex flex-col items-center leading-tight cursor-help group relative" title="Average Time in Current Grade">
-              <span className="font-bold text-lg text-amber-600">{unitStats.avgTIG}m</span>
-              <span className="text-[10px] uppercase font-bold text-slate-400">Avg TIG</span>
-              <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1 px-2 shadow-lg">
-                Average Time in Grade: {unitStats.avgTIG} months
-              </div>
-           </div>
-
-           <div className="flex flex-col items-center leading-tight cursor-help group relative" title="Members with Duty Assignments">
-              <span className="font-bold text-lg text-indigo-600">{unitStats.dutyAssignmentRate}%</span>
-              <span className="text-[10px] uppercase font-bold text-slate-400">W/ Duty</span>
-              <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1 px-2 shadow-lg">
-                {unitStats.withDuties} / {unitStats.filtered} with duty assignments ({unitStats.dutyAssignmentRate}%)
-              </div>
-           </div>
-
-           <div className="flex flex-col items-center leading-tight cursor-help group relative" title="Specialty Track Enrollment">
-              <span className="font-bold text-lg text-purple-600">{unitStats.trackEnrollmentRate}%</span>
-              <span className="text-[10px] uppercase font-bold text-slate-400">Enrolled</span>
-              <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1 px-2 shadow-lg">
-                Track Enrollment: {unitStats.withTracks} / {unitStats.filtered} ({unitStats.trackEnrollmentRate}%)
-                <div className="text-[10px] text-slate-300 mt-1 pt-1 border-t border-slate-600">
-                  Master: {unitStats.withMasterTrack} | Senior: {unitStats.withSeniorTrack} | Tech: {unitStats.withTechTrack}
-                </div>
-              </div>
            </div>
 
            {unitStats.cadetProtection && (

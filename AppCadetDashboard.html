@@ -9,7 +9,7 @@ function CadetDashboard(props) {
     filterPhase, setFilterPhase, filter90Days, setFilter90Days, isMobile,
     activeFilterMenu, setActiveFilterMenu, dutySearchQuery, setDutySearchQuery,
     setSelectedCadet, selectedCadet, CADET_ACHIEVEMENT_TO_RANK, dataFiles, cadetDataService,
-    getCadetProtectionStatus
+    getCadetProtectionStatus, baseUnitStats
   } = props;
 
   // Cadet duty position ranking for ordering
@@ -316,44 +316,61 @@ function CadetDashboard(props) {
 
         {/* Statistics Row */}
         <div className="flex flex-wrap justify-center gap-4 text-sm flex-1">
-          <div className="flex flex-col items-center leading-tight">
-            <span className="font-bold text-xl text-slate-800">{filteredStats.total}</span>
-            <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
-          </div>
-          <div className="h-8 w-px bg-slate-100"></div>
+          {baseUnitStats && (
+            <>
+              <div className="flex flex-col items-center leading-tight">
+                <span className="font-bold text-xl text-slate-800">{baseUnitStats.total}</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
+              </div>
+              <div className="h-8 w-px bg-slate-100"></div>
+              <div className="flex flex-col items-center leading-tight">
+                <span className="font-bold text-xl text-blue-600">{baseUnitStats.cadets}</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Cadets</span>
+              </div>
+              <div className="h-8 w-px bg-slate-100"></div>
+            </>
+          )}
           <div
             onClick={() => setFilterStatus(filterStatus === 'READY' ? 'ALL' : 'READY')}
-            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filterStatus === 'READY' ? 'bg-green-50' : 'hover:bg-slate-50'}`}
+            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded group relative ${filterStatus === 'READY' ? 'bg-green-50' : 'hover:bg-slate-50'}`}
           >
             <span className="font-bold text-xl text-green-600 flex items-center">
               {filteredStats.ready} {filterStatus === 'READY' && <Icon name="Check" className="w-3 h-3 ml-1" />}
             </span>
             <span className="text-[10px] uppercase font-bold text-slate-400">Ready</span>
+            <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1.5 px-2.5 shadow-lg pointer-events-none">
+              Cadets who have completed all requirements and are eligible for promotion
+            </div>
           </div>
           <div
             onClick={() => setFilterStatus(filterStatus === 'NEARLY_READY' ? 'ALL' : 'NEARLY_READY')}
-            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filterStatus === 'NEARLY_READY' ? 'bg-amber-50' : 'hover:bg-slate-50'}`}
+            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded group relative ${filterStatus === 'NEARLY_READY' ? 'bg-amber-50' : 'hover:bg-slate-50'}`}
           >
             <span className="font-bold text-xl text-amber-600 flex items-center">
               {filteredStats.nearlyReady} {filterStatus === 'NEARLY_READY' && <Icon name="Check" className="w-3 h-3 ml-1" />}
             </span>
             <span className="text-[10px] uppercase font-bold text-slate-400">Close</span>
+            <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1.5 px-2.5 shadow-lg pointer-events-none">
+              Cadets who are nearly ready or waiting on time in grade
+            </div>
           </div>
           <div
             onClick={() => setFilter90Days(!filter90Days)}
-            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded ${filter90Days ? 'bg-orange-50' : 'hover:bg-slate-50'}`}
+            className={`flex flex-col items-center cursor-pointer transition-colors leading-tight px-2 rounded group relative ${filter90Days ? 'bg-orange-50' : 'hover:bg-slate-50'}`}
           >
             <span className="font-bold text-xl text-orange-600 flex items-center">
               {filteredStats.days90Plus} {filter90Days && <Icon name="Check" className="w-3 h-3 ml-1" />}
             </span>
             <span className="text-[10px] uppercase font-bold text-slate-400">90+ Days</span>
+            <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1.5 px-2.5 shadow-lg pointer-events-none">
+              Cadets who have been at their current grade for 90+ days
+            </div>
           </div>
           <div className="flex flex-col items-center leading-tight cursor-help group relative">
             <span className="font-bold text-xl text-purple-600">{filteredStats.honorCredits}</span>
             <span className="text-[10px] uppercase font-bold text-slate-400">Honor ⭐</span>
-            <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 max-w-xs bg-slate-800 text-white text-xs rounded py-2 px-3 shadow-lg">
-              <div className="font-bold mb-1">Total Honor Credits Earned</div>
-              <div className="text-[10px] opacity-90">Honor credit earned when PL_MemberPathCredit shows ExtraCreditEarned.CreditEarned = true for the achievement</div>
+            <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 w-max bg-slate-800 text-white text-xs rounded py-1.5 px-2.5 shadow-lg pointer-events-none">
+              Total honor credits earned across all cadets
             </div>
           </div>
           {cadetProtectionStats && (

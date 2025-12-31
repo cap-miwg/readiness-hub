@@ -121,7 +121,7 @@
         const [selectedReport, setSelectedReport] = useState(null);
         const [reportTagFilter, setReportTagFilter] = useState([]);
         const [isNavOpen, setIsNavOpen] = useState(false);
-        const [showSeniorFilters, setShowSeniorFilters] = useState(true);
+        const [showSeniorFilters, setShowSeniorFilters] = useState(false);
         const [reportsCollapsed, setReportsCollapsed] = useState(false);
         const [selectedTaskMembers, setSelectedTaskMembers] = useState(null);
         const [selectedMemberTaskDetails, setSelectedMemberTaskDetails] = useState(null);
@@ -240,7 +240,8 @@
           if (!loading) return;
           const rotation = [
             "Reviewing the local ops log...",
-            "Unpacking the latest duty rosters...",
+            "Analyzing over 1,400 members profiles...",
+            "Preparing insights for nearly 40 units...",
             "Checking in with headquarters...",
             "Syncing personnel and training records...",
             "Lining up the promotion requirements...",
@@ -7248,7 +7249,7 @@
                 filterPhase, setFilterPhase, filter90Days, setFilter90Days, isMobile,
                 activeFilterMenu, setActiveFilterMenu, dutySearchQuery, setDutySearchQuery,
                 setSelectedCadet, selectedCadet, CADET_ACHIEVEMENT_TO_RANK, dataFiles, cadetDataService,
-                getCadetProtectionStatus
+                getCadetProtectionStatus, baseUnitStats
               }} />}
 
               {activeTab === 'reports' && <ReportsSection {...{

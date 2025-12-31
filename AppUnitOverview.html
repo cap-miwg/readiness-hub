@@ -1380,9 +1380,66 @@ const GoogleAdoptionSection = ({
 
   const metrics = unitKey ? googleAdoptionService.getMetricsForUnit(unitKey) : null;
   const userDetails = unitKey ? googleAdoptionService.getUsersForUnit(unitKey) : [];
-  const hasData = metrics || (viewMode === 'aggregate' && subordinateUnitKeys.length > 0);
 
+  // Get subordinate metrics for aggregate view
+  const subordinateMetrics = viewMode === 'aggregate' && subordinateUnitKeys.length > 0
+    ? googleAdoptionService.getMetricsForMultipleUnits(subordinateUnitKeys)
+    : [];
+
+  // Calculate aggregate stats from subordinate units
+  const aggregateStats = useMemo(() => {
+    if (viewMode !== 'aggregate' || subordinateMetrics.length === 0) return null;
+
+    let totalRoster = 0;
+    let totalActiveUsers = 0;
+    let totalAccounts = 0;
+    let totalRecentLogin = 0;
+    let totalGmailActive = 0;
+    let totalDriveActive = 0;
+
+    subordinateMetrics.forEach(m => {
+      totalRoster += m.rosterCount || 0;
+      totalActiveUsers += m.activeUsers || 0;
+      totalAccounts += m.totalAccounts || 0;
+      totalRecentLogin += m.recentLogin || 0;
+      totalGmailActive += m.gmailActive || 0;
+      totalDriveActive += m.driveActive || 0;
+    });
+
+    const adoptionRate = totalRoster > 0
+      ? Math.min(Math.round((totalActiveUsers / totalRoster) * 100), 100)
+      : 0;
+    const loginRate = totalAccounts > 0
+      ? Math.round((totalRecentLogin / totalAccounts) * 100)
+      : 0;
+    const gmailRate = totalAccounts > 0
+      ? Math.round((totalGmailActive / totalAccounts) * 100)
+      : 0;
+    const driveRate = totalAccounts > 0
+      ? Math.round((totalDriveActive / totalAccounts) * 100)
+      : 0;
+
+    return {
+      rosterCount: totalRoster,
+      activeUsers: totalActiveUsers,
+      totalAccounts: totalAccounts,
+      recentLogin: totalRecentLogin,
+      loginRate: loginRate,
+      gmailActive: totalGmailActive,
+      gmailRate: gmailRate,
+      driveActive: totalDriveActive,
+      driveRate: driveRate,
+      adoptionRate: adoptionRate,
+      unitCount: subordinateMetrics.length,
+      collectionDate: subordinateMetrics[0]?.collectionDate || 'Unknown'
+    };
+  }, [viewMode, subordinateMetrics]);
+
+  const hasData = metrics || aggregateStats;
   if (!hasData) return null;
+
+  // Use aggregate stats in aggregate view, otherwise use single unit metrics
+  const displayMetrics = viewMode === 'aggregate' && aggregateStats ? aggregateStats : metrics;
 
   // Get color for adoption rate
   const getAdoptionColor = (rate) => {
@@ -1392,31 +1449,28 @@ const GoogleAdoptionSection = ({
     return 'rose';
   };
 
-  const adoptionColor = metrics ? getAdoptionColor(metrics.adoptionRate) : 'blue';
+  const adoptionColor = displayMetrics ? getAdoptionColor(displayMetrics.adoptionRate) : 'blue';
 
   // Key data shown in collapsed state
-  const keyData = metrics ? (
+  const keyData = displayMetrics ? (
     <div className="flex items-center gap-4 flex-wrap">
-      <span className="font-semibold">{metrics.adoptionRate}% adoption</span>
+      <span className="font-semibold">{displayMetrics.adoptionRate}% adoption</span>
       <span className="text-slate-400">|</span>
-      <span>{metrics.activeUsers} of {metrics.rosterCount} active</span>
-      {metrics.loginRate < 70 && (
+      <span>{displayMetrics.activeUsers} of {displayMetrics.rosterCount} active</span>
+      {aggregateStats && (
         <>
           <span className="text-slate-400">|</span>
-          <span className="text-amber-600">{metrics.loginRate}% login rate</span>
+          <span>{aggregateStats.unitCount} units</span>
+        </>
+      )}
+      {displayMetrics.loginRate < 70 && (
+        <>
+          <span className="text-slate-400">|</span>
+          <span className="text-amber-600">{displayMetrics.loginRate}% login rate</span>
         </>
       )}
     </div>
-  ) : (
-    <div className="flex items-center gap-4">
-      <span className="font-semibold">{subordinateUnitKeys.length} units tracked</span>
-    </div>
-  );
-
-  // Get subordinate metrics for aggregate view
-  const subordinateMetrics = viewMode === 'aggregate' && subordinateUnitKeys.length > 0
-    ? googleAdoptionService.getMetricsForMultipleUnits(subordinateUnitKeys)
-    : [];
+  ) : null;
 
   return (
     <DashboardSection
@@ -1429,26 +1483,32 @@ const GoogleAdoptionSection = ({
       keyData={keyData}
     >
       <div className="space-y-4 pt-4">
-        {/* Single Unit View */}
-        {metrics && (
+        {/* Adoption Score - shown for both single unit and aggregate */}
+        {displayMetrics && (
           <>
-            {/* Adoption Score */}
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-slate-800">Workspace Adoption Rate</h4>
+                  <h4 className="font-semibold text-slate-800">
+                    {aggregateStats ? 'Combined Adoption Rate' : 'Workspace Adoption Rate'}
+                  </h4>
                   <HelpTooltip title="What is this?" position="right">
-                    <p className="mb-2">Percentage of roster members actively using Google Workspace (logged in, sent email, or used Drive).</p>
+                    <p className="mb-2">
+                      {aggregateStats
+                        ? `Combined adoption across ${aggregateStats.unitCount} subordinate units.`
+                        : 'Percentage of roster members actively using Google Workspace (logged in, sent email, or used Drive).'
+                      }
+                    </p>
                     <p className="text-slate-300">80%+ is excellent, 60%+ is good, 40%+ is fair.</p>
                   </HelpTooltip>
                 </div>
-                <span className={`text-2xl font-bold text-${adoptionColor}-700`}>{metrics.adoptionRate}%</span>
+                <span className={`text-2xl font-bold text-${adoptionColor}-700`}>{displayMetrics.adoptionRate}%</span>
               </div>
               {/* Progress bar */}
               <div className="w-full bg-slate-200 rounded-full h-3">
                 <div
                   className={`h-3 rounded-full transition-all duration-500 bg-${adoptionColor}-500`}
-                  style={{ width: `${Math.min(metrics.adoptionRate, 100)}%` }}
+                  style={{ width: `${Math.min(displayMetrics.adoptionRate, 100)}%` }}
                 />
               </div>
               <div className="flex justify-between text-xs text-slate-500 mt-1">
@@ -1462,21 +1522,21 @@ const GoogleAdoptionSection = ({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <MetricWithHelp
                 label="Active Users"
-                value={metrics.activeUsers}
-                subValue={`of ${metrics.rosterCount} roster`}
+                value={displayMetrics.activeUsers}
+                subValue={`of ${displayMetrics.rosterCount} roster`}
                 color="blue"
                 explanation={{
                   label: 'Active Users',
-                  shortDesc: 'Members actively using their Google account',
+                  shortDesc: aggregateStats ? 'Total members actively using Google across all units' : 'Members actively using their Google account',
                   howToImprove: 'Encourage logins, email usage, and Drive collaboration',
                   goodValue: 'Match roster count'
                 }}
               />
               <MetricWithHelp
                 label="Recent Login"
-                value={metrics.recentLogin}
-                subValue={`${metrics.loginRate}% logged in`}
-                color={metrics.loginRate >= 70 ? 'green' : metrics.loginRate >= 40 ? 'amber' : 'red'}
+                value={displayMetrics.recentLogin}
+                subValue={`${displayMetrics.loginRate}% logged in`}
+                color={displayMetrics.loginRate >= 70 ? 'green' : displayMetrics.loginRate >= 40 ? 'amber' : 'red'}
                 explanation={{
                   label: 'Recent Logins',
                   shortDesc: 'Accounts logged in within 30 days',
@@ -1486,8 +1546,8 @@ const GoogleAdoptionSection = ({
               />
               <MetricWithHelp
                 label="Gmail Active"
-                value={metrics.gmailActive}
-                subValue={`${metrics.gmailRate}% using`}
+                value={displayMetrics.gmailActive}
+                subValue={`${displayMetrics.gmailRate}% using`}
                 color="slate"
                 explanation={{
                   label: 'Gmail Activity',
@@ -1498,8 +1558,8 @@ const GoogleAdoptionSection = ({
               />
               <MetricWithHelp
                 label="Drive Active"
-                value={metrics.driveActive}
-                subValue={`${metrics.driveRate}% using`}
+                value={displayMetrics.driveActive}
+                subValue={`${displayMetrics.driveRate}% using`}
                 color="slate"
                 explanation={{
                   label: 'Drive Activity',
@@ -1509,38 +1569,40 @@ const GoogleAdoptionSection = ({
                 }}
               />
             </div>
+          </>
+        )}
 
-            {/* User Details Toggle */}
-            {userDetails.length > 0 && (
-              <div className="mt-4">
-                <button
-                  onClick={() => setShowUserDetails(!showUserDetails)}
-                  className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                  <span className={`transform transition-transform ${showUserDetails ? 'rotate-90' : ''}`}>▶</span>
-                  {showUserDetails ? 'Hide' : 'Show'} Member Details ({userDetails.length} accounts)
-                </button>
+        {/* Single Unit: User Details Toggle */}
+        {metrics && userDetails.length > 0 && viewMode !== 'aggregate' && (
+          <div className="mt-4">
+            <button
+              onClick={() => setShowUserDetails(!showUserDetails)}
+              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              <span className={`transform transition-transform ${showUserDetails ? 'rotate-90' : ''}`}>▶</span>
+              {showUserDetails ? 'Hide' : 'Show'} Member Details ({userDetails.length} accounts)
+            </button>
 
-                {showUserDetails && (
-                  <div className="mt-3">
-                    <GoogleAdoptionUserTable users={userDetails} />
-                  </div>
-                )}
+            {showUserDetails && (
+              <div className="mt-3">
+                <GoogleAdoptionUserTable users={userDetails} />
               </div>
             )}
-
-            {/* Data Collection Info */}
-            <div className="text-xs text-slate-400 text-right">
-              Data collected: {metrics.collectionDate}
-            </div>
-          </>
+          </div>
         )}
 
         {/* Multi-Unit Comparison Table (Aggregate View) */}
         {viewMode === 'aggregate' && subordinateMetrics.length > 0 && (
           <div className="mt-4">
-            <h4 className="font-semibold text-slate-800 mb-3">Subordinate Unit Adoption</h4>
+            <h4 className="font-semibold text-slate-800 mb-3">Breakdown by Unit</h4>
             <GoogleAdoptionComparisonTable unitMetrics={subordinateMetrics} />
+          </div>
+        )}
+
+        {/* Data Collection Info */}
+        {displayMetrics && (
+          <div className="text-xs text-slate-400 text-right">
+            Data collected: {displayMetrics.collectionDate}
           </div>
         )}
       </div>

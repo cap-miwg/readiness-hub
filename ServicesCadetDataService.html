@@ -708,14 +708,15 @@ function createCadetDataService() {
     const reqData = getAchievementRequirements(capid, nextAchievement.toString(), timeInGrade);
     const tigReady = timeInGrade.isEligible;
 
-    // Check only cadet-controllable requirements (exclude activeParticipation and cadetOath)
+    // Check only cadet-controllable requirements (exclude activeParticipation, cadetOath, and timeInGrade)
+    // timeInGrade is excluded because it happens automatically with the passage of time
     const cadetControllableReqs = Object.entries(reqData.requirements).filter(([key, _]) =>
-      key !== 'activeParticipation' && key !== 'cadetOath'
+      key !== 'activeParticipation' && key !== 'cadetOath' && key !== 'timeInGrade'
     );
     const cadetControllableCompleted = cadetControllableReqs.filter(([_, req]) => req.completed).length;
     const reqsReady = cadetControllableCompleted === cadetControllableReqs.length;
 
-    // Check for READY: everything cadet can control is complete
+    // Check for READY: everything cadet can control is complete (and TIG met)
     if (tigReady && reqsReady) return { status: 'READY', message: 'Ready for promotion!' };
 
     // Check for TIME_PENDING: everything done but not eligible due to time in grade
