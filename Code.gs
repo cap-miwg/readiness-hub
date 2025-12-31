@@ -130,16 +130,53 @@ function showCurrentConfig() {
   return props;
 }
 
+/**
+ * Get user's full name from Google Workspace Directory
+ * @param {string} userEmail - The user's email address
+ * @returns {string} - The user's full name or 'Unknown' if lookup fails
+ */
+function getUserFullName(userEmail) {
+  if (!userEmail || userEmail === 'Unknown') {
+    return 'Unknown';
+  }
+
+  try {
+    const user = AdminDirectory.Users.get(userEmail);
+    return user.name.fullName || 'Unknown';
+  } catch (err) {
+    Logger.log("Could not retrieve full name for " + userEmail + ": " + err.message);
+    return 'Unknown';
+  }
+}
+
+/**
+ * Get username from email address (part before @)
+ * @param {string} userEmail - The user's email address
+ * @returns {string} - The username or 'Unknown' if not available
+ */
+function getUserNameFromEmail(userEmail) {
+  if (!userEmail || userEmail === 'Unknown') {
+    return 'Unknown';
+  }
+
+  const atIndex = userEmail.indexOf('@');
+  if (atIndex > 0) {
+    return userEmail.substring(0, atIndex);
+  }
+  return 'Unknown';
+}
+
 function doGet(e) {
   const startTime = new Date();
   const userEmail = Session.getActiveUser().getEmail() || 'Unknown';
+  const userName = getUserFullName(userEmail);
   let status = 'SUCCESS';
   let errorMessage = '';
   let errorStack = '';
 
   try {
     Logger.log("========== WEB APP ACCESS ==========");
-    Logger.log("User: " + userEmail);
+    Logger.log("User: " + userName + " (" + userEmail + ")");
     Logger.log("Access Time: " + startTime.toISOString());
     Logger.log("====================================");
 
@@ -156,6 +193,7 @@ function doGet(e) {
 
     logWebAppAccess({
       timestamp: startTime,
+      userName: userName,
       userEmail: userEmail,
       eventType: 'WEB_APP_ACCESS',
       status: status,
@@ -179,6 +217,7 @@ function doGet(e) {
     // Log the error
     logWebAppAccess({
       timestamp: startTime,
+      userName: userName,
       userEmail: userEmail,
       eventType: 'WEB_APP_ACCESS',
       status: status,
@@ -429,10 +468,11 @@ function syncDriveToSheet() {
 function getAppData() {
   const startTime = new Date();
   const userEmail = Session.getActiveUser().getEmail() || 'Unknown';
+  const userName = getUserFullName(userEmail);
 
   Logger.log("========== GET APP DATA START ==========");
   Logger.log("Request Time: " + startTime.toISOString());
-  Logger.log("User: " + userEmail);
+  Logger.log("User: " + userName + " (" + userEmail + ")");
 
   const cache = CacheService.getScriptCache();
   // Bump version to force refresh if schema changes
@@ -449,6 +489,7 @@ function getAppData() {
     // Log API call with cache hit
     logWebAppAccess({
       timestamp: startTime,
+      userName: userName,
       userEmail: userEmail,
       eventType: 'API_CALL_GET_DATA',
       status: 'SUCCESS_CACHED',
@@ -585,6 +626,7 @@ function getAppData() {
     // Log successful API call with cache miss
     logWebAppAccess({
       timestamp: startTime,
+      userName: userName,
       userEmail: userEmail,
       eventType: 'API_CALL_GET_DATA',
       status: 'SUCCESS_UNCACHED',
@@ -608,6 +650,7 @@ function getAppData() {
     // Log failed API call
     logWebAppAccess({
       timestamp: startTime,
+      userName: userName,
       userEmail: userEmail,
       eventType: 'API_CALL_GET_DATA',
       status: 'ERROR',
@@ -644,6 +687,7 @@ function logWebAppAccess(logData) {
       // Set up headers with standard logging fields
       const headers = [
         'Timestamp',
+        'User Name',
         'User Email',
         'Event Type',
         'Status',
@@ -680,6 +724,7 @@ function logWebAppAccess(logData) {
     // Prepare log row data
     const logRow = [
       logData.timestamp,
+      logData.userName || 'Unknown',
       logData.userEmail || 'Unknown',
       logData.eventType || 'UNKNOWN_EVENT',
       logData.status || 'UNKNOWN',
@@ -729,9 +774,10 @@ function logWebAppAccess(logData) {
 function createGitHubIssue(issueData) {
   const startTime = new Date();
   const userEmail = Session.getActiveUser().getEmail() || 'Unknown';
+  const userName = getUserFullName(userEmail);
 
   Logger.log("========== CREATE GITHUB ISSUE ==========");
-  Logger.log("User: " + userEmail);
+  Logger.log("User: " + userName + " (" + userEmail + ")");
   Logger.log("Category: " + issueData.category);
   Logger.log("Title: " + issueData.title);
   Logger.log("=========================================");
@@ -752,8 +798,9 @@ function createGitHubIssue(issueData) {
       throw new Error('Issue description is required');
     }
 
-    // Build issue body with markdown formatting
-    const issueBody = formatIssueBody(issueData, userEmail);
+    // Build issue body with markdown formatting (use username for privacy)
+    const userNameForGitHub = getUserNameFromEmail(userEmail);
+    const issueBody = formatIssueBody(issueData, userNameForGitHub);
 
     // Determine labels based on category
     const labels = getCategoryLabels(issueData.category);
@@ -803,6 +850,7 @@ function createGitHubIssue(issueData) {
       // Log successful submission
       logWebAppAccess({
         timestamp: startTime,
+        userName: userName,
         userEmail: userEmail,
         eventType: 'GITHUB_ISSUE_CREATED',
         status: 'SUCCESS',
@@ -828,7 +876,7 @@ function createGitHubIssue(issueData) {
           description: issueData.description || '',
           category: issueData.category || 'other',
           submitterEmail: userEmail,
-          submitterName: null  // Could be enhanced to get display name if available
+          submitterName: userName
         });
         Logger.log("IT Chatbot notification sent successfully");
       } catch (notifyError) {
@@ -869,6 +917,7 @@ function createGitHubIssue(issueData) {
     // Log the failure
     logWebAppAccess({
       timestamp: startTime,
+      userName: userName,
       userEmail: userEmail,
       eventType: 'GITHUB_ISSUE_CREATED',
       status: 'ERROR',
@@ -896,10 +945,10 @@ function createGitHubIssue(issueData) {
  * Creates a well-structured issue body with diagnostic information
  *
  * @param {Object} issueData - The issue data from frontend
- * @param {string} userEmail - The submitting user's email
+ * @param {string} userName - The submitting user's name
  * @returns {string} - Formatted markdown body
  */
-function formatIssueBody(issueData, userEmail) {
+function formatIssueBody(issueData, userName) {
   const d = issueData.diagnostics || {};
   const submissionTime = new Date().toISOString();
 
@@ -912,7 +961,7 @@ function formatIssueBody(issueData, userEmail) {
   body += '### Submission Details\n';
   body += '| Property | Value |\n';
   body += '|----------|-------|\n';
-  body += '| **Submitted By** | ' + userEmail + ' |\n';
+  body += '| **Submitted By** | ' + userName + ' |\n';
   body += '| **Submission Time** | ' + submissionTime + ' |\n';
   body += '| **Category** | ' + (issueData.category || 'N/A') + ' |\n\n';
 
