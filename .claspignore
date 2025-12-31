@@ -1,0 +1,21 @@
+# Git files
+.git/**
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+screenshots/**
+
+# Claude/IDE files
+.claude/**
+
+# Clasp config (don't push to Apps Script)
+.clasp.json
+.claspignore
+
+# Common dev files
+node_modules/**
+package.json
+package-lock.json
+*.log
