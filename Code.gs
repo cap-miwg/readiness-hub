@@ -7,34 +7,128 @@
  * Data source: CAPWATCH exports synced to a Google Drive folder
  *
  * Setup Instructions:
- * 1. Set SOURCE_FOLDER_ID to your Google Drive folder containing CAPWATCH exports
- * 2. Set DB_SPREADSHEET_ID to a Google Sheet for data storage
- * 3. Set APP_NAME to your unit's name (e.g., "Michigan Wing Readiness Hub")
- * 4. (Optional) Configure GitHub integration for user feedback
- * 5. Deploy as web app and set up hourly trigger for syncDriveToSheet()
+ * 1. Run setupScriptProperties() once to initialize default property values
+ * 2. Go to Extensions > Apps Script > Project Settings > Script Properties
+ * 3. Configure required properties:
+ *    - SOURCE_FOLDER_ID: Google Drive folder ID containing CAPWATCH exports
+ *    - DB_SPREADSHEET_ID: Google Sheet ID for data storage
+ *    - APP_NAME: Your unit name (e.g., "Michigan Wing Readiness Hub")
+ * 4. (Optional) Configure GitHub integration:
+ *    - GITHUB_TOKEN: Personal access token with 'repo' scope
+ *    - GITHUB_OWNER: Your GitHub username or organization
+ *    - GITHUB_REPO: Repository name (default: "readiness-hub")
+ * 5. (Optional) Configure IT Chatbot integration:
+ *    - CHATBOT_WEBAPP_URL: URL to the IT Chatbot web app
+ *    - CHATBOT_API_KEY: API key for the chatbot
+ * 6. Deploy as web app and set up hourly trigger for syncDriveToSheet()
  *
  * See README.md for detailed setup instructions.
  */
 
-// --- CONFIGURATION ---
-// REQUIRED: Replace these with your actual IDs
-const SOURCE_FOLDER_ID = 'YOUR_SOURCE_FOLDER_ID';  // Google Drive folder with CAPWATCH exports
-const DB_SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';   // Google Sheet for data storage
-const DB_SHEET_NAME = 'DB';
-const LOGS_SHEET_NAME = 'Logs';
+// --- CONFIGURATION VIA SCRIPT PROPERTIES ---
+// All configuration is stored in Script Properties for security.
+// Access via: Extensions > Apps Script > Project Settings > Script Properties
 
-// APP DISPLAY NAME - Customize this for your unit
-const APP_NAME = 'CAP Readiness Hub';  // Change to your unit name, e.g., "Michigan Wing Readiness Hub"
+/**
+ * Get a configuration value from Script Properties
+ * @param {string} key - The property key
+ * @param {string} defaultValue - Default value if property not set
+ * @returns {string} - The property value or default
+ */
+function getConfig(key, defaultValue) {
+  const value = PropertiesService.getScriptProperties().getProperty(key);
+  return value !== null ? value : defaultValue;
+}
 
-// --- GITHUB ISSUE CONFIGURATION (Optional) ---
-// Enables in-app feedback submission via GitHub Issues
-// To configure:
-// 1. Create a GitHub personal access token with 'repo' scope
-// 2. In Apps Script: Extensions > Apps Script > Project Settings > Script Properties
-// 3. Add property: GITHUB_TOKEN = your_personal_access_token
-const GITHUB_OWNER = 'YOUR_GITHUB_USERNAME';  // Replace with your GitHub username or organization
-const GITHUB_REPO = 'readiness-hub';
-const GITHUB_API_URL = 'https://api.github.com';
+/**
+ * Get required configuration - throws error if not set
+ * @param {string} key - The property key
+ * @param {string} friendlyName - Human-readable name for error message
+ * @returns {string} - The property value
+ * @throws {Error} - If property is not configured
+ */
+function getRequiredConfig(key, friendlyName) {
+  const value = PropertiesService.getScriptProperties().getProperty(key);
+  if (!value || value === 'YOUR_' + key || value.startsWith('YOUR_')) {
+    throw new Error(friendlyName + ' is not configured. Please set "' + key + '" in Script Properties (Extensions > Apps Script > Project Settings > Script Properties).');
+  }
+  return value;
+}
+
+/**
+ * Initialize Script Properties with default values
+ * Run this function once to set up the property structure.
+ * Then edit the values in Project Settings > Script Properties.
+ */
+function setupScriptProperties() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const currentProps = scriptProperties.getProperties();
+
+  // Default configuration values - only set if not already configured
+  const defaults = {
+    'SOURCE_FOLDER_ID': 'YOUR_SOURCE_FOLDER_ID',
+    'DB_SPREADSHEET_ID': 'YOUR_SPREADSHEET_ID',
+    'DB_SHEET_NAME': 'DB',
+    'LOGS_SHEET_NAME': 'Logs',
+    'APP_NAME': 'CAP Readiness Hub',
+    'GITHUB_OWNER': 'YOUR_GITHUB_USERNAME',
+    'GITHUB_REPO': 'readiness-hub',
+    'GITHUB_API_URL': 'https://api.github.com'
+    // GITHUB_TOKEN, CHATBOT_WEBAPP_URL, CHATBOT_API_KEY should be added manually for security
+  };
+
+  let newProps = 0;
+  let existingProps = 0;
+
+  for (const [key, defaultValue] of Object.entries(defaults)) {
+    if (!currentProps.hasOwnProperty(key)) {
+      scriptProperties.setProperty(key, defaultValue);
+      Logger.log('Created property: ' + key + ' = ' + defaultValue);
+      newProps++;
+    } else {
+      Logger.log('Property already exists: ' + key + ' = ' + currentProps[key]);
+      existingProps++;
+    }
+  }
+
+  Logger.log('========================================');
+  Logger.log('Setup complete!');
+  Logger.log('New properties created: ' + newProps);
+  Logger.log('Existing properties kept: ' + existingProps);
+  Logger.log('');
+  Logger.log('Next steps:');
+  Logger.log('1. Go to Extensions > Apps Script > Project Settings');
+  Logger.log('2. Scroll down to Script Properties');
+  Logger.log('3. Edit the values for your deployment');
+  Logger.log('========================================');
+
+  return {
+    newProperties: newProps,
+    existingProperties: existingProps,
+    message: 'Setup complete. Edit values in Project Settings > Script Properties.'
+  };
+}
+
+/**
+ * Display current configuration (for debugging)
+ * Masks sensitive values like tokens
+ */
+function showCurrentConfig() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const sensitiveKeys = ['GITHUB_TOKEN', 'CHATBOT_API_KEY'];
+
+  Logger.log('========== CURRENT CONFIGURATION ==========');
+  for (const [key, value] of Object.entries(props)) {
+    if (sensitiveKeys.includes(key)) {
+      Logger.log(key + ': ' + (value ? '***CONFIGURED***' : 'NOT SET'));
+    } else {
+      Logger.log(key + ': ' + value);
+    }
+  }
+  Logger.log('==========================================');
+
+  return props;
+}
 
 function doGet(e) {
   const startTime = new Date();
@@ -49,9 +143,10 @@ function doGet(e) {
     Logger.log("Access Time: " + startTime.toISOString());
     Logger.log("====================================");
 
+    const appName = getConfig('APP_NAME', 'CAP Readiness Hub');
     const htmlOutput = HtmlService.createTemplateFromFile('Index')
       .evaluate()
-      .setTitle(APP_NAME)
+      .setTitle(appName)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 
@@ -131,25 +226,30 @@ function syncDriveToSheet() {
     Logger.log("WARNING: Failed to clear cache: " + e.toString());
   }
 
-  Logger.log("Accessing Drive folder ID: " + SOURCE_FOLDER_ID);
-  const folder = DriveApp.getFolderById(SOURCE_FOLDER_ID);
+  // Get configuration from Script Properties
+  const sourceFolderId = getRequiredConfig('SOURCE_FOLDER_ID', 'Source Folder ID');
+  const dbSpreadsheetId = getRequiredConfig('DB_SPREADSHEET_ID', 'Database Spreadsheet ID');
+  const dbSheetName = getConfig('DB_SHEET_NAME', 'DB');
+
+  Logger.log("Accessing Drive folder ID: " + sourceFolderId);
+  const folder = DriveApp.getFolderById(sourceFolderId);
   Logger.log("Folder accessed: " + folder.getName());
 
   const filesIterator = folder.getFiles();
   Logger.log("Files iterator created");
 
-  Logger.log("Opening spreadsheet ID: " + DB_SPREADSHEET_ID);
-  const ss = SpreadsheetApp.openById(DB_SPREADSHEET_ID);
+  Logger.log("Opening spreadsheet ID: " + dbSpreadsheetId);
+  const ss = SpreadsheetApp.openById(dbSpreadsheetId);
   Logger.log("Spreadsheet opened: " + ss.getName());
 
-  let sheet = ss.getSheetByName(DB_SHEET_NAME);
+  let sheet = ss.getSheetByName(dbSheetName);
 
   if (!sheet) {
-    Logger.log("Sheet '" + DB_SHEET_NAME + "' not found, creating new sheet");
-    sheet = ss.insertSheet(DB_SHEET_NAME);
+    Logger.log("Sheet '" + dbSheetName + "' not found, creating new sheet");
+    sheet = ss.insertSheet(dbSheetName);
     Logger.log("Sheet created successfully");
   } else {
-    Logger.log("Sheet '" + DB_SHEET_NAME + "' found");
+    Logger.log("Sheet '" + dbSheetName + "' found");
   }
 
   // Headers: Filename, Category, Key, ChunkIndex, Content, LastUpdated
@@ -364,19 +464,23 @@ function getAppData() {
 
   Logger.log("Cache MISS - Fetching data from sheet");
 
+  // Get configuration from Script Properties
+  const dbSpreadsheetId = getRequiredConfig('DB_SPREADSHEET_ID', 'Database Spreadsheet ID');
+  const dbSheetName = getConfig('DB_SHEET_NAME', 'DB');
+
   try {
-    Logger.log("Opening spreadsheet ID: " + DB_SPREADSHEET_ID);
-    const ss = SpreadsheetApp.openById(DB_SPREADSHEET_ID);
+    Logger.log("Opening spreadsheet ID: " + dbSpreadsheetId);
+    const ss = SpreadsheetApp.openById(dbSpreadsheetId);
     Logger.log("Spreadsheet opened: " + ss.getName());
 
-    const sheet = ss.getSheetByName(DB_SHEET_NAME);
+    const sheet = ss.getSheetByName(dbSheetName);
 
     if (!sheet) {
-      Logger.log("ERROR: Sheet '" + DB_SHEET_NAME + "' not found");
+      Logger.log("ERROR: Sheet '" + dbSheetName + "' not found");
       throw new Error("Database sheet not found. Please run 'syncDriveToSheet' first.");
     }
 
-    Logger.log("Sheet '" + DB_SHEET_NAME + "' found");
+    Logger.log("Sheet '" + dbSheetName + "' found");
     Logger.log("Reading data range from sheet...");
     const rows = sheet.getDataRange().getValues();
     Logger.log("Read " + rows.length + " total rows from sheet");
@@ -526,13 +630,16 @@ function logWebAppAccess(logData) {
   try {
     Logger.log("Logging web app access for user: " + logData.userEmail);
 
-    const ss = SpreadsheetApp.openById(DB_SPREADSHEET_ID);
-    let logsSheet = ss.getSheetByName(LOGS_SHEET_NAME);
+    const dbSpreadsheetId = getRequiredConfig('DB_SPREADSHEET_ID', 'Database Spreadsheet ID');
+    const logsSheetName = getConfig('LOGS_SHEET_NAME', 'Logs');
+
+    const ss = SpreadsheetApp.openById(dbSpreadsheetId);
+    let logsSheet = ss.getSheetByName(logsSheetName);
 
     // Create Logs sheet if it doesn't exist
     if (!logsSheet) {
       Logger.log("Creating new Logs sheet");
-      logsSheet = ss.insertSheet(LOGS_SHEET_NAME);
+      logsSheet = ss.insertSheet(logsSheetName);
 
       // Set up headers with standard logging fields
       const headers = [
@@ -655,8 +762,13 @@ function createGitHubIssue(issueData) {
     const categoryPrefix = (issueData.category || 'feedback').toUpperCase();
     const formattedTitle = '[' + categoryPrefix + '] ' + issueData.title.trim();
 
+    // Get GitHub configuration from Script Properties
+    const githubOwner = getRequiredConfig('GITHUB_OWNER', 'GitHub Owner');
+    const githubRepo = getConfig('GITHUB_REPO', 'readiness-hub');
+    const githubApiUrl = getConfig('GITHUB_API_URL', 'https://api.github.com');
+
     // Prepare API request
-    const apiUrl = GITHUB_API_URL + '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/issues';
+    const apiUrl = githubApiUrl + '/repos/' + githubOwner + '/' + githubRepo + '/issues';
     const payload = {
       title: formattedTitle,
       body: issueBody,
@@ -706,6 +818,23 @@ function createGitHubIssue(issueData) {
       });
 
       Logger.log("========== GITHUB ISSUE CREATED ==========");
+
+      // Notify IT Chatbot about the new issue
+      try {
+        notifyITChatbot({
+          issueUrl: responseBody.html_url,
+          issueNumber: responseBody.number,
+          title: formattedTitle,
+          description: issueData.description || '',
+          category: issueData.category || 'other',
+          submitterEmail: userEmail,
+          submitterName: null  // Could be enhanced to get display name if available
+        });
+        Logger.log("IT Chatbot notification sent successfully");
+      } catch (notifyError) {
+        // Log but don't fail the main function - issue creation is the primary goal
+        Logger.log("Failed to notify IT Chatbot: " + notifyError.toString());
+      }
 
       return {
         success: true,
@@ -840,5 +969,64 @@ function getCategoryLabels(category) {
   };
 
   return labelMap[category] || ['user-reported'];
+}
+
+/**
+ * NOTIFY IT CHATBOT ABOUT NEW GITHUB ISSUE
+ * Sends a notification to the IT Chatbot when a new GitHub issue is created
+ * The chatbot will post a card to the IT Support space and send an email to the submitter
+ *
+ * @param {Object} issueData - Issue information
+ * @param {string} issueData.issueUrl - URL to the GitHub issue
+ * @param {number} issueData.issueNumber - GitHub issue number
+ * @param {string} issueData.title - Issue title
+ * @param {string} issueData.description - Issue description
+ * @param {string} issueData.category - Issue category (bug, feature, etc.)
+ * @param {string} issueData.submitterEmail - Email of the person who submitted the issue
+ * @param {string|null} issueData.submitterName - Name of the submitter (optional)
+ */
+function notifyITChatbot(issueData) {
+  const CHATBOT_WEBAPP_URL = PropertiesService.getScriptProperties().getProperty('CHATBOT_WEBAPP_URL');
+  const CHATBOT_API_KEY = PropertiesService.getScriptProperties().getProperty('CHATBOT_API_KEY');
+
+  if (!CHATBOT_WEBAPP_URL || !CHATBOT_API_KEY) {
+    Logger.log('IT Chatbot integration not configured - skipping notification');
+    Logger.log('Missing: ' + (!CHATBOT_WEBAPP_URL ? 'CHATBOT_WEBAPP_URL ' : '') + (!CHATBOT_API_KEY ? 'CHATBOT_API_KEY' : ''));
+    return;
+  }
+
+  const payload = {
+    action: 'GITHUB_ISSUE_NOTIFICATION',
+    issueData: {
+      issueUrl: issueData.issueUrl,
+      issueNumber: issueData.issueNumber,
+      title: issueData.title,
+      description: issueData.description,
+      category: issueData.category,
+      submitterEmail: issueData.submitterEmail,
+      submitterName: issueData.submitterName
+    }
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const url = CHATBOT_WEBAPP_URL + '?apiKey=' + encodeURIComponent(CHATBOT_API_KEY);
+
+  Logger.log('Sending notification to IT Chatbot...');
+  const response = UrlFetchApp.fetch(url, options);
+  const responseCode = response.getResponseCode();
+
+  if (responseCode >= 200 && responseCode < 300) {
+    Logger.log('IT Chatbot notified successfully');
+  } else {
+    const responseText = response.getContentText();
+    Logger.log('IT Chatbot notification failed (HTTP ' + responseCode + '): ' + responseText);
+    throw new Error('Chatbot notification failed: HTTP ' + responseCode);
+  }
 }
 

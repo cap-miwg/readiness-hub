@@ -62,24 +62,38 @@ Copy all the project files to a new Google Apps Script project:
 
 ### 2. Configure Required Settings
 
-Edit `Code.gs` and update these constants:
+Configuration is stored securely in Script Properties (not in the code):
 
-```javascript
-// REQUIRED: Replace with your Google Drive folder ID containing CAPWATCH exports
-const SOURCE_FOLDER_ID = 'YOUR_SOURCE_FOLDER_ID';
+1. In the Apps Script editor, select `setupScriptProperties` from the function dropdown
+2. Click **Run** to initialize the default property structure
+3. Go to **Project Settings** (gear icon) > **Script Properties**
+4. Edit these required properties:
 
-// REQUIRED: Replace with a new Google Sheet ID for data storage
-const DB_SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
-
-// REQUIRED: Customize for your unit
-const APP_NAME = 'Your Wing Readiness Hub';
-```
+| Property | Description | Example |
+|----------|-------------|---------|
+| `SOURCE_FOLDER_ID` | Google Drive folder ID with CAPWATCH exports | `1ABC...xyz` |
+| `DB_SPREADSHEET_ID` | Google Sheet ID for data storage | `1DEF...abc` |
+| `APP_NAME` | Display name for your unit | `Michigan Wing Readiness Hub` |
 
 **Finding IDs:**
 - **Folder ID**: Open your Drive folder, copy from URL: `https://drive.google.com/drive/folders/{FOLDER_ID}`
 - **Spreadsheet ID**: Create a new Google Sheet, copy from URL: `https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit`
 
 Also update `ConfigConstants.html` line 5 to match your APP_NAME.
+
+**Optional Configuration Properties:**
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `DB_SHEET_NAME` | Name of the data sheet tab | `DB` |
+| `LOGS_SHEET_NAME` | Name of the logs sheet tab | `Logs` |
+| `GITHUB_OWNER` | GitHub username/org for feedback | - |
+| `GITHUB_REPO` | Repository name for feedback | `readiness-hub` |
+| `GITHUB_TOKEN` | Personal access token (add manually) | - |
+
+**Utility Functions:**
+- `setupScriptProperties()` - Initialize default property values
+- `showCurrentConfig()` - Display current configuration (masks sensitive values)
 
 ### 3. Run Initial Data Sync
 
@@ -157,13 +171,23 @@ The app expects these CAPWATCH export files in your source folder:
 The app includes an optional feedback feature that creates GitHub issues. To enable:
 
 1. Create a GitHub personal access token with `repo` scope
-2. In Apps Script: **Extensions** > **Apps Script** > **Project Settings** > **Script Properties**
-3. Add property: `GITHUB_TOKEN` = your token
-4. Update `Code.gs`:
-   ```javascript
-   const GITHUB_OWNER = 'your-github-username';
-   const GITHUB_REPO = 'your-repo-name';
-   ```
+2. In Apps Script: Go to **Project Settings** (gear icon) > **Script Properties**
+3. Add/edit these properties:
+
+| Property | Value |
+|----------|-------|
+| `GITHUB_TOKEN` | Your personal access token |
+| `GITHUB_OWNER` | Your GitHub username or organization |
+| `GITHUB_REPO` | Repository name (default: `readiness-hub`) |
+
+**Optional IT Chatbot Integration:**
+
+If you have an IT chatbot that should be notified of new issues, add these properties:
+
+| Property | Value |
+|----------|-------|
+| `CHATBOT_WEBAPP_URL` | URL to your IT chatbot web app |
+| `CHATBOT_API_KEY` | API key for the chatbot |
 
 ## Optional: Cadet Rank Insignia Images
 
