@@ -142,6 +142,7 @@ function createDataService() {
   let _unitChildrenMap = new Map();
   let _esService = null;
   let _esUnitAnalysisService = null;
+  let _googleAdoptionService = null;
 
   const padUnit = (val) => (val || "").replace(/^0+/, '').padStart(3, '0');
   const buildUnitChildren = () => {
@@ -226,6 +227,9 @@ function createDataService() {
     _esService = createESDataService(_rawConfig, _rawData);
     // Initialize ES Unit Analysis service
     _esUnitAnalysisService = createESUnitAnalysisService(_rawConfig, _rawData, _esService);
+    // Initialize Google Adoption service
+    _googleAdoptionService = createGoogleAdoptionDataService();
+    _googleAdoptionService.initialize(payload?.data?.googleAdoption, payload?.data?.googleAdoptionUsers);
   };
 
   const buildUnitName = (org) => {
@@ -353,7 +357,9 @@ function createDataService() {
     checkESQualificationEligibility: (achvID, member) => _esService.checkESQualificationEligibility(achvID, member),
     getAllESAchievements: () => _esService.getAllESAchievements(),
     // ES Unit Analysis Service
-    getESUnitAnalysisService: () => _esUnitAnalysisService
+    getESUnitAnalysisService: () => _esUnitAnalysisService,
+    // Google Adoption Service
+    getGoogleAdoptionService: () => _googleAdoptionService
   };
 }
 </script>

@@ -335,7 +335,9 @@ function syncDriveToSheet() {
     'SeniorAwards': { cat: 'data', key: 'seniorAwards', priority: 31 },
     'OFlight': { cat: 'data', key: 'oFlights', priority: 32 },
     'ORGStatistics': { cat: 'data', key: 'orgStats', priority: 33 },
-    'PL_VolUInstructors': { cat: 'data', key: 'voluInstructors', priority: 34 }
+    'PL_VolUInstructors': { cat: 'data', key: 'voluInstructors', priority: 34 },
+    'GoogleAdoptionStats': { cat: 'data', key: 'googleAdoption', priority: 35 },
+    'GoogleAdoptionUsers': { cat: 'data', key: 'googleAdoptionUsers', priority: 36 }
   };
 
   // First, collect all files into an array for sorting
@@ -1077,5 +1079,568 @@ function notifyITChatbot(issueData) {
     Logger.log('IT Chatbot notification failed (HTTP ' + responseCode + '): ' + responseText);
     throw new Error('Chatbot notification failed: HTTP ' + responseCode);
   }
+}
+
+// ========================================
+// GOOGLE WORKSPACE ADOPTION TRACKING
+// ========================================
+
+/**
+ * Main function to collect Google Workspace adoption data
+ * Run daily via time-based trigger (5 AM Eastern, after ORGStatistics refresh)
+ */
+function collectGoogleAdoptionData() {
+  const startTime = new Date();
+  Logger.log("========== GOOGLE ADOPTION DATA COLLECTION START ==========");
+  Logger.log("Start Time: " + startTime.toISOString());
+
+  try {
+    // Step 1: Get roster counts from ORGStatistics
+    Logger.log("Step 1: Getting roster counts from ORGStatistics...");
+    const rosterCounts = getRosterCountsByUnit();
+    Logger.log("Roster counts retrieved for " + Object.keys(rosterCounts).length + " units");
+
+    // Step 2: Get Google Workspace user activity data
+    Logger.log("Step 2: Getting Google Workspace metrics...");
+    const googleMetrics = getGoogleWorkspaceMetrics();
+    Logger.log("Google metrics retrieved for " + Object.keys(googleMetrics).length + " units");
+
+    // Step 3: Calculate adoption rates and build output
+    Logger.log("Step 3: Calculating adoption metrics...");
+    const adoptionData = calculateAdoptionMetrics(rosterCounts, googleMetrics);
+    Logger.log("Adoption metrics calculated for " + adoptionData.length + " units");
+
+    // Step 4: Write CSV to Drive folder
+    Logger.log("Step 4: Writing CSV to Drive folder...");
+    writeAdoptionCSV(adoptionData);
+    Logger.log("CSV written successfully");
+
+    const endTime = new Date();
+    const duration = (endTime - startTime) / 1000;
+    Logger.log("========== GOOGLE ADOPTION DATA COLLECTION END ==========");
+    Logger.log("Duration: " + duration + " seconds");
+
+    return { success: true, unitsProcessed: adoptionData.length, duration: duration };
+
+  } catch (error) {
+    Logger.log("ERROR in collectGoogleAdoptionData: " + error.toString());
+    Logger.log("Stack: " + (error.stack || 'N/A'));
+    throw error;
+  }
+}
+
+/**
+ * Get roster counts per unit from ORGStatistics file
+ * Filters to MI wing, units 001-800, operational member types
+ * @returns {Object} Map of unit key (MI-###) to roster count
+ */
+function getRosterCountsByUnit() {
+  const sourceFolderId = getRequiredConfig('SOURCE_FOLDER_ID', 'Source Folder ID');
+  const folder = DriveApp.getFolderById(sourceFolderId);
+  const files = folder.getFiles();
+
+  let orgStatsContent = null;
+  while (files.hasNext()) {
+    const file = files.next();
+    if (file.getName().includes('ORGStatistics')) {
+      orgStatsContent = file.getBlob().getDataAsString();
+      Logger.log("Found ORGStatistics file: " + file.getName());
+      break;
+    }
+  }
+
+  if (!orgStatsContent) {
+    Logger.log("WARNING: ORGStatistics file not found in folder");
+    return {};
+  }
+
+  // Parse CSV
+  const lines = orgStatsContent.split('\n').filter(l => l.trim());
+  if (lines.length === 0) return {};
+
+  const headers = parseCSVRowToArray(lines[0]);
+  Logger.log("ORGStatistics headers: " + headers.join(', '));
+
+  const rosterCounts = {};
+
+  // Get current month/year for filtering
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // Operational member types (case-insensitive matching)
+  const operationalTypes = ['CADET', 'SENIOR', 'FIFTY YEAR', 'LIFE'];
+
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCSVRowToObject(lines[i], headers);
+
+    // Filter: Wing = MI, Unit between 001-800
+    const wing = (row.Wing || '').toUpperCase().trim();
+    const unit = (row.Unit || '').trim().padStart(3, '0');
+    const unitNum = parseInt(unit);
+
+    if (wing !== 'MI' || unitNum < 1 || unitNum > 800) continue;
+
+    // Filter: TOTAL count type
+    const cntType = (row.CntType || '').toUpperCase().trim();
+    if (cntType !== 'TOTAL') continue;
+
+    // Check date is current month (or previous month for data lag)
+    const cntDate = row.CntDate;
+    if (cntDate) {
+      const parts = cntDate.split('/');
+      if (parts.length === 3) {
+        const rowMonth = parseInt(parts[0]);
+        const rowYear = parseInt(parts[2]);
+        // Accept current month or previous month
+        const isCurrentPeriod = (rowYear === currentYear && (rowMonth === currentMonth || rowMonth === currentMonth - 1)) ||
+                                (rowMonth === 12 && rowYear === currentYear - 1 && currentMonth === 1);
+        if (!isCurrentPeriod) continue;
+      }
+    }
+
+    // Filter: Operational member types only
+    const mbrType = (row.MbrType || '').toUpperCase().trim();
+    if (!operationalTypes.includes(mbrType)) continue;
+
+    // Sum quantity for this unit
+    const unitKey = 'MI-' + unit;
+    const quantity = parseInt(row.Quantity) || 0;
+
+    if (!rosterCounts[unitKey]) {
+      rosterCounts[unitKey] = 0;
+    }
+    rosterCounts[unitKey] += quantity;
+  }
+
+  return rosterCounts;
+}
+
+/**
+ * Parse a CSV row into an array of values, respecting quotes
+ * @param {string} line - CSV line
+ * @returns {Array} Array of values
+ */
+function parseCSVRowToArray(line) {
+  const values = [];
+  let currentVal = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(currentVal.trim().replace(/^"|"$/g, ''));
+      currentVal = '';
+    } else {
+      currentVal += char;
+    }
+  }
+  values.push(currentVal.trim().replace(/^"|"$/g, ''));
+  return values;
+}
+
+/**
+ * Parse a CSV row into an object using headers
+ * @param {string} line - CSV line
+ * @param {Array} headers - Column headers
+ * @returns {Object} Row as object
+ */
+function parseCSVRowToObject(line, headers) {
+  const values = parseCSVRowToArray(line);
+  const row = {};
+  for (let i = 0; i < headers.length && i < values.length; i++) {
+    row[headers[i]] = values[i];
+  }
+  return row;
+}
+
+/**
+ * Get Google Workspace metrics for all users in MI-### organizational units
+ * Uses Admin Directory API for user data and Admin Reports API for activity
+ *
+ * Returns both aggregated unit metrics AND per-user details for display.
+ *
+ * "Active" means actually using the account - defined as:
+ * - Logged in within 30 days, OR
+ * - Has Gmail activity (sent emails), OR
+ * - Has Drive activity (edited files)
+ *
+ * @returns {Object} { unitMetrics: { MI-###: {...} }, userDetails: [ {...}, ...] }
+ */
+function getGoogleWorkspaceMetrics() {
+  const unitMetrics = {};
+  const userDetails = [];
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  // Regex to extract unit from OU path (handles nested structure)
+  // OU structure: /MI-001/MI-705/MI-063 - we want the LAST MI-### segment
+  const unitRegex = /MI-(\d{3})/g;
+
+  try {
+    // Get all users with pagination
+    let pageToken = null;
+    const allUsers = [];
+
+    Logger.log("Fetching users from Admin Directory...");
+    do {
+      const response = AdminDirectory.Users.list({
+        customer: 'my_customer',
+        maxResults: 500,
+        pageToken: pageToken,
+        projection: 'full'
+      });
+
+      if (response.users) {
+        allUsers.push(...response.users);
+      }
+      pageToken = response.nextPageToken;
+    } while (pageToken);
+
+    Logger.log("Total users found: " + allUsers.length);
+
+    // Build a map of user email to user data for Reports API lookups
+    const userDataMap = new Map();
+
+    // Process each user for basic metrics
+    allUsers.forEach(user => {
+      // Extract unit from OU path
+      // OU structure example: /MI-001/MI-705/MI-063
+      const ouPath = user.orgUnitPath || '';
+
+      // Find all MI-### matches and take the last one (the actual unit)
+      const matches = ouPath.match(unitRegex);
+      if (!matches || matches.length === 0) return;
+
+      const unitKey = matches[matches.length - 1].toUpperCase(); // Last match is the unit
+      const unitNum = parseInt(unitKey.split('-')[1]);
+
+      // Filter to units 001-800
+      if (unitNum < 1 || unitNum > 800) return;
+
+      // Only count non-suspended, non-archived accounts
+      if (user.suspended || user.archived) return;
+
+      // Check if logged in within 30 days
+      let hasRecentLogin = false;
+      let lastLoginDate = '';
+      if (user.lastLoginTime) {
+        const lastLogin = new Date(user.lastLoginTime);
+        hasRecentLogin = lastLogin >= thirtyDaysAgo;
+        lastLoginDate = Utilities.formatDate(lastLogin, 'America/New_York', 'MM/dd/yyyy');
+      }
+
+      // Store user data for Reports API lookup and later aggregation
+      const userData = {
+        email: user.primaryEmail,
+        fullName: user.name?.fullName || '',
+        unitKey: unitKey,
+        hasRecentLogin: hasRecentLogin,
+        lastLoginDate: lastLoginDate,
+        hasGmailActivity: false,
+        hasDriveActivity: false,
+        isActiveUser: hasRecentLogin // Will be updated after Reports API check
+      };
+      userDataMap.set(user.primaryEmail, userData);
+
+      // Initialize unit metrics if needed
+      if (!unitMetrics[unitKey]) {
+        unitMetrics[unitKey] = {
+          totalAccounts: 0,
+          activeUsers: 0,  // Users actually using the account
+          recentLogin: 0,
+          gmailActive: 0,
+          driveActive: 0
+        };
+      }
+
+      unitMetrics[unitKey].totalAccounts++;
+
+      if (hasRecentLogin) {
+        unitMetrics[unitKey].recentLogin++;
+      }
+    });
+
+    Logger.log("Processed " + userDataMap.size + " non-suspended users in MI units");
+
+    // Get Gmail and Drive activity from Reports API
+    // Reports data is delayed by 3-5 days, so we query 5 days ago to ensure data availability
+    const reportDate = Utilities.formatDate(new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), 'UTC', 'yyyy-MM-dd');
+    Logger.log("Fetching usage reports for date: " + reportDate);
+
+    try {
+      let reportPageToken = null;
+      let reportsProcessed = 0;
+
+      do {
+        const usageReport = AdminReports.UserUsageReport.get('all', reportDate, {
+          pageToken: reportPageToken,
+          parameters: 'gmail:num_emails_sent,drive:num_items_edited'
+        });
+
+        if (usageReport.usageReports) {
+          usageReport.usageReports.forEach(report => {
+            const email = report.entity.userEmail;
+            const userData = userDataMap.get(email);
+            if (!userData) return;
+
+            const unitKey = userData.unitKey;
+            if (!unitMetrics[unitKey]) return;
+
+            reportsProcessed++;
+
+            // Check for Gmail activity
+            const params = report.parameters || [];
+            const gmailParam = params.find(p => p.name === 'gmail:num_emails_sent');
+            if (gmailParam && (parseInt(gmailParam.intValue || gmailParam.stringValue || '0') > 0)) {
+              userData.hasGmailActivity = true;
+              unitMetrics[unitKey].gmailActive++;
+            }
+
+            // Check for Drive activity
+            const driveParam = params.find(p => p.name === 'drive:num_items_edited');
+            if (driveParam && (parseInt(driveParam.intValue || driveParam.stringValue || '0') > 0)) {
+              userData.hasDriveActivity = true;
+              unitMetrics[unitKey].driveActive++;
+            }
+          });
+        }
+
+        reportPageToken = usageReport.nextPageToken;
+      } while (reportPageToken);
+
+      Logger.log("Processed " + reportsProcessed + " usage reports");
+
+    } catch (reportError) {
+      Logger.log("WARNING: Could not fetch usage reports: " + reportError.toString());
+      Logger.log("Continuing without Gmail/Drive activity data...");
+      // Continue without detailed activity data - basic metrics still available
+    }
+
+    // Now calculate "active users" - those who are actually using the account
+    // Active = has recent login OR has Gmail activity OR has Drive activity
+    userDataMap.forEach(userData => {
+      userData.isActiveUser = userData.hasRecentLogin || userData.hasGmailActivity || userData.hasDriveActivity;
+
+      if (userData.isActiveUser && unitMetrics[userData.unitKey]) {
+        unitMetrics[userData.unitKey].activeUsers++;
+      }
+
+      // Add to user details array for CSV output
+      userDetails.push(userData);
+    });
+
+    Logger.log("Calculated active users for all units");
+
+  } catch (error) {
+    Logger.log("ERROR getting Google Workspace metrics: " + error.toString());
+    throw error;
+  }
+
+  return { unitMetrics, userDetails };
+}
+
+/**
+ * Calculate adoption metrics by combining roster and Google data
+ *
+ * Adoption Rate is now calculated as: activeUsers / roster count
+ * where "activeUsers" = users who logged in OR used Gmail OR used Drive
+ *
+ * @param {Object} rosterCounts - Map of unit key to roster count
+ * @param {Object} googleData - { unitMetrics: {...}, userDetails: [...] }
+ * @returns {Object} { unitStats: [...], userDetails: [...] }
+ */
+function calculateAdoptionMetrics(rosterCounts, googleData) {
+  const unitStats = [];
+  const collectionDate = Utilities.formatDate(new Date(), 'America/New_York', 'MM/dd/yyyy');
+
+  const { unitMetrics, userDetails } = googleData;
+
+  // Get all unique units from both sources
+  const allUnits = new Set([...Object.keys(rosterCounts), ...Object.keys(unitMetrics)]);
+
+  allUnits.forEach(unitKey => {
+    const roster = rosterCounts[unitKey] || 0;
+    const google = unitMetrics[unitKey] || {
+      totalAccounts: 0,
+      activeUsers: 0,
+      recentLogin: 0,
+      gmailActive: 0,
+      driveActive: 0
+    };
+
+    // Calculate adoption rate (active users who are using the account / roster count)
+    // "Active" = logged in within 30 days OR has Gmail activity OR has Drive activity
+    let adoptionRate = 0;
+    if (roster > 0) {
+      adoptionRate = Math.round((google.activeUsers / roster) * 100);
+      // Cap at 100% (can exceed if Google has more active users than roster)
+      adoptionRate = Math.min(adoptionRate, 100);
+    }
+
+    unitStats.push({
+      unit: unitKey,
+      rosterCount: roster,
+      totalAccounts: google.totalAccounts,
+      activeUsers: google.activeUsers,
+      recentLogin: google.recentLogin,
+      gmailActive: google.gmailActive,
+      driveActive: google.driveActive,
+      adoptionRate: adoptionRate,
+      collectionDate: collectionDate
+    });
+  });
+
+  // Sort by unit name
+  unitStats.sort((a, b) => a.unit.localeCompare(b.unit));
+
+  // Add collection date to user details
+  const userDetailsWithDate = userDetails.map(u => ({
+    ...u,
+    collectionDate: collectionDate
+  }));
+
+  return { unitStats, userDetails: userDetailsWithDate };
+}
+
+/**
+ * Write adoption data to CSV files in source folder
+ * Creates two files:
+ * - GoogleAdoptionStats.csv: Unit-level summary
+ * - GoogleAdoptionUsers.csv: Per-user details
+ *
+ * @param {Object} adoptionData - { unitStats: [...], userDetails: [...] }
+ */
+function writeAdoptionCSV(adoptionData) {
+  const sourceFolderId = getRequiredConfig('SOURCE_FOLDER_ID', 'Source Folder ID');
+  const folder = DriveApp.getFolderById(sourceFolderId);
+
+  const { unitStats, userDetails } = adoptionData;
+
+  // === UNIT STATS CSV ===
+  const unitHeaders = [
+    'Unit',
+    'RosterCount',
+    'TotalAccounts',
+    'ActiveUsers',
+    'RecentLogin',
+    'GmailActive',
+    'DriveActive',
+    'AdoptionRate',
+    'CollectionDate'
+  ];
+
+  let unitCsvContent = unitHeaders.join(',') + '\n';
+
+  unitStats.forEach(row => {
+    const line = [
+      row.unit,
+      row.rosterCount,
+      row.totalAccounts,
+      row.activeUsers,
+      row.recentLogin,
+      row.gmailActive,
+      row.driveActive,
+      row.adoptionRate,
+      row.collectionDate
+    ].join(',');
+    unitCsvContent += line + '\n';
+  });
+
+  // Write/update unit stats file
+  const unitFileName = 'GoogleAdoptionStats.csv';
+  writeOrUpdateFile(folder, unitFileName, unitCsvContent);
+
+  // === USER DETAILS CSV ===
+  const userHeaders = [
+    'Unit',
+    'Email',
+    'FullName',
+    'IsActiveUser',
+    'HasRecentLogin',
+    'LastLoginDate',
+    'HasGmailActivity',
+    'HasDriveActivity',
+    'CollectionDate'
+  ];
+
+  let userCsvContent = userHeaders.join(',') + '\n';
+
+  // Sort users by unit, then by name
+  userDetails.sort((a, b) => {
+    const unitCompare = a.unitKey.localeCompare(b.unitKey);
+    if (unitCompare !== 0) return unitCompare;
+    return (a.fullName || '').localeCompare(b.fullName || '');
+  });
+
+  userDetails.forEach(user => {
+    // Escape fullName in case it contains commas
+    const escapedName = user.fullName.includes(',')
+      ? '"' + user.fullName.replace(/"/g, '""') + '"'
+      : user.fullName;
+
+    const line = [
+      user.unitKey,
+      user.email,
+      escapedName,
+      user.isActiveUser ? 'TRUE' : 'FALSE',
+      user.hasRecentLogin ? 'TRUE' : 'FALSE',
+      user.lastLoginDate || '',
+      user.hasGmailActivity ? 'TRUE' : 'FALSE',
+      user.hasDriveActivity ? 'TRUE' : 'FALSE',
+      user.collectionDate
+    ].join(',');
+    userCsvContent += line + '\n';
+  });
+
+  // Write/update user details file
+  const userFileName = 'GoogleAdoptionUsers.csv';
+  writeOrUpdateFile(folder, userFileName, userCsvContent);
+
+  Logger.log("Wrote " + unitStats.length + " unit records and " + userDetails.length + " user records");
+}
+
+/**
+ * Helper function to write or update a file in a folder
+ */
+function writeOrUpdateFile(folder, fileName, content) {
+  const files = folder.getFilesByName(fileName);
+
+  if (files.hasNext()) {
+    const existingFile = files.next();
+    existingFile.setContent(content);
+    Logger.log("Updated existing " + fileName);
+  } else {
+    folder.createFile(fileName, content, MimeType.CSV);
+    Logger.log("Created new " + fileName);
+  }
+}
+
+/**
+ * Set up daily trigger for Google Adoption data collection
+ * Run this function once during initial setup
+ */
+function setupGoogleAdoptionTrigger() {
+  // Remove any existing triggers for this function
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'collectGoogleAdoptionData') {
+      ScriptApp.deleteTrigger(trigger);
+      Logger.log("Removed existing trigger for collectGoogleAdoptionData");
+    }
+  });
+
+  // Create new daily trigger at 5 AM Eastern (after ORGStatistics refresh at ~4-5 AM)
+  ScriptApp.newTrigger('collectGoogleAdoptionData')
+    .timeBased()
+    .everyDays(1)
+    .atHour(5)
+    .nearMinute(0)
+    .inTimezone('America/New_York')
+    .create();
+
+  Logger.log("Created daily trigger for collectGoogleAdoptionData at 5 AM Eastern");
 }
 

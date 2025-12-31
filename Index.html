@@ -52,6 +52,7 @@
     <!-- SERVICES (depend on utils & config) -->
     <?!= include('ServicesESDataService') ?>
     <?!= include('ServicesESUnitAnalysisService') ?>
+    <?!= include('ServicesGoogleAdoptionDataService') ?>
     <?!= include('ServicesDataService') ?>
     <?!= include('ServicesCadetDataService') ?>
     <?!= include('ServicesOrgStatsDataService') ?>
@@ -7218,6 +7219,7 @@
                   descendantOrgIds={getDescendantOrgIds(unitFilter)}
                   orgStatsService={orgStatsService}
                   esUnitAnalysisService={dataService?.getESUnitAnalysisService()}
+                  googleAdoptionService={dataService?.getGoogleAdoptionService()}
                   dataFiles={dataFiles}
                   setRecruitingRetentionModal={setRecruitingRetentionModal}
                   setESReadinessModal={setESReadinessModal}

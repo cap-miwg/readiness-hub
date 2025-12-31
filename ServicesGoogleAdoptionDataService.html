@@ -1,0 +1,346 @@
+<script type="text/babel">
+/**
+ * ServicesGoogleAdoptionDataService.html
+ *
+ * Google Workspace adoption data processing service.
+ * Provides per-unit adoption metrics and analysis for Google Workspace usage.
+ *
+ * Metrics tracked:
+ * - Adoption Rate: Active users (login + Gmail + Drive) / roster count
+ * - Total Accounts: All non-suspended Google accounts
+ * - Active Users: Users who are actually using the account
+ * - Recent Login: Accounts logged in within 30 days
+ * - Gmail Activity: Accounts with recent email activity
+ * - Drive Activity: Accounts with recent Drive activity
+ *
+ * Dependencies:
+ * - UtilsDataParsing.html (parseCSV)
+ */
+
+function createGoogleAdoptionDataService() {
+  let _unitData = [];
+  let _userData = [];
+  let _unitIndex = new Map();
+  let _usersByUnit = new Map();
+
+  // Adoption rate thresholds for rating classification
+  const ADOPTION_THRESHOLDS = {
+    excellent: 80,
+    good: 60,
+    fair: 40,
+    low: 0
+  };
+
+  // Metric explanations for UI help text
+  const METRIC_EXPLANATIONS = {
+    adoptionRate: {
+      label: 'Adoption Rate',
+      shortDesc: 'Percentage of roster members actively using Google',
+      fullDesc: 'The percentage of members on the unit roster who are actively using their Google Workspace account (logged in, sent email, or used Drive). This measures actual engagement, not just account existence.',
+      howToImprove: 'Ensure all members know about their Google accounts, provide login instructions, and encourage use of CAP email for official communications.',
+      goodValue: '80%+ is excellent'
+    },
+    recentLogin: {
+      label: 'Recent Login',
+      shortDesc: 'Accounts logged in within 30 days',
+      fullDesc: 'The number of accounts that have logged in at least once in the past 30 days. This indicates active usage of the Google Workspace account.',
+      howToImprove: 'Send communications via CAP email to encourage regular logins, share resources that require Google login.',
+      goodValue: '70%+ of accounts active'
+    },
+    loginRate: {
+      label: 'Login Rate',
+      shortDesc: 'Percentage of accounts with recent login',
+      fullDesc: 'Of all Google accounts, what percentage have logged in within the past 30 days.',
+      howToImprove: 'Regular email communications and shared resources encourage logins.',
+      goodValue: '70%+ is healthy'
+    },
+    gmailActive: {
+      label: 'Gmail Activity',
+      shortDesc: 'Accounts using CAP email',
+      fullDesc: 'The number of accounts that have sent at least one email recently. This shows adoption of CAP email for communications.',
+      howToImprove: 'Encourage use of CAP email for official communications, set expectations for monitoring CAP email.',
+      goodValue: 'Majority of accounts'
+    },
+    driveActive: {
+      label: 'Drive Activity',
+      shortDesc: 'Accounts using Google Drive',
+      fullDesc: 'The number of accounts that have edited files in Google Drive recently. This shows adoption of shared documents and collaboration tools.',
+      howToImprove: 'Share unit documents via Google Drive, use shared folders for forms and resources.',
+      goodValue: 'Increasing over time'
+    },
+    totalAccounts: {
+      label: 'Total Accounts',
+      shortDesc: 'Non-suspended Google accounts',
+      fullDesc: 'The total number of active (not suspended or archived) Google Workspace accounts for members in this unit.',
+      howToImprove: 'Ensure new members get accounts provisioned promptly.',
+      goodValue: 'Match roster count'
+    },
+    activeUsers: {
+      label: 'Active Users',
+      shortDesc: 'Users actually using the account',
+      fullDesc: 'Users who have logged in, sent email, OR used Drive recently. This is the key metric for true adoption.',
+      howToImprove: 'Encourage regular use of CAP email and Google tools.',
+      goodValue: 'Match roster count'
+    },
+    rosterCount: {
+      label: 'Roster Count',
+      shortDesc: 'Members on CAP roster',
+      fullDesc: 'The total number of operational members (cadets, seniors, fifty-year, life) on the unit roster from CAPWATCH data.',
+      howToImprove: 'N/A - this reflects actual membership.',
+      goodValue: 'N/A'
+    }
+  };
+
+  // === INITIALIZATION ===
+  const initialize = (googleAdoptionRaw, googleAdoptionUsersRaw) => {
+    if (!googleAdoptionRaw) {
+      console.warn('GoogleAdoptionDataService: No adoption data provided');
+      return;
+    }
+    _unitData = parseCSV(googleAdoptionRaw) || [];
+    _userData = googleAdoptionUsersRaw ? (parseCSV(googleAdoptionUsersRaw) || []) : [];
+    buildIndexes();
+  };
+
+  const buildIndexes = () => {
+    _unitIndex.clear();
+    _usersByUnit.clear();
+
+    // Index unit data
+    _unitData.forEach(row => {
+      const unit = row.Unit;
+      if (unit) {
+        _unitIndex.set(unit, row);
+      }
+    });
+
+    // Index user data by unit
+    _userData.forEach(row => {
+      const unit = row.Unit;
+      if (unit) {
+        if (!_usersByUnit.has(unit)) {
+          _usersByUnit.set(unit, []);
+        }
+        _usersByUnit.get(unit).push(row);
+      }
+    });
+  };
+
+  // === DATA ACCESS ===
+
+  /**
+   * Get adoption metrics for a specific unit
+   * @param {string} unitKey - Unit identifier in MI-### format
+   * @returns {Object|null} Metrics object or null if no data
+   */
+  const getMetricsForUnit = (unitKey) => {
+    const data = _unitIndex.get(unitKey);
+    if (!data) return null;
+
+    const rosterCount = parseInt(data.RosterCount) || 0;
+    const totalAccounts = parseInt(data.TotalAccounts) || 0;
+    const activeUsers = parseInt(data.ActiveUsers) || 0;
+    const recentLogin = parseInt(data.RecentLogin) || 0;
+    const gmailActive = parseInt(data.GmailActive) || 0;
+    const driveActive = parseInt(data.DriveActive) || 0;
+    const adoptionRate = parseInt(data.AdoptionRate) || 0;
+
+    // Calculate login rate (percentage of total accounts with recent login)
+    const loginRate = totalAccounts > 0
+      ? Math.round((recentLogin / totalAccounts) * 100)
+      : 0;
+
+    // Calculate Gmail usage rate
+    const gmailRate = totalAccounts > 0
+      ? Math.round((gmailActive / totalAccounts) * 100)
+      : 0;
+
+    // Calculate Drive usage rate
+    const driveRate = totalAccounts > 0
+      ? Math.round((driveActive / totalAccounts) * 100)
+      : 0;
+
+    // Determine rating based on adoption rate
+    const rating = adoptionRate >= ADOPTION_THRESHOLDS.excellent ? 'excellent' :
+                   adoptionRate >= ADOPTION_THRESHOLDS.good ? 'good' :
+                   adoptionRate >= ADOPTION_THRESHOLDS.fair ? 'fair' : 'low';
+
+    return {
+      unit: unitKey,
+      rosterCount,
+      totalAccounts,
+      activeUsers,
+      recentLogin,
+      loginRate,
+      gmailActive,
+      gmailRate,
+      driveActive,
+      driveRate,
+      adoptionRate,
+      rating,
+      collectionDate: data.CollectionDate || 'Unknown'
+    };
+  };
+
+  /**
+   * Get user details for a specific unit
+   * @param {string} unitKey - Unit identifier in MI-### format
+   * @returns {Array} Array of user detail objects
+   */
+  const getUsersForUnit = (unitKey) => {
+    const users = _usersByUnit.get(unitKey) || [];
+    return users.map(u => ({
+      email: u.Email || '',
+      fullName: u.FullName || '',
+      isActiveUser: u.IsActiveUser === 'TRUE',
+      hasRecentLogin: u.HasRecentLogin === 'TRUE',
+      lastLoginDate: u.LastLoginDate || '',
+      hasGmailActivity: u.HasGmailActivity === 'TRUE',
+      hasDriveActivity: u.HasDriveActivity === 'TRUE'
+    }));
+  };
+
+  /**
+   * Get metrics for multiple units (for comparison tables)
+   * @param {Array} unitKeys - Array of unit identifiers
+   * @returns {Array} Array of metrics objects, sorted by adoption rate descending
+   */
+  const getMetricsForMultipleUnits = (unitKeys) => {
+    return unitKeys
+      .map(key => getMetricsForUnit(key))
+      .filter(m => m !== null)
+      .sort((a, b) => b.adoptionRate - a.adoptionRate);
+  };
+
+  /**
+   * Check if data exists for a unit
+   * @param {string} unitKey - Unit identifier
+   * @returns {boolean}
+   */
+  const hasDataForUnit = (unitKey) => {
+    return _unitIndex.has(unitKey);
+  };
+
+  /**
+   * Get all available unit keys
+   * @returns {Array} Array of unit identifiers
+   */
+  const getAllUnits = () => {
+    return Array.from(_unitIndex.keys());
+  };
+
+  /**
+   * Get summary statistics across all units
+   * @returns {Object|null} Summary object or null if no data
+   */
+  const getSummaryStats = () => {
+    if (_unitData.length === 0) return null;
+
+    let totalRoster = 0;
+    let totalAccounts = 0;
+    let totalActiveUsers = 0;
+    let totalRecentLogin = 0;
+    let totalGmailActive = 0;
+    let totalDriveActive = 0;
+    const adoptionRates = [];
+
+    _unitData.forEach(row => {
+      totalRoster += parseInt(row.RosterCount) || 0;
+      totalAccounts += parseInt(row.TotalAccounts) || 0;
+      totalActiveUsers += parseInt(row.ActiveUsers) || 0;
+      totalRecentLogin += parseInt(row.RecentLogin) || 0;
+      totalGmailActive += parseInt(row.GmailActive) || 0;
+      totalDriveActive += parseInt(row.DriveActive) || 0;
+      adoptionRates.push(parseInt(row.AdoptionRate) || 0);
+    });
+
+    const avgAdoptionRate = adoptionRates.length > 0
+      ? Math.round(adoptionRates.reduce((a, b) => a + b, 0) / adoptionRates.length)
+      : 0;
+
+    const overallAdoptionRate = totalRoster > 0
+      ? Math.round((totalActiveUsers / totalRoster) * 100)
+      : 0;
+
+    const overallLoginRate = totalAccounts > 0
+      ? Math.round((totalRecentLogin / totalAccounts) * 100)
+      : 0;
+
+    return {
+      totalUnits: _unitData.length,
+      totalRoster,
+      totalAccounts,
+      totalActiveUsers,
+      totalRecentLogin,
+      totalGmailActive,
+      totalDriveActive,
+      avgAdoptionRate,
+      overallAdoptionRate,
+      overallLoginRate,
+      collectionDate: _unitData[0]?.CollectionDate || 'Unknown'
+    };
+  };
+
+  /**
+   * Get key data for collapsed section view
+   * @param {string} unitKey - Unit identifier
+   * @returns {Object} Key data for display
+   */
+  const getKeyDataForUnit = (unitKey) => {
+    const metrics = getMetricsForUnit(unitKey);
+
+    if (!metrics) {
+      return {
+        adoptionRate: null,
+        activeUsers: 0,
+        rosterCount: 0,
+        loginRate: null,
+        rating: 'unknown'
+      };
+    }
+
+    return {
+      adoptionRate: metrics.adoptionRate,
+      activeUsers: metrics.activeUsers,
+      rosterCount: metrics.rosterCount,
+      loginRate: metrics.loginRate,
+      rating: metrics.rating
+    };
+  };
+
+  /**
+   * Get explanation text for a specific metric
+   * @param {string} metricKey - Key of the metric
+   * @returns {Object|null} Explanation object or null
+   */
+  const getMetricExplanation = (metricKey) => {
+    return METRIC_EXPLANATIONS[metricKey] || null;
+  };
+
+  /**
+   * Get all metric explanations
+   * @returns {Object} All metric explanations
+   */
+  const getMetricExplanations = () => METRIC_EXPLANATIONS;
+
+  /**
+   * Get adoption thresholds for rating classification
+   * @returns {Object} Threshold values
+   */
+  const getAdoptionThresholds = () => ADOPTION_THRESHOLDS;
+
+  return {
+    initialize,
+    getMetricsForUnit,
+    getUsersForUnit,
+    getMetricsForMultipleUnits,
+    hasDataForUnit,
+    getAllUnits,
+    getSummaryStats,
+    getKeyDataForUnit,
+    getMetricExplanation,
+    getMetricExplanations,
+    getAdoptionThresholds
+  };
+}
+</script>
