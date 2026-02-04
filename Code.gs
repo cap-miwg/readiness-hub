@@ -314,7 +314,7 @@ function syncDriveToSheet() {
     // ES Member Data Files
     'MbrAchievements': { cat: 'data', key: 'esMbrAchievements', priority: 12 }, // Member ES achievement completions
     'MbrTasks': { cat: 'data', key: 'esMbrTasks', priority: 13 }, // Member ES task completions (large file, ~15MB)
-    'Member': { cat: 'data', key: 'members', exclude: 'Current', priority: 14 }, // Exclude CurrentMembers.txt
+    'Member': { cat: 'data', key: 'members', exclude: 'Current|Prm|Instrumentation|Currency', priority: 14 }, // Exclude CurrentMembers.txt, MemberPrm.txt, MemberInstrumentation.txt, MemberCurrency.txt
     'SpecTrack': { cat: 'data', key: 'tracks', priority: 15 },
     'Organization': { cat: 'data', key: 'organization', priority: 16 },
     'CadetDuty': { cat: 'data', key: 'cadetDuty', priority: 17 },
