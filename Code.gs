@@ -71,6 +71,7 @@ function setupScriptProperties() {
     'DB_SHEET_NAME': 'DB',
     'LOGS_SHEET_NAME': 'Logs',
     'APP_NAME': 'CAP Readiness Hub',
+    'LOGO_DRIVE_FILE_ID': '',  // Google Drive file ID for logo (optional)
     'GITHUB_OWNER': 'YOUR_GITHUB_USERNAME',
     'GITHUB_REPO': 'readiness-hub',
     'GITHUB_API_URL': 'https://api.github.com'
@@ -128,6 +129,21 @@ function showCurrentConfig() {
   Logger.log('==========================================');
 
   return props;
+}
+
+/**
+ * Get frontend configuration from Script Properties
+ * Returns app name and logo URL for use in the UI
+ * @returns {Object} Configuration object for frontend
+ */
+function getAppConfig() {
+  const appName = getConfig('APP_NAME', 'CAP Readiness Hub');
+  const logoFileId = getConfig('LOGO_DRIVE_FILE_ID', '');
+
+  return {
+    appName: appName,
+    logoUrl: logoFileId ? 'https://drive.google.com/thumbnail?id=' + logoFileId : ''
+  };
 }
 
 /**
@@ -605,6 +621,10 @@ function getAppData() {
         Logger.log("  Added " + compoundKey + " (" + reassemblyMap[compoundKey].length + " chunks, " + fullContent.length + " chars)");
       }
     });
+
+    // Add app configuration for frontend
+    payload.appConfig = getAppConfig();
+    Logger.log("Added appConfig: " + JSON.stringify(payload.appConfig));
 
     Logger.log("Serializing payload to JSON...");
     const jsonString = JSON.stringify(payload);

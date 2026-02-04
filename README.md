@@ -79,17 +79,21 @@ Configuration is stored securely in Script Properties (not in the code):
 - **Folder ID**: Open your Drive folder, copy from URL: `https://drive.google.com/drive/folders/{FOLDER_ID}`
 - **Spreadsheet ID**: Create a new Google Sheet, copy from URL: `https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit`
 
-Also update `ConfigConstants.html` line 5 to match your APP_NAME.
-
 **Optional Configuration Properties:**
 
 | Property | Description | Default |
 |----------|-------------|---------|
+| `LOGO_DRIVE_FILE_ID` | Google Drive file ID for logo image | (no logo) |
 | `DB_SHEET_NAME` | Name of the data sheet tab | `DB` |
 | `LOGS_SHEET_NAME` | Name of the logs sheet tab | `Logs` |
 | `GITHUB_OWNER` | GitHub username/org for feedback | - |
 | `GITHUB_REPO` | Repository name for feedback | `readiness-hub` |
 | `GITHUB_TOKEN` | Personal access token (add manually) | - |
+
+**Finding Logo File ID:**
+- Upload your logo image to Google Drive
+- Right-click > Share > Change to "Anyone with the link can view"
+- Copy the file ID from URL: `https://drive.google.com/file/d/{FILE_ID}/view`
 
 **Utility Functions:**
 - `setupScriptProperties()` - Initialize default property values

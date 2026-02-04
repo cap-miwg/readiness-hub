@@ -11,8 +11,8 @@ function HomeSection({
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl p-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-wide opacity-80">Welcome to Michigan Wing Readiness Hub</p>
-          <h1 className="text-2xl font-bold">Michigan Wing Readiness Hub</h1>
+          <p className="text-sm uppercase tracking-wide opacity-80">Welcome to {window.APP_CONFIG?.appName || APP_NAME}</p>
+          <h1 className="text-2xl font-bold">{window.APP_CONFIG?.appName || APP_NAME}</h1>
           <p className="text-sm text-blue-100 max-w-xl">
             One place for commanders, senior members, and cadets to monitor readiness, training, and staffing.
           </p>

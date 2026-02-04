@@ -1,8 +1,16 @@
 <script type="text/babel">
 // --- APP METADATA ---
 const APP_VERSION = '1.0.0';  // Increment with releases
-// APP_NAME: Customize this for your unit (must match APP_NAME in Code.gs)
-const APP_NAME = 'CAP Readiness Hub';
+
+// APP_CONFIG: Receives values from backend via getAppConfig()
+// These are fallback defaults - actual values loaded from Script Properties
+let APP_CONFIG = {
+  appName: 'CAP Readiness Hub',
+  logoUrl: ''
+};
+
+// Backwards compatibility alias
+const APP_NAME = APP_CONFIG.appName;
 
 // --- FEEDBACK CATEGORIES ---
 // Used by the feedback submission form in ReferenceModal

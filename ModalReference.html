@@ -333,10 +333,10 @@ const ReferenceModal = ({
             <section>
               <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
                 <Icon name="Home" className="w-4 h-4 mr-2 text-blue-600" />
-                Welcome to Michigan Wing Readiness Hub
+                Welcome to {window.APP_CONFIG?.appName || APP_NAME}
               </h3>
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700">
-                <p className="mb-2">The Michigan Wing Readiness Hub is your one-stop dashboard for monitoring unit readiness, training status, and personnel metrics. It provides role-specific views for commanders, senior members, and cadets.</p>
+                <p className="mb-2">The {window.APP_CONFIG?.appName || APP_NAME} is your one-stop dashboard for monitoring unit readiness, training status, and personnel metrics. It provides role-specific views for commanders, senior members, and cadets.</p>
                 <p>Use the navigation buttons or tab bar at the top to switch between different views.</p>
               </div>
             </section>
