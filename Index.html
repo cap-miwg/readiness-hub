@@ -197,11 +197,22 @@
         }, []);
 
         const processPayload = useCallback((result) => {
+          // Debug logging for troubleshooting data loading issues
+          console.group('📥 Processing Payload');
+          console.log('Payload received, initializing service...');
+
           setLoadingStatus("Building data indexes...");
           const service = createDataService();
           service.initialize(result);
+
+          const rawData = service.rawData();
+          console.log('Raw data from service:');
+          console.log('  members:', rawData.members?.length || 0);
+          console.log('  organization:', rawData.organization?.length || 0);
+          console.log('  duty:', rawData.duty?.length || 0);
+
           setDataService(service);
-          setDataFiles(service.rawData());
+          setDataFiles(rawData);
           setConfigFiles(service.rawConfig());
           if (result.meta && result.meta.lastUpdated) {
             setLastUpdated(result.meta.lastUpdated);
@@ -212,6 +223,7 @@
             orgStats.initialize(result.data.orgStats);
             setOrgStatsService(orgStats);
           }
+          console.groupEnd();
         }, []);
 
         const fetchFromServer = useCallback((lastKnownTimestamp = null) => {
@@ -320,19 +332,57 @@
         };
 
         const availableUnits = useMemo(() => {
-          if (!dataFiles.members.length) return [];
-          const units = new Map();
+          // Debug logging for troubleshooting unit dropdown issues
+          console.group('🏢 Building Available Units');
+          console.log('Total members in dataFiles:', dataFiles.members.length);
 
-          dataFiles.members.forEach(m => {
-            if (m.ORGID && m.Unit && !isNaN(parseInt(m.Unit)) && /^\d+$/.test(m.Unit.trim())) {
-               const cleanUnit = m.Unit.replace(/^0+/, '').padStart(3, '0');
-               if (cleanUnit === '000' || cleanUnit === '004') return;
-               if(!units.has(m.ORGID)){
-                  units.set(m.ORGID, { id: m.ORGID, unitNum: cleanUnit, name: `Unit ${cleanUnit}` }); 
-               }
+          if (!dataFiles.members.length) {
+            console.warn('❌ No members found - dropdown will be empty');
+            console.groupEnd();
+            return [];
+          }
+
+          const units = new Map();
+          let skippedNoOrgId = 0;
+          let skippedNoUnit = 0;
+          let skippedNonNumeric = 0;
+          let skippedWingGroup = 0;
+          let accepted = 0;
+
+          dataFiles.members.forEach((m, idx) => {
+            const hasOrgId = !!m.ORGID;
+            const hasUnit = !!m.Unit;
+            const isNumeric = hasUnit && /^\d+$/.test(m.Unit.trim());
+
+            // Log first 3 members for debugging
+            if (idx < 3) {
+              console.log(`Member ${idx}: ORGID="${m.ORGID}", Unit="${m.Unit}", isNumeric=${isNumeric}`);
+            }
+
+            if (!hasOrgId) { skippedNoOrgId++; return; }
+            if (!hasUnit || isNaN(parseInt(m.Unit))) { skippedNoUnit++; return; }
+            if (!isNumeric) { skippedNonNumeric++; return; }
+
+            const cleanUnit = m.Unit.replace(/^0+/, '').padStart(3, '0');
+            if (cleanUnit === '000' || cleanUnit === '004') {
+              skippedWingGroup++;
+              return;
+            }
+
+            accepted++;
+            if(!units.has(m.ORGID)){
+              units.set(m.ORGID, { id: m.ORGID, unitNum: cleanUnit, name: `Unit ${cleanUnit}` });
             }
           });
-          
+
+          console.log('Validation Results:');
+          console.log(`  ✅ Accepted: ${accepted}`);
+          console.log(`  ❌ Skipped (no ORGID): ${skippedNoOrgId}`);
+          console.log(`  ❌ Skipped (no Unit): ${skippedNoUnit}`);
+          console.log(`  ❌ Skipped (non-numeric Unit): ${skippedNonNumeric}`);
+          console.log(`  ❌ Skipped (Wing/Group 000/004): ${skippedWingGroup}`);
+          console.log(`  🏢 Unique units in dropdown: ${units.size}`);
+
           if(dataFiles.organization.length){
              dataFiles.organization.forEach(o => {
                 if(units.has(o.ORGID)) {
@@ -344,6 +394,7 @@
              });
           }
 
+          console.groupEnd();
           return Array.from(units.values()).sort((a, b) => parseInt(a.unitNum) - parseInt(b.unitNum));
         }, [dataFiles.members, dataFiles.organization]);
 

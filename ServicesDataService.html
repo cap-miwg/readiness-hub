@@ -221,6 +221,20 @@ function createDataService() {
       // VOLU Instructor Data
       voluInstructors: parseCSV(payload?.data?.voluInstructors) || []
     };
+
+    // Debug logging for troubleshooting data loading issues
+    console.group('📊 Data Service Parse Results');
+    console.log('Raw payload.data.members:', payload?.data?.members?.substring?.(0, 500) || 'EMPTY');
+    console.log('Parsed members count:', _rawData.members.length);
+    if (_rawData.members.length > 0) {
+      console.log('Sample member (first):', _rawData.members[0]);
+      console.log('Member fields:', Object.keys(_rawData.members[0]));
+    } else {
+      console.warn('⚠️ No members parsed from payload!');
+    }
+    console.log('Organization count:', _rawData.organization.length);
+    console.groupEnd();
+
     buildUnitChildren();
     findLevelPathIds();
     // Initialize ES service with config and data
