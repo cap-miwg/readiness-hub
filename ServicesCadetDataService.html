@@ -539,6 +539,19 @@ function createCadetDataService() {
       requirements.wrightBrothersLeadershipExam.completed = learnToLeadExam;
       requirements.wrightBrothersLeadershipExam.value = learnToLeadExam ? 'Passed' : 'Not passed';
     }
+    if (requirements.achievement8Speech || requirements.achievement8Essay) { // Achievement 8 (Armstrong)
+      const speech = isTaskCompleted('374');
+      const essay = isTaskCompleted('373');
+
+      if (requirements.achievement8Speech) {
+        requirements.achievement8Speech.completed = speech;
+        requirements.achievement8Speech.value = speech ? 'Passed' : 'Not passed';
+      }
+      if (requirements.achievement8Essay) {
+        requirements.achievement8Essay.completed = essay;
+        requirements.achievement8Essay.value = essay ? 'Passed' : 'Not passed';
+      }
+    }
     if (requirements.mitchellLeadershipExam || requirements.mitchellAerospaceExam || requirements.encampment) { // Billy Mitchell
       const learnToLeadExam = isTaskCompleted('378');
       const aerospaceExam = isTaskCompleted('379');
