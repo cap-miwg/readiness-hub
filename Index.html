@@ -3994,6 +3994,242 @@
           };
         };
 
+        const generateCACRepresentativesReport = () => {
+          if (!unitFilter) return { rows: [], meta: { scopeLevel: 'Unknown', scopeLabel: 'CAC Representatives', scopeOrgName: 'Unknown', scopeReps: [], totalScopeReps: 0, totalAllReps: 0 } };
+
+          const currentOrg = dataFiles.organization.find(o => String(o.ORGID || '').trim() === String(unitFilter).trim());
+          const currentType = currentOrg ? (currentOrg.Type || '').toUpperCase() : '';
+          const isWingLevel = currentType.includes('WING');
+          const isGroupLevel = currentType.includes('GROUP');
+          const scopeLevel = isWingLevel ? 'WING' : isGroupLevel ? 'GROUP' : 'SQUADRON';
+
+          const allDescendantIds = getDescendantOrgIds(unitFilter);
+
+          const positionOrder = { ADVISOR: 0, CHAIR: 1, VICE: 2, RECORDER: 3, REPRESENTATIVE: 4, ALTERNATE: 5 };
+
+          const getPositionType = (text, isChairFlag = false) => {
+            const t = (text || '').toUpperCase();
+            if ((isChairFlag || t.includes('CHAIR')) && !t.includes('VICE')) return 'CHAIR';
+            if (t.includes('VICE')) return 'VICE';
+            if (t.includes('RECORDER') || t.includes('SECRETARY')) return 'RECORDER';
+            if (t.includes('ASSISTANT') || t.includes('ALTERNATE')) return 'ALTERNATE';
+            return 'REPRESENTATIVE';
+          };
+
+          const getCACLevel = (dutyText) => {
+            const upper = (dutyText || '').toUpperCase();
+            if (upper.includes('NCAC')) return 'National';
+            if (upper.includes('RCAC')) return 'Region';
+            if (upper.includes('WCAC')) return 'Wing';
+            if (upper.includes('GCAC')) return 'Group';
+            return null; // Return null for generic CAC so caller can determine from context
+          };
+
+          const getCommitteeCACLevel = (committeeName) => {
+            const upper = (committeeName || '').toUpperCase();
+            if (upper.includes('NATIONAL')) return 'National';
+            if (upper.includes('REGION')) return 'Region';
+            if (upper.includes('WING')) return 'Wing';
+            if (upper.includes('GROUP')) return 'Group';
+            return null; // Generic "Cadet Advisory Council" - caller determines from context
+          };
+
+          // Find the ancestor org of a given type (GROUP or WING) for a member's ORGID
+          const findAncestorOrgOfType = (orgId, targetType) => {
+            const visited = new Set();
+            let currentId = String(orgId || '').trim();
+            while (currentId && !visited.has(currentId)) {
+              visited.add(currentId);
+              const org = (dataFiles.organization || []).find(o => String(o.ORGID || '').trim() === currentId);
+              if (!org) return null;
+              const type = (org.Type || '').toUpperCase();
+              if (type.includes(targetType)) return org;
+              const parentId = String(org.NextLevel || '').trim();
+              if (!parentId || parentId === currentId) return null;
+              currentId = parentId;
+            }
+            return null;
+          };
+
+          // Get the CAC organization display name based on CAC level and member's ORGID
+          const getCACOrgDisplayName = (cacLevel, memberOrgId) => {
+            if (cacLevel === 'National' || cacLevel === 'Region') return cacLevel;
+            if (cacLevel === 'Wing') {
+              const wingOrg = findAncestorOrgOfType(memberOrgId, 'WING');
+              return wingOrg ? `${wingOrg.Region || ''}-${wingOrg.Wing || ''}-${(wingOrg.Unit || '').replace(/^0+/, '').padStart(3, '0')}` : 'Wing';
+            }
+            if (cacLevel === 'Group') {
+              const groupOrg = findAncestorOrgOfType(memberOrgId, 'GROUP');
+              return groupOrg ? `${groupOrg.Region || ''}-${groupOrg.Wing || ''}-${(groupOrg.Unit || '').replace(/^0+/, '').padStart(3, '0')}` : 'Group';
+            }
+            return getUnitDisplayName(memberOrgId);
+          };
+
+          const getUnitDisplayName = (orgId) => {
+            const org = (dataFiles.organization || []).find(o => String(o.ORGID || '').trim() === String(orgId || '').trim());
+            if (!org) return 'Unknown';
+            const r = org.Region || '';
+            const w = org.Wing || '';
+            const u = org.Unit ? org.Unit.replace(/^0+/, '').padStart(3, '0') : '000';
+            return `${r}-${w}-${u}`;
+          };
+
+          const buildCACRecord = (capid, orgId, dutyText, positionType, cacLevel) => {
+            const member = (dataFiles.members || []).find(m => String(m.CAPID || '').trim() === String(capid || '').trim());
+            if (!member) return null;
+            const memberType = (member.Type || member.TYPE || '').toUpperCase();
+            const isSenior = memberType === 'SENIOR' || memberType === 'LIFE';
+            // Seniors on CAC are advisors - override their position
+            const finalPositionType = isSenior ? 'ADVISOR' : positionType;
+            const finalPositionLabel = isSenior ? 'Advisor' : positionType.charAt(0) + positionType.slice(1).toLowerCase();
+            return {
+              capid: member.CAPID,
+              memberName: `${member.NameLast}, ${member.NameFirst}`,
+              rank: member.Rank || 'N/A',
+              isSeniorAdvisor: isSenior,
+              unit: getUnitDisplayName(member.ORGID),
+              memberOrgId: member.ORGID,
+              positionType: finalPositionType,
+              positionLabel: finalPositionLabel,
+              cacLevel,
+              cacOrgName: getCACOrgDisplayName(cacLevel, member.ORGID),
+              email: getMemberEmail(member.CAPID) || '',
+              sortOrder: positionOrder[finalPositionType] || 99
+            };
+          };
+
+          // Section 1: Scope CAC
+          const scopeReps = [];
+          const scopeDutyPrefix = isWingLevel ? 'WCAC' : isGroupLevel ? 'GCAC' : null;
+          const scopeLevelName = isWingLevel ? 'Wing' : isGroupLevel ? 'Group' : 'Squadron';
+
+          if (dataFiles.cadetDuty && dataFiles.cadetDuty.length > 0) {
+            dataFiles.cadetDuty
+              .filter(d => d.Duty && !(d.Duty || '').toUpperCase().includes('#REF'))
+              .filter(d => allDescendantIds.includes(d.ORGID))
+              .filter(d => {
+                const dutyUpper = (d.Duty || '').toUpperCase();
+                if (!dutyUpper.includes('CAC')) return false;
+                if (scopeDutyPrefix) return dutyUpper.includes(scopeDutyPrefix);
+                return true;
+              })
+              .forEach(d => {
+                const dutyUpper = (d.Duty || '').toUpperCase();
+                const positionType = getPositionType(dutyUpper, d.Chair === "1");
+                const cacLevel = getCACLevel(dutyUpper) || scopeLevelName;
+                const record = buildCACRecord(d.CAPID, d.ORGID, d.Duty, positionType, cacLevel);
+                if (record && !scopeReps.find(r => r.capid === record.capid && r.cacLevel === record.cacLevel && r.positionType === record.positionType)) {
+                  scopeReps.push(record);
+                }
+              });
+          }
+
+          if (dataFiles.committees && dataFiles.committees.length > 0) {
+            dataFiles.committees
+              .filter(c => allDescendantIds.includes(c.ORGID))
+              .filter(c => {
+                const committeeName = (c.Committee || '').toUpperCase();
+                if (!committeeName.includes('CADET ADVISORY COUNCIL')) return false;
+                if (isWingLevel) return committeeName.includes('WING') || !committeeName.includes('GROUP');
+                if (isGroupLevel) return committeeName.includes('GROUP') || !committeeName.includes('WING');
+                return true;
+              })
+              .forEach(c => {
+                const positionType = getPositionType(c.Position || c.Role || c.Title, c.Chair === "1");
+                // For generic "Cadet Advisory Council" without level prefix, use the scope level
+                const cacLevel = getCommitteeCACLevel(c.Committee) || scopeLevelName;
+                const record = buildCACRecord(c.CAPID, c.ORGID, c.Committee, positionType, cacLevel);
+                if (record && !scopeReps.find(r => r.capid === record.capid && r.cacLevel === record.cacLevel && r.positionType === record.positionType)) {
+                  scopeReps.push(record);
+                }
+              });
+          }
+
+          scopeReps.sort((a, b) => {
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return a.memberName.localeCompare(b.memberName);
+          });
+
+          // Section 2: All CAC Reps in scope
+          const allRepsMap = new Map();
+
+          if (dataFiles.cadetDuty && dataFiles.cadetDuty.length > 0) {
+            dataFiles.cadetDuty
+              .filter(d => d.Duty && !(d.Duty || '').toUpperCase().includes('#REF'))
+              .filter(d => allDescendantIds.includes(d.ORGID))
+              .filter(d => (d.Duty || '').toUpperCase().includes('CAC'))
+              .forEach(d => {
+                const dutyUpper = (d.Duty || '').toUpperCase();
+                const positionType = getPositionType(dutyUpper, d.Chair === "1");
+                const cacLevel = getCACLevel(dutyUpper) || scopeLevelName;
+                const record = buildCACRecord(d.CAPID, d.ORGID, d.Duty, positionType, cacLevel);
+                if (record) {
+                  const key = `${record.capid}-${record.cacLevel}-${record.positionType}`;
+                  if (!allRepsMap.has(key)) allRepsMap.set(key, record);
+                }
+              });
+          }
+
+          if (dataFiles.committees && dataFiles.committees.length > 0) {
+            dataFiles.committees
+              .filter(c => allDescendantIds.includes(c.ORGID))
+              .filter(c => (c.Committee || '').toUpperCase().includes('CADET ADVISORY COUNCIL'))
+              .forEach(c => {
+                const positionType = getPositionType(c.Position || c.Role || c.Title, c.Chair === "1");
+                const cacLevel = getCommitteeCACLevel(c.Committee) || scopeLevelName;
+                const record = buildCACRecord(c.CAPID, c.ORGID, c.Committee, positionType, cacLevel);
+                if (record) {
+                  const key = `${record.capid}-${record.cacLevel}-${record.positionType}`;
+                  if (!allRepsMap.has(key)) allRepsMap.set(key, record);
+                }
+              });
+          }
+
+          // Group Section 2 by CAC organization, sorted by level then org name
+          const levelOrder = { National: 1, Region: 2, Wing: 3, Group: 4, Squadron: 5 };
+          const allReps = Array.from(allRepsMap.values()).sort((a, b) => {
+            const levelA = levelOrder[a.cacLevel] || 99;
+            const levelB = levelOrder[b.cacLevel] || 99;
+            if (levelA !== levelB) return levelA - levelB;
+            if (a.cacOrgName !== b.cacOrgName) return a.cacOrgName.localeCompare(b.cacOrgName);
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return a.memberName.localeCompare(b.memberName);
+          });
+
+          // Build grouped structure for Section 2
+          const groupedReps = [];
+          let currentGroup = null;
+          allReps.forEach(rep => {
+            const groupKey = `${rep.cacLevel}-${rep.cacOrgName}`;
+            if (!currentGroup || currentGroup.key !== groupKey) {
+              currentGroup = { key: groupKey, cacLevel: rep.cacLevel, cacOrgName: rep.cacOrgName, members: [] };
+              groupedReps.push(currentGroup);
+            }
+            currentGroup.members.push(rep);
+          });
+
+          const scopeLabel = isWingLevel ? 'Wing Cadet Advisory Council'
+            : isGroupLevel ? 'Group Cadet Advisory Council'
+            : 'Squadron CAC Representatives';
+
+          const scopeOrgName = currentOrg
+            ? `${currentOrg.Region || ''}-${currentOrg.Wing || ''}-${(currentOrg.Unit || '').replace(/^0+/, '').padStart(3, '0')} ${currentOrg.Name || ''}`
+            : 'Unknown Unit';
+
+          return {
+            rows: allReps,
+            meta: {
+              scopeLevel,
+              scopeLabel,
+              scopeOrgName,
+              scopeReps,
+              groupedReps,
+              totalScopeReps: scopeReps.length,
+              totalAllReps: allReps.length
+            }
+          };
+        };
+
         const normalizeReportTag = (tag) => (tag || "").toLowerCase();
         const formatReportTagLabel = (tag) => (tag || "").split(" ").map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 
@@ -4206,6 +4442,15 @@
             accent: 'amber',
             tags: ['senior', 'cadet', 'membership', 'retention', 'analytics'],
             generate: (members, options) => generateRetentionAnalysisReport(members, options)
+          },
+          {
+            id: 'cac-representatives',
+            title: 'CAC Representatives',
+            description: 'Cadet Advisory Council representatives and advisors across the unit hierarchy',
+            icon: 'Users',
+            accent: 'purple',
+            tags: ['cadet', 'senior', 'readiness'],
+            generate: (members) => generateCACRepresentativesReport(members)
           }
         ];
 
@@ -5589,6 +5834,7 @@
               'aerospace-education',
               'encampment-status',
               'near-promotion',
+              'cac-representatives',
               'promotion',
               'tlc-compliance'
             ];
@@ -7032,6 +7278,112 @@
           }
         };
 
+        const renderCACRepresentativesReport = (pdf, report, startY) => {
+          const meta = report.meta || {};
+          const scopeReps = meta.scopeReps || [];
+          const groupedReps = meta.groupedReps || [];
+          let yPos = startY;
+          const pageHeight = pdf.internal.pageSize.getHeight();
+
+          pdf.setFontSize(9);
+          pdf.setFont(undefined, 'normal');
+          pdf.text(`Scope: ${meta.scopeOrgName || 'Unknown'} (${meta.scopeLevel || 'Unknown'} level)`, 15, yPos);
+          yPos += 5;
+          pdf.text(`${meta.scopeLabel || 'Scope CAC'}: ${meta.totalScopeReps || 0} reps | All CAC in Scope: ${meta.totalAllReps || 0} reps`, 15, yPos);
+          yPos += 8;
+
+          pdf.setFontSize(11);
+          pdf.setFont(undefined, 'bold');
+          pdf.text(meta.scopeLabel || 'Scope CAC', 15, yPos);
+          yPos += 6;
+
+          const sectionColumns = ['Name', 'CAPID', 'Rank', 'Unit', 'Position', 'Email'];
+          const mapRow = r => [r.memberName, r.capid, r.rank, r.unit, r.positionLabel, r.email || 'N/A'];
+
+          const renderEmailList = (reps) => {
+            const emails = Array.from(new Set(reps.map(r => r.email).filter(Boolean)));
+            if (!emails.length) return;
+            pdf.setFontSize(8);
+            pdf.setFont(undefined, 'bold');
+            pdf.text(`Email Addresses (${emails.length}):`, 15, yPos);
+            yPos += 4;
+            pdf.setFont(undefined, 'normal');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const emailText = emails.join('; ');
+            const lines = pdf.splitTextToSize(emailText, pageWidth - 30);
+            pdf.text(lines, 15, yPos);
+            yPos += lines.length * 3.5 + 4;
+          };
+
+          if (scopeReps.length > 0) {
+            pdf.autoTable({
+              startY: yPos,
+              head: [sectionColumns],
+              body: scopeReps.map(mapRow),
+              styles: { fontSize: 8, cellPadding: 2 },
+              headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              margin: { left: 15, right: 15 },
+              theme: 'grid'
+            });
+            yPos = pdf.lastAutoTable.finalY + 5;
+            renderEmailList(scopeReps);
+            yPos += 4;
+          } else {
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'italic');
+            pdf.text('No representatives found for this scope.', 15, yPos);
+            yPos += 8;
+          }
+
+          if (yPos > pageHeight - 60) {
+            pdf.addPage();
+            yPos = 20;
+          }
+
+          pdf.setFontSize(11);
+          pdf.setFont(undefined, 'bold');
+          pdf.text('All CAC Representatives in Scope', 15, yPos);
+          yPos += 6;
+
+          if (groupedReps.length > 0) {
+            const allReps = report.data || [];
+            groupedReps.forEach(group => {
+              if (yPos > pageHeight - 50) {
+                pdf.addPage();
+                yPos = 20;
+              }
+
+              pdf.setFontSize(9);
+              pdf.setFont(undefined, 'bold');
+              pdf.text(`${group.cacLevel} — ${group.cacOrgName} (${group.members.length} members)`, 15, yPos);
+              yPos += 5;
+
+              pdf.autoTable({
+                startY: yPos,
+                head: [sectionColumns],
+                body: group.members.map(mapRow),
+                styles: { fontSize: 7, cellPadding: 2 },
+                headStyles: { fillColor: [71, 85, 105], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                margin: { left: 15, right: 15 },
+                theme: 'grid'
+              });
+              yPos = pdf.lastAutoTable.finalY + 8;
+            });
+
+            if (yPos > pageHeight - 30) {
+              pdf.addPage();
+              yPos = 20;
+            }
+            renderEmailList(allReps);
+          } else {
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'italic');
+            pdf.text('No CAC representatives found in scope.', 15, yPos);
+          }
+        };
+
         const addReportContent = (pdf, report) => {
           const startY = 45;
 
@@ -7052,6 +7404,8 @@
               return renderRecruitingTrendsReport(pdf, report, startY);
             case 'retention-analysis':
               return renderRetentionAnalysisReport(pdf, report, startY);
+            case 'cac-representatives':
+              return renderCACRepresentativesReport(pdf, report, startY);
             default:
               return renderTableReport(pdf, report, startY);
           }
