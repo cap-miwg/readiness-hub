@@ -2862,6 +2862,189 @@ function ReportsSection(props) {
       );
     })()}
 
+    {/* CAC Representatives Report */}
+    {selectedReport && selectedReport.type === 'cac-representatives' && (() => {
+      const meta = selectedReport.meta || {};
+      const allReps = selectedReport.data || [];
+      const scopeReps = meta.scopeReps || [];
+      const groupedReps = meta.groupedReps || [];
+
+      const positionBadgeColor = (posType) => {
+        switch ((posType || '').toUpperCase()) {
+          case 'ADVISOR': return 'bg-orange-100 text-orange-800 border-orange-200';
+          case 'CHAIR': return 'bg-purple-100 text-purple-800 border-purple-200';
+          case 'VICE': return 'bg-blue-100 text-blue-800 border-blue-200';
+          case 'RECORDER': return 'bg-green-100 text-green-800 border-green-200';
+          case 'ALTERNATE': return 'bg-slate-100 text-slate-700 border-slate-200';
+          default: return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+        }
+      };
+
+      const levelBadgeColor = (level) => {
+        switch (level) {
+          case 'National': return 'bg-red-100 text-red-800';
+          case 'Region': return 'bg-orange-100 text-orange-800';
+          case 'Wing': return 'bg-blue-100 text-blue-800';
+          case 'Group': return 'bg-emerald-100 text-emerald-800';
+          default: return 'bg-slate-100 text-slate-700';
+        }
+      };
+
+      const renderRepRow = (row, idx) => (
+        <tr key={idx} className="hover:bg-slate-50">
+          <td className="px-3 py-2">
+            <div className="font-bold text-slate-900">{row.memberName}</div>
+          </td>
+          <td className="px-3 py-2 font-mono text-xs text-slate-700">{row.capid}</td>
+          <td className="px-3 py-2 text-xs font-semibold text-slate-800">{row.rank}</td>
+          <td className="px-3 py-2 text-xs text-slate-700">{row.unit}</td>
+          <td className="px-3 py-2">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border ${positionBadgeColor(row.positionType)}`}>
+              {row.positionLabel}
+            </span>
+          </td>
+          <td className="px-3 py-2 text-xs text-slate-600 font-mono">
+            {row.email || <span className="text-slate-400 italic">N/A</span>}
+          </td>
+        </tr>
+      );
+
+      return (
+        <div>
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-4">
+            <p className="text-sm text-purple-900">
+              <strong>CAC Representatives</strong> — Viewing from the perspective of
+              <strong> {meta.scopeOrgName}</strong> ({meta.scopeLevel} level).
+              Section 1 shows the {meta.scopeLabel}. Section 2 shows all members
+              in scope who hold any CAC position at any level.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs font-semibold mb-4">
+            <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800">
+              {meta.scopeLabel}: {meta.totalScopeReps || 0}
+            </span>
+            <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+              All CAC Reps in Scope: {meta.totalAllReps || 0}
+            </span>
+          </div>
+
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+              <Icon name="Users" className="w-5 h-5 text-purple-600" />
+              {meta.scopeLabel}
+            </h3>
+
+            {scopeReps.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
+                <Icon name="Users" className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                <p className="font-medium">No {meta.scopeLabel} representatives found.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                  <thead className="bg-purple-50 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Name</th>
+                      <th className="px-3 py-2 text-left">CAPID</th>
+                      <th className="px-3 py-2 text-left">Rank</th>
+                      <th className="px-3 py-2 text-left">Unit</th>
+                      <th className="px-3 py-2 text-left">Position</th>
+                      <th className="px-3 py-2 text-left">Email</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {scopeReps.map(renderRepRow)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {(() => {
+              const emails = Array.from(new Set(scopeReps.map(r => r.email).filter(Boolean)));
+              if (!emails.length) return null;
+              return (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-slate-700">Email Addresses ({emails.length})</span>
+                    <span className="text-[11px] text-slate-500">Copy/paste to email all</span>
+                  </div>
+                  <textarea
+                    className="w-full text-xs font-mono text-slate-700 border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                    rows="2"
+                    readOnly
+                    value={emails.join('; ')}
+                  />
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="border-t border-slate-200 my-6"></div>
+
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+              <Icon name="Globe" className="w-5 h-5 text-blue-600" />
+              All CAC Representatives in Scope
+            </h3>
+
+            {allReps.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
+                <Icon name="Users" className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                <p className="font-medium">No CAC representatives found in any sub-units.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {groupedReps.map((group, gIdx) => (
+                  <div key={gIdx} className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${levelBadgeColor(group.cacLevel)}`}>
+                        {group.cacLevel}
+                      </span>
+                      <span className="text-sm font-bold text-slate-700">{group.cacOrgName}</span>
+                      <span className="text-xs text-slate-500">({group.members.length} {group.members.length === 1 ? 'member' : 'members'})</span>
+                    </div>
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-white text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
+                        <tr>
+                          <th className="px-3 py-1.5 text-left">Name</th>
+                          <th className="px-3 py-1.5 text-left">CAPID</th>
+                          <th className="px-3 py-1.5 text-left">Rank</th>
+                          <th className="px-3 py-1.5 text-left">Unit</th>
+                          <th className="px-3 py-1.5 text-left">Position</th>
+                          <th className="px-3 py-1.5 text-left">Email</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {group.members.map(renderRepRow)}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(() => {
+              const emails = Array.from(new Set(allReps.map(r => r.email).filter(Boolean)));
+              if (!emails.length) return null;
+              return (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-slate-700">All Email Addresses ({emails.length})</span>
+                    <span className="text-[11px] text-slate-500">Copy/paste to email all</span>
+                  </div>
+                  <textarea
+                    className="w-full text-xs font-mono text-slate-700 border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    rows="2"
+                    readOnly
+                    value={emails.join('; ')}
+                  />
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      );
+    })()}
+
     {/* Member List Modal */}
     {selectedTaskMembers && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setSelectedTaskMembers(null)}>
