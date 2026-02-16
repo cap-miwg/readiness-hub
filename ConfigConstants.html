@@ -589,7 +589,7 @@ const CADET_ACHIEVEMENT_REQUIREMENTS = {
     'physicalFitness', 'characterDevelopment', 'activeParticipation', 'cadetOath', 'timeInGrade'
   ],
   "4": [
-    'wrightBrothersLeadershipExam', 'leadershipFeedback', 'leadershipExpectations', 'uniformWear',
+    'wrightBrothersLeadershipExam', 'drillTest', 'leadershipFeedback', 'leadershipExpectations', 'uniformWear',
     'physicalFitness', 'activeParticipation', 'cadetOath', 'timeInGrade'
   ],
   "5": [
@@ -754,48 +754,83 @@ const CADET_CHARACTER_FORUM_TASKS = {
 };
 
 // Task IDs for cadet oath by achievement ID
+// PL "Achievement X" numbering skips milestones (4, 10, 14, 20, 21)
 const CADET_OATH_TASKS = {
-  "1": "450",
-  "2": "456",
-  "3": "459",
-  "4": "501",
-  "5": "465",
-  "6": "468",
-  "7": "471",
-  "8": "474",
-  "9": "477",
-  "10": "504",
-  "11": "483",
-  "12": "486",
-  "13": "489",
-  "14": "507",
-  "15": "495",
-  "16": "498",
-  "20": "510",
-  "21": "513"
+  "1": "450",   // PL Ach 1
+  "2": "456",   // PL Ach 2
+  "3": "459",   // PL Ach 3
+  "4": "501",   // Wright Brothers (milestone)
+  "5": "462",   // PL Ach 4
+  "6": "465",   // PL Ach 5
+  "7": "468",   // PL Ach 6
+  "8": "471",   // PL Ach 7
+  "9": "474",   // PL Ach 8
+  "10": "504",  // Billy Mitchell (milestone)
+  "11": "477",  // PL Ach 9
+  "12": "480",  // PL Ach 10
+  "13": "483",  // PL Ach 11
+  "14": "507",  // Amelia Earhart (milestone)
+  "15": "486",  // PL Ach 12
+  "16": "489",  // PL Ach 13
+  "17": "492",  // PL Ach 14
+  "18": "495",  // PL Ach 15
+  "19": "498",  // PL Ach 16
+  "20": "510",  // Eaker (milestone)
+  "21": "513"   // Spaatz (milestone)
 };
 
 // Task IDs for active participation by achievement ID
+// PL "Achievement X" numbering skips milestones (4, 10, 14, 20, 21)
 const CADET_ACTIVE_PARTICIPATION_TASKS = {
-  "1": "449",
-  "2": "457",
-  "3": "460",
-  "4": "502",
-  "5": "466",
-  "6": "469",
-  "7": "472",
-  "8": "475",
-  "9": "478",
-  "10": "505",
-  "11": "484",
-  "12": "487",
-  "13": "490",
-  "14": "508",
-  "15": "496",
-  "16": "499",
-  "20": "511",
-  "21": "514"
+  "1": "449",   // PL Ach 1
+  "2": "457",   // PL Ach 2
+  "3": "460",   // PL Ach 3
+  "4": "502",   // Wright Brothers (milestone)
+  "5": "463",   // PL Ach 4
+  "6": "466",   // PL Ach 5
+  "7": "469",   // PL Ach 6
+  "8": "472",   // PL Ach 7
+  "9": "475",   // PL Ach 8
+  "10": "505",  // Billy Mitchell (milestone)
+  "11": "478",  // PL Ach 9
+  "12": "481",  // PL Ach 10
+  "13": "484",  // PL Ach 11
+  "14": "508",  // Amelia Earhart (milestone)
+  "15": "487",  // PL Ach 12
+  "16": "490",  // PL Ach 13
+  "17": "493",  // PL Ach 14
+  "18": "496",  // PL Ach 15
+  "19": "499",  // PL Ach 16
+  "20": "511",  // Eaker (milestone)
+  "21": "514"   // Spaatz (milestone)
 };
+
+// Task IDs for SDA Staff Service by achievement ID (PL numbering skips milestones)
+const CADET_SDA_SERVICE_TASKS = {
+  "11": "404",  // PL Ach 9
+  "12": "392",  // PL Ach 10
+  "13": "410",  // PL Ach 11
+  "15": "417",  // PL Ach 12
+  "16": "422",  // PL Ach 13
+  "17": "427",  // PL Ach 14
+  "18": "432",  // PL Ach 15
+  "19": "437"   // PL Ach 16
+};
+
+// Task IDs for SDA Oral Presentation by achievement ID (PL numbering skips milestones)
+const CADET_SDA_PRESENTATION_TASKS = {
+  "11": "393",  // PL Ach 9
+  "12": "405",  // PL Ach 10
+  "13": "411",  // PL Ach 11
+  "15": "418",  // PL Ach 12
+  "16": "423",  // PL Ach 13
+  "17": "428",  // PL Ach 14
+  "18": "433",  // PL Ach 15
+  "19": "438"   // PL Ach 16
+};
+
+// Task IDs for SDA Technical Writing assignments (any one satisfies the writing requirement)
+const CADET_SDA_WRITING_TASKS = ['384', '385', '386', '387', '388', '389', '390', '391'];
 
 // Task IDs for leadership feedback (once per phase)
 const CADET_PHASE_LEADERSHIP_FEEDBACK_TASKS = {
@@ -839,6 +874,12 @@ const ACHIEVEMENT_LEADERSHIP_MODULE_TASKS = {
   '11': ['382'],        // Achievement 11: Module 9
   '12': ['402'],        // Achievement 12: Module 10
   '13': ['408'],        // Achievement 13: Module 11
+  // Phase 4: No Cadet Interactive modules exist; use Learn to Lead chapter tasks instead
+  '15': ['416'],        // CadetAchvID 15: Learn to Lead Chapter 12 (PL Achievement 12)
+  '16': ['421'],        // CadetAchvID 16: Learn to Lead Chapter 13 (PL Achievement 13)
+  '17': ['426'],        // CadetAchvID 17: Learn to Lead Chapter 14 (PL Achievement 14 / Boyd)
+  '18': ['431'],        // CadetAchvID 18: Learn to Lead Chapter 15 (PL Achievement 15 / Ride)
+  '19': ['436'],        // CadetAchvID 19: Learn to Lead Chapter 16 (PL Achievement 16)
   // Note: Milestones (4, 10, 14, 20, 21) use comprehensive exams, handled separately
 };
 
@@ -859,6 +900,13 @@ const ACHIEVEMENT_AEROSPACE_MODULE_TASKS = AEROSPACE_DIMENSIONS_MODULES.reduce((
   acc[module.achievementId].push(module.taskId);
   return acc;
 }, {});
+
+// Journey of Flight test mappings for Phase 3-4 achievements
+// PL "Achievement X" numbering skips milestones: PL Ach 9 = CadetAchvID 11, PL Ach 14 = CadetAchvID 17, etc.
+ACHIEVEMENT_AEROSPACE_MODULE_TASKS['11'] = ['394'];  // JOF Test 1 (PL Ach 9)
+ACHIEVEMENT_AEROSPACE_MODULE_TASKS['17'] = ['397'];  // JOF Test 4 (PL Ach 14 / Boyd)
+ACHIEVEMENT_AEROSPACE_MODULE_TASKS['18'] = ['398'];  // JOF Test 5 (PL Ach 15 / Ride)
+ACHIEVEMENT_AEROSPACE_MODULE_TASKS['19'] = ['399'];  // JOF Test 6 (PL Ach 16)
 
 // Education & Training level definitions (splits Level 2 into two parts)
 const LEVELS = [
