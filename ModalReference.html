@@ -378,6 +378,35 @@ const ReferenceModal = ({
                 </div>
               </div>
             </section>
+
+            <section>
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center border-b pb-2">
+                <Icon name="Info" className="w-4 h-4 mr-2 text-slate-600" />
+                Version Information
+              </h3>
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm text-slate-700">
+                <p className="mb-3">
+                  <span className="font-mono font-bold text-slate-800">
+                    {window.APP_CONFIG?.appName || APP_NAME} v{typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'Unknown'}
+                  </span>
+                </p>
+                <p className="mb-2">This application uses <strong>semantic versioning</strong> (Major.Minor.Patch):</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <span className="font-bold block text-slate-800">Major</span>
+                    <p className="text-slate-600 mt-1">Significant changes that may alter workflows or introduce major new capabilities.</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <span className="font-bold block text-slate-800">Minor</span>
+                    <p className="text-slate-600 mt-1">New features, enhancements, or improvements that are backward-compatible.</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <span className="font-bold block text-slate-800">Patch</span>
+                    <p className="text-slate-600 mt-1">Bug fixes, small tweaks, and maintenance updates.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
           </>
         )}
 

@@ -33,7 +33,7 @@
     <div id="root">
       <div class="flex h-screen flex-col items-center justify-center bg-slate-50">
         <div class="spinner mb-4"></div>
-        <h2 class="text-xl font-bold text-slate-800">Loading <?= getConfig('APP_NAME', 'CAP Readiness Hub') ?>...</h2>
+        <h2 class="text-xl font-bold text-slate-800">Loading <?= getConfig('APP_SHORT_NAME', 'Readiness Hub') ?>...</h2>
         <p class="text-slate-500 text-sm mt-2">Checking local cache...</p>
       </div>
     </div>
@@ -7460,7 +7460,7 @@
           return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
               <div className="spinner mb-4"></div>
-              <h2 className="text-xl font-bold text-slate-800">Loading {window.APP_CONFIG?.appName || APP_NAME}...</h2>
+              <h2 className="text-xl font-bold text-slate-800">Loading {window.APP_CONFIG?.appShortName || APP_SHORT_NAME}...</h2>
               <p className="text-slate-500 mt-2 text-sm">{loadingStatus}</p>
             </div>
           );
@@ -7478,7 +7478,7 @@
                       <img src={window.APP_CONFIG.logoUrl} alt="Logo" className="w-10 h-10 object-contain mr-2" />
                     )}
                     <div className="min-w-0">
-                      <h1 className="text-xl font-bold leading-tight">{window.APP_CONFIG?.appName || APP_NAME}</h1>
+                      <h1 className="text-xl font-bold leading-tight">{window.APP_CONFIG?.appShortName || APP_SHORT_NAME}</h1>
                       <p className="text-xs text-blue-200">Sync: {formatSyncTime(lastUpdated)}</p>
                     </div>
                 </div>

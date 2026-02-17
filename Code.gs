@@ -12,7 +12,8 @@
  * 3. Configure required properties:
  *    - SOURCE_FOLDER_ID: Google Drive folder ID containing CAPWATCH exports
  *    - DB_SPREADSHEET_ID: Google Sheet ID for data storage
- *    - APP_NAME: Your unit name (e.g., "Michigan Wing Readiness Hub")
+ *    - APP_NAME: Full unit name (e.g., "Michigan Wing Readiness Hub")
+ *    - APP_SHORT_NAME: Short name for header/tab (e.g., "Readiness Hub")
  * 4. (Optional) Configure GitHub integration:
  *    - GITHUB_TOKEN: Personal access token with 'repo' scope
  *    - GITHUB_OWNER: Your GitHub username or organization
@@ -71,6 +72,7 @@ function setupScriptProperties() {
     'DB_SHEET_NAME': 'DB',
     'LOGS_SHEET_NAME': 'Logs',
     'APP_NAME': 'CAP Readiness Hub',
+    'APP_SHORT_NAME': 'Readiness Hub',
     'LOGO_DRIVE_FILE_ID': '',  // Google Drive file ID for logo (optional)
     'GITHUB_OWNER': 'YOUR_GITHUB_USERNAME',
     'GITHUB_REPO': 'readiness-hub',
@@ -138,10 +140,12 @@ function showCurrentConfig() {
  */
 function getAppConfig() {
   const appName = getConfig('APP_NAME', 'CAP Readiness Hub');
+  const appShortName = getConfig('APP_SHORT_NAME', 'Readiness Hub');
   const logoFileId = getConfig('LOGO_DRIVE_FILE_ID', '');
 
   return {
     appName: appName,
+    appShortName: appShortName,
     logoUrl: logoFileId ? 'https://drive.google.com/thumbnail?id=' + logoFileId : ''
   };
 }
@@ -196,10 +200,10 @@ function doGet(e) {
     Logger.log("Access Time: " + startTime.toISOString());
     Logger.log("====================================");
 
-    const appName = getConfig('APP_NAME', 'CAP Readiness Hub');
+    const appShortName = getConfig('APP_SHORT_NAME', 'Readiness Hub');
     const htmlOutput = HtmlService.createTemplateFromFile('Index')
       .evaluate()
-      .setTitle(appName)
+      .setTitle(appShortName)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 
@@ -1017,7 +1021,7 @@ function formatIssueBody(issueData, userName) {
   body += '| **Organizations Loaded** | ' + (d.orgCount || 'N/A') + ' |\n\n';
 
   body += '---\n\n';
-  body += '*This issue was automatically generated from the CAP Readiness Hub feedback system.*';
+  body += '*This issue was automatically generated from the ' + getConfig('APP_NAME', 'CAP Readiness Hub') + ' feedback system.*';
 
   return body;
 }

@@ -1,16 +1,18 @@
 <script type="text/babel">
 // --- APP METADATA ---
-const APP_VERSION = '1.0.0';  // Increment with releases
+const APP_VERSION = '1.10.12';  // Semantic version: major.minor.patch
 
 // APP_CONFIG: Receives values from backend via getAppConfig()
 // These are fallback defaults - actual values loaded from Script Properties
 let APP_CONFIG = {
   appName: 'CAP Readiness Hub',
+  appShortName: 'Readiness Hub',
   logoUrl: ''
 };
 
-// Backwards compatibility alias
+// Backwards compatibility aliases
 const APP_NAME = APP_CONFIG.appName;
+const APP_SHORT_NAME = APP_CONFIG.appShortName;
 
 // --- FEEDBACK CATEGORIES ---
 // Used by the feedback submission form in ReferenceModal

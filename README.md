@@ -1,5 +1,8 @@
 # CAP Readiness Hub
 
+![Version](https://img.shields.io/badge/version-1.10.12-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 A Google Apps Script web application for Civil Air Patrol units to track member readiness, cadet progression, senior member qualifications, and emergency services status.
 
 Designed primarily for Wings and below, this tool provides dashboards and analytics based on CAPWATCH data exports.
@@ -73,7 +76,8 @@ Configuration is stored securely in Script Properties (not in the code):
 |----------|-------------|---------|
 | `SOURCE_FOLDER_ID` | Google Drive folder ID with CAPWATCH exports | `1ABC...xyz` |
 | `DB_SPREADSHEET_ID` | Google Sheet ID for data storage | `1DEF...abc` |
-| `APP_NAME` | Display name for your unit | `Michigan Wing Readiness Hub` |
+| `APP_NAME` | Full display name for your unit | `Michigan Wing Readiness Hub` |
+| `APP_SHORT_NAME` | Short name for header bar and browser tab | `Readiness Hub` |
 
 **Finding IDs:**
 - **Folder ID**: Open your Drive folder, copy from URL: `https://drive.google.com/drive/folders/{FOLDER_ID}`
@@ -242,6 +246,28 @@ The first load after sync may take a few seconds to build the cache. Subsequent 
 
 ### Missing CAPWATCH files
 The app logs warnings for missing files but continues to function. Check the Apps Script execution logs for details.
+
+## Versioning
+
+This project uses [Semantic Versioning](https://semver.org/) (Major.Minor.Patch):
+
+- **Major**: Significant changes that may alter workflows or require re-deployment
+- **Minor**: New features and enhancements (backward-compatible)
+- **Patch**: Bug fixes and small tweaks
+
+Current version: **1.10.12** (defined in `ConfigConstants.html`)
+
+### Release Process
+
+1. Update `APP_VERSION` in `ConfigConstants.html`
+2. Commit all changes
+3. Create an annotated git tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z: description"`
+4. Push the tag: `git push origin vX.Y.Z`
+5. Create a GitHub Release from the tag with release notes
+
+### Changelog
+
+See [GitHub Releases](https://github.com/cap-miwg/readiness-hub/releases) for a detailed changelog of each version.
 
 ## Contributing
 
