@@ -1,0 +1,218 @@
+<!--
+  ============================================================
+  THIS FILE IS NOT PART OF THE APPS SCRIPT PROJECT
+
+  It is build infrastructure for the browser-based preview
+  version deployed to GitHub Pages. Do not copy this file
+  into your Google Apps Script editor.
+  ============================================================
+-->
+<script>
+// =============================================================================
+// CAPWATCH File Mapping
+// Maps ZIP entry filenames to the payload structure expected by the app.
+// Based on Code.gs fileMap — keep in sync when new CAPWATCH files are added.
+// =============================================================================
+
+// Contains-match files: filename.includes(key) is used for matching.
+// These names are unique enough to not collide with other filenames.
+window.CAPWATCH_FILE_MAP = {
+  // Config files
+  'PL_Paths': { cat: 'config', key: 'paths' },
+  'PL_Groups': { cat: 'config', key: 'groups' },
+  'PL_Tasks': { cat: 'config', key: 'tasks' },
+  'PL_TaskGroupAssignments': { cat: 'config', key: 'assignments' },
+  'CdtAchvEnum': { cat: 'config', key: 'cadetAchvEnum' },
+  'AchvStepTasks': { cat: 'config', key: 'esAchvStepTasks' },
+  'AchvStepAchv': { cat: 'config', key: 'esAchvStepAchv' },
+  // Data files
+  'CadetDutyPositions': { cat: 'data', key: 'cadetDuty' },
+  'SeniorLevel': { cat: 'data', key: 'seniorLevels' },
+  'SpecTrack': { cat: 'data', key: 'tracks' },
+  'MbrCommittee': { cat: 'data', key: 'committees' },
+  'MbrContact': { cat: 'data', key: 'contacts' },
+  'MbrAchievements': { cat: 'data', key: 'esMbrAchievements' },
+  'MbrTasks': { cat: 'data', key: 'esMbrTasks' },
+  'PL_MemberTaskCredit': { cat: 'data', key: 'memberTasks' },
+  'PL_MemberPathCredit': { cat: 'data', key: 'memberPaths' },
+  'CadetRank': { cat: 'data', key: 'cadetRank' },
+  'CadetAchvAprs': { cat: 'data', key: 'cadetAchvAprs' },
+  'CadetAchvFullReport': { cat: 'data', key: 'cadetAchvFullReport' },
+  'CadetActivities': { cat: 'data', key: 'cadetActivities' },
+  'CadetHFZInformation': { cat: 'data', key: 'cadetHFZ' },
+  'CadetPhase': { cat: 'data', key: 'cadetPhase' },
+  'CadetAwards': { cat: 'data', key: 'cadetAwards' },
+  'SeniorAwards': { cat: 'data', key: 'seniorAwards' },
+  'OFlight': { cat: 'data', key: 'oFlights' },
+  'ORGStatistics': { cat: 'data', key: 'orgStats' },
+  'PL_VolUInstructors': { cat: 'data', key: 'voluInstructors' },
+  'GoogleAdoptionStats': { cat: 'data', key: 'googleAdoption' },
+  'GoogleAdoptionUsers': { cat: 'data', key: 'googleAdoptionUsers' }
+};
+
+// Exact-match files: baseName === key is used for matching.
+// These filenames are substrings of other filenames, so contains-match would
+// produce false positives (e.g. "Member" would match "MbrAchievements").
+window.EXACT_MATCH_FILES = {
+  'Achievements': { cat: 'config', key: 'esAchievements' },
+  'Tasks': { cat: 'config', key: 'esTasks' },
+  'CadetAchv': { cat: 'data', key: 'cadetAchv' },
+  'Member': { cat: 'data', key: 'members' },
+  'Organization': { cat: 'data', key: 'organization' },
+  'DutyPosition': { cat: 'data', key: 'duty' },
+  'Training': { cat: 'data', key: 'training' },
+  'DownLoadDate': { cat: 'meta', key: 'downloadDate' }
+};
+
+// =============================================================================
+// IndexedDB Wrapper — local data persistence for the preview version
+// =============================================================================
+
+window.CapwatchDB = {
+  DB_NAME: 'capwatch-preview',
+  DB_VERSION: 1,
+  STORE_NAME: 'data',
+
+  async open() {
+    return new Promise((resolve, reject) => {
+      var request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+      request.onerror = function() { reject(request.error); };
+      request.onsuccess = function() { resolve(request.result); };
+      request.onupgradeneeded = function(event) {
+        var db = event.target.result;
+        if (!db.objectStoreNames.contains('data')) {
+          db.createObjectStore('data');
+        }
+      };
+    });
+  },
+
+  async save(payload) {
+    var db = await this.open();
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('data', 'readwrite');
+      var store = tx.objectStore('data');
+      var request = store.put({ payload: payload, timestamp: Date.now() }, 'current');
+      request.onerror = function() { reject(request.error); };
+      request.onsuccess = function() { resolve(); };
+      tx.oncomplete = function() { db.close(); };
+    });
+  },
+
+  async load() {
+    try {
+      var db = await this.open();
+      return new Promise(function(resolve, reject) {
+        var tx = db.transaction('data', 'readonly');
+        var store = tx.objectStore('data');
+        var request = store.get('current');
+        request.onerror = function() { reject(request.error); };
+        request.onsuccess = function() { resolve(request.result); };
+        tx.oncomplete = function() { db.close(); };
+      });
+    } catch (e) {
+      console.warn('IndexedDB load failed:', e);
+      return null;
+    }
+  },
+
+  async clear() {
+    var db = await this.open();
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('data', 'readwrite');
+      var store = tx.objectStore('data');
+      var request = store.clear();
+      request.onerror = function() { reject(request.error); };
+      request.onsuccess = function() { resolve(); };
+      tx.oncomplete = function() { db.close(); };
+    });
+  }
+};
+
+// =============================================================================
+// CAPWATCH ZIP Importer
+// =============================================================================
+
+window.importCapwatchZip = async function(file, onProgress) {
+  try {
+    onProgress && onProgress('Reading ZIP file...');
+    var zip = await JSZip.loadAsync(file);
+
+    var payload = {
+      config: {},
+      data: {},
+      meta: {
+        lastUpdated: new Date().toISOString(),
+        source: 'zip-import',
+        filename: file.name
+      }
+    };
+
+    var entries = Object.entries(zip.files).filter(function(pair) { return !pair[1].dir; });
+    var processed = 0;
+
+    for (var i = 0; i < entries.length; i++) {
+      var filename = entries[i][0];
+      var zipEntry = entries[i][1];
+      var baseName = filename.split('/').pop().replace('.txt', '');
+      var matched = false;
+
+      // Try exact match files first
+      var exactKeys = Object.keys(window.EXACT_MATCH_FILES);
+      for (var j = 0; j < exactKeys.length; j++) {
+        var searchKey = exactKeys[j];
+        if (baseName === searchKey) {
+          onProgress && onProgress('Processing ' + baseName + '...');
+          var content = await zipEntry.async('string');
+          var def = window.EXACT_MATCH_FILES[searchKey];
+          if (!payload[def.cat]) payload[def.cat] = {};
+          payload[def.cat][def.key] = content;
+          matched = true;
+          break;
+        }
+      }
+
+      // Then try contains matching
+      if (!matched) {
+        var containsKeys = Object.keys(window.CAPWATCH_FILE_MAP);
+        for (var k = 0; k < containsKeys.length; k++) {
+          var cKey = containsKeys[k];
+          if (baseName.indexOf(cKey) !== -1) {
+            onProgress && onProgress('Processing ' + baseName + '...');
+            var cContent = await zipEntry.async('string');
+            var cDef = window.CAPWATCH_FILE_MAP[cKey];
+            if (!payload[cDef.cat]) payload[cDef.cat] = {};
+            payload[cDef.cat][cDef.key] = cContent;
+            break;
+          }
+        }
+      }
+
+      processed++;
+      if (processed % 5 === 0) {
+        onProgress && onProgress('Processed ' + processed + '/' + entries.length + ' files...');
+      }
+    }
+
+    // Parse DownLoadDate if present and use it as lastUpdated
+    if (payload.meta && payload.meta.downloadDate) {
+      var lines = payload.meta.downloadDate.split('\n').filter(function(l) { return l.trim(); });
+      if (lines.length > 1) {
+        var dateStr = lines[1].replace(/"/g, '').trim();
+        var parsed = new Date(dateStr);
+        if (!isNaN(parsed.getTime())) {
+          payload.meta.lastUpdated = parsed.toISOString();
+        }
+      }
+    }
+
+    onProgress && onProgress('Saving to local storage...');
+    await window.CapwatchDB.save(payload);
+
+    return payload;
+  } catch (error) {
+    console.error('ZIP import failed:', error);
+    throw error;
+  }
+};
+</script>

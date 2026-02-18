@@ -1,0 +1,116 @@
+<!--
+  ============================================================
+  THIS FILE IS NOT PART OF THE APPS SCRIPT PROJECT
+
+  It is build infrastructure for the browser-based preview
+  version deployed to GitHub Pages. Do not copy this file
+  into your Google Apps Script editor.
+  ============================================================
+-->
+<script type="text/babel">
+// ZIP Import Modal Component for the Preview version
+function ZipImportModal({ onImport, onClose, isOpen }) {
+  const [dragOver, setDragOver] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [progress, setProgress] = React.useState('');
+  const [error, setError] = React.useState(null);
+  const fileInputRef = React.useRef(null);
+
+  if (!isOpen) return null;
+
+  const handleFile = async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.zip')) {
+      setError('Please select a valid ZIP file');
+      return;
+    }
+
+    setImporting(true);
+    setError(null);
+    setProgress('Starting import...');
+
+    try {
+      const payload = await window.importCapwatchZip(file, setProgress);
+      setProgress('Import complete!');
+      setTimeout(() => {
+        onImport(payload);
+      }, 500);
+    } catch (err) {
+      setError('Import failed: ' + err.message);
+      setImporting(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    handleFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const baseClass = "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors";
+  const activeClass = dragOver ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50";
+  const dropZoneClass = baseClass + " " + activeClass;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-slate-900">Import CAPWATCH Data</h2>
+          {onClose && !importing && (
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <Icon name="X" className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        <p className="text-sm text-slate-600 mb-4">
+          Upload your CAPWATCH export ZIP file to load member data.
+          The file is processed locally in your browser and stored for future visits.
+        </p>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        {importing ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+            <p className="text-sm text-slate-600">{progress}</p>
+          </div>
+        ) : (
+          <div
+            className={dropZoneClass}
+            onDragOver={handleDragOver}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+          >
+            <Icon name="Upload" className="mx-auto h-12 w-12 text-slate-400 mb-4" />
+            <p className="text-slate-600 font-medium">Drop your CAPWATCH export ZIP file here</p>
+            <p className="text-sm text-slate-400 mt-2">or click to browse</p>
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".zip"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files[0])}
+        />
+
+        <div className="mt-4 text-xs text-slate-400 text-center">
+          Data is stored locally in your browser using IndexedDB
+        </div>
+      </div>
+    </div>
+  );
+}
+</script>

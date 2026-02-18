@@ -1,0 +1,63 @@
+# ============================================================
+# THIS FILE IS NOT PART OF THE APPS SCRIPT PROJECT
+#
+# GitHub Actions workflow that builds the browser-based preview
+# version and deploys it to GitHub Pages. Do not copy this file
+# into your Google Apps Script editor.
+# ============================================================
+
+name: Build and Deploy Preview Version
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build preview version
+        run: bash offline/build-preview.sh
+
+      - name: Validate output
+        run: |
+          test -f _site/index.html
+          size=$(stat -c%s _site/index.html)
+          echo "Built index.html: $size bytes"
+          if [ "$size" -lt 500000 ]; then
+            echo "ERROR: Output file is suspiciously small ($size bytes)"
+            exit 1
+          fi
+          grep -q "CapwatchDB" _site/index.html
+          grep -q "ZipImportModal" _site/index.html
+          grep -q "PREVIEW" _site/index.html
+          echo "All validation checks passed"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

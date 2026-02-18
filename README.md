@@ -17,6 +17,21 @@ Designed primarily for Wings and below, this tool provides dashboards and analyt
 - **Org Chart** - Visual organizational hierarchy with metrics overlay
 - **Reports & Export** - PDF and data exports for unit analysis
 
+## Try It Now (Preview)
+
+Want to see the Readiness Hub in action before setting up the full version? A **browser-based preview** is available at:
+
+**[https://cap-miwg.github.io/readiness-hub/](https://cap-miwg.github.io/readiness-hub/)**
+
+1. Export your CAPWATCH data as a ZIP file
+2. Open the preview link above
+3. Click **Import** and upload your ZIP file
+4. Browse all dashboards with your real data
+
+The preview runs entirely in your browser — no data is uploaded to any server. It updates automatically with each new release.
+
+> **Note:** The preview version is read-only and does not include data sync, feedback submission, or other features that require a Google Apps Script backend. For the full experience, follow the setup instructions below.
+
 ## Screenshots
 
 ### Home Dashboard
@@ -58,10 +73,12 @@ Designed primarily for Wings and below, this tool provides dashboards and analyt
 
 ### 1. Copy the Project Files
 
-Copy all the project files to a new Google Apps Script project:
+Copy the Apps Script project files to a new Google Apps Script project:
 1. Go to [script.google.com](https://script.google.com)
 2. Create a new project
-3. Copy each file from this repository into the project
+3. Copy only the `.html` and `.gs` files from the **root** of this repository into the project
+
+> **Important:** Do **NOT** copy the `offline/` folder, `.github/` folder, or any non-`.html`/`.gs` files. Those are build infrastructure for the [browser-based preview version](https://cap-miwg.github.io/readiness-hub/) and are not part of the Apps Script project.
 
 ### 2. Configure Required Settings
 
