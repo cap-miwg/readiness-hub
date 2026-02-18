@@ -21,7 +21,11 @@
  * 5. (Optional) Configure IT Chatbot integration:
  *    - CHATBOT_WEBAPP_URL: URL to the IT Chatbot web app
  *    - CHATBOT_API_KEY: API key for the chatbot
- * 6. Deploy as web app and set up hourly trigger for syncDriveToSheet()
+ * 6. (Optional) Configure CAPWATCH auto-download:
+ *    - CAPWATCH_ORGID: Your CAP organization ID (e.g., '223')
+ *    - Run setCapwatchAuthorization() once to store eServices credentials
+ *    - Run setupCapwatchTrigger() to create a daily download+sync trigger
+ * 7. Deploy as web app and set up hourly trigger for syncDriveToSheet()
  *
  * See README.md for detailed setup instructions.
  */
@@ -76,7 +80,8 @@ function setupScriptProperties() {
     'LOGO_DRIVE_FILE_ID': '',  // Google Drive file ID for logo (optional)
     'GITHUB_OWNER': 'YOUR_GITHUB_USERNAME',
     'GITHUB_REPO': 'readiness-hub',
-    'GITHUB_API_URL': 'https://api.github.com'
+    'GITHUB_API_URL': 'https://api.github.com',
+    'CAPWATCH_ORGID': ''  // Your wing/unit ORGID (e.g., '223' for MI Wing)
     // GITHUB_TOKEN, CHATBOT_WEBAPP_URL, CHATBOT_API_KEY should be added manually for security
   };
 
@@ -1666,5 +1671,270 @@ function setupGoogleAdoptionTrigger() {
     .create();
 
   Logger.log("Created daily trigger for collectGoogleAdoptionData at 5 AM Eastern");
+}
+
+// ========================================
+// CAPWATCH AUTO-DOWNLOAD
+// ========================================
+// Downloads CAPWATCH data directly from the CAP eServices API.
+// This is optional — only needed if you don't already have CAPWATCH
+// files being placed in the SOURCE_FOLDER_ID by another process
+// (e.g., gsuite-automation or manual upload).
+//
+// Setup:
+// 1. Set CAPWATCH_ORGID in Script Properties (e.g., '223')
+// 2. Run setCapwatchAuthorization() to store your eServices credentials
+// 3. Run setupCapwatchTrigger() to schedule daily download+sync
+//
+// Note: CAPWATCH API has a daily blackout window from 12:00-2:30 AM CST.
+// The default trigger runs at 4 AM Eastern (3 AM CST) to avoid this.
+
+/**
+ * One-time setup: store eServices credentials for CAPWATCH API access.
+ * Run this from the Apps Script editor. Credentials are stored per-user
+ * in UserProperties (not shared with other users or visible in Script Properties).
+ */
+function setCapwatchAuthorization() {
+  const username = Browser.inputBox('CAPWATCH Setup', 'Enter your eServices username:', Browser.Buttons.OK_CANCEL);
+  if (username === 'cancel' || !username) {
+    Logger.log('CAPWATCH authorization setup cancelled (username step).');
+    return;
+  }
+
+  const password = Browser.inputBox('CAPWATCH Setup', 'Enter your eServices password:', Browser.Buttons.OK_CANCEL);
+  if (password === 'cancel' || !password) {
+    Logger.log('CAPWATCH authorization setup cancelled (password step).');
+    return;
+  }
+
+  const authorization = Utilities.base64Encode(username + ':' + password);
+  PropertiesService.getUserProperties().setProperty('CAPWATCH_AUTHORIZATION', authorization);
+
+  Logger.log('CAPWATCH authorization saved successfully.');
+  Browser.msgBox('CAPWATCH Setup', 'Authorization saved. You can now run getCapwatch() to test.', Browser.Buttons.OK);
+}
+
+/**
+ * Validate that CAPWATCH credentials are configured.
+ * @returns {string} The Base64-encoded authorization token
+ * @throws {Error} If credentials are not set
+ */
+function checkCapwatchCredentials() {
+  const auth = PropertiesService.getUserProperties().getProperty('CAPWATCH_AUTHORIZATION');
+  if (!auth) {
+    throw new Error('CAPWATCH credentials not configured. Run setCapwatchAuthorization() first.');
+  }
+  return auth;
+}
+
+/**
+ * Download CAPWATCH data from the CAP eServices API and save files
+ * to the SOURCE_FOLDER_ID Google Drive folder.
+ *
+ * Requires CAPWATCH_ORGID in Script Properties and credentials
+ * stored via setCapwatchAuthorization().
+ *
+ * @returns {Object} Summary with filesExtracted and duration
+ */
+function getCapwatch() {
+  const startTime = new Date();
+  let userEmail = 'Unknown';
+  let userName = 'Unknown';
+
+  try {
+    userEmail = Session.getActiveUser().getEmail() || 'Unknown';
+    userName = getUserFullName(userEmail);
+  } catch (e) {
+    Logger.log('Could not determine user identity: ' + e.message);
+  }
+
+  Logger.log('========== CAPWATCH DOWNLOAD START ==========');
+
+  try {
+    const orgId = getRequiredConfig('CAPWATCH_ORGID', 'CAPWATCH Organization ID');
+    const sourceFolderId = getRequiredConfig('SOURCE_FOLDER_ID', 'Source Folder ID');
+    const authorization = checkCapwatchCredentials();
+
+    const url = 'https://www.capnhq.gov/CAP.CapWatchAPI.Web/api/cw?ORGID=' + orgId + '&unitOnly=0';
+    Logger.log('Fetching CAPWATCH data for ORGID ' + orgId);
+
+    // Fetch with simple retry (immediate fail on auth errors)
+    let response;
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      Logger.log('Download attempt ' + attempt + ' of ' + maxAttempts);
+      response = UrlFetchApp.fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': 'Basic ' + authorization },
+        muteHttpExceptions: true
+      });
+
+      const code = response.getResponseCode();
+      if (code === 200) break;
+      if (code === 401) throw new Error('Authentication failed (401). Check your eServices credentials — run setCapwatchAuthorization() to update.');
+      if (code === 403) throw new Error('Access denied (403). Your account may not have CAPWATCH API access for ORGID ' + orgId + '.');
+      if (attempt === maxAttempts) throw new Error('CAPWATCH API returned HTTP ' + code + ' after ' + maxAttempts + ' attempts.');
+
+      Logger.log('Attempt ' + attempt + ' returned HTTP ' + code + ', retrying in 5 seconds...');
+      Utilities.sleep(5000);
+    }
+
+    // Unzip and extract files
+    const zipBlob = response.getBlob();
+    Logger.log('Downloaded ZIP: ' + zipBlob.getBytes().length + ' bytes');
+
+    const files = Utilities.unzip(zipBlob);
+    Logger.log('Extracted ' + files.length + ' files from ZIP');
+
+    // Write each file to the Drive folder
+    const folder = DriveApp.getFolderById(sourceFolderId);
+    let updated = 0;
+    let created = 0;
+
+    files.forEach(function(blob) {
+      const fileName = blob.getName();
+      const existingFiles = folder.getFilesByName(fileName);
+      if (existingFiles.hasNext()) {
+        existingFiles.next().setContent(blob.getDataAsString());
+        updated++;
+      } else {
+        folder.createFile(blob);
+        created++;
+      }
+      Logger.log('  ' + fileName + ' (' + blob.getBytes().length + ' bytes)');
+    });
+
+    const duration = ((new Date() - startTime) / 1000).toFixed(1);
+    Logger.log('CAPWATCH download complete: ' + updated + ' updated, ' + created + ' created (' + duration + 's)');
+    Logger.log('========== CAPWATCH DOWNLOAD END ==========');
+
+    // Log to Logs sheet
+    logWebAppAccess({
+      timestamp: startTime,
+      userName: userName,
+      userEmail: userEmail,
+      eventType: 'CAPWATCH_DOWNLOAD',
+      status: 'SUCCESS',
+      durationSeconds: parseFloat(duration),
+      queryString: '',
+      parameters: JSON.stringify({ orgId: orgId, filesExtracted: files.length, updated: updated, created: created }),
+      errorMessage: '',
+      errorStack: ''
+    });
+
+    return { success: true, filesExtracted: files.length, updated: updated, created: created, duration: parseFloat(duration) };
+
+  } catch (error) {
+    const duration = ((new Date() - startTime) / 1000).toFixed(1);
+    Logger.log('CAPWATCH download FAILED: ' + error.message);
+    Logger.log('========== CAPWATCH DOWNLOAD END ==========');
+
+    logWebAppAccess({
+      timestamp: startTime,
+      userName: userName,
+      userEmail: userEmail,
+      eventType: 'CAPWATCH_DOWNLOAD',
+      status: 'ERROR',
+      durationSeconds: parseFloat(duration),
+      queryString: '',
+      parameters: '{}',
+      errorMessage: error.message,
+      errorStack: error.stack || ''
+    });
+
+    throw error;
+  }
+}
+
+/**
+ * Download CAPWATCH data and then sync to the database sheet.
+ * This is the recommended trigger target for daily automated runs.
+ */
+function downloadAndSync() {
+  const startTime = new Date();
+  let userEmail = 'Unknown';
+  let userName = 'Unknown';
+
+  try {
+    userEmail = Session.getActiveUser().getEmail() || 'Unknown';
+    userName = getUserFullName(userEmail);
+  } catch (e) {
+    Logger.log('Could not determine user identity: ' + e.message);
+  }
+
+  Logger.log('========== DOWNLOAD AND SYNC START ==========');
+
+  try {
+    Logger.log('Step 1: Downloading CAPWATCH data...');
+    const downloadResult = getCapwatch();
+    Logger.log('Download complete: ' + downloadResult.filesExtracted + ' files');
+
+    Logger.log('Step 2: Syncing to database sheet...');
+    syncDriveToSheet();
+    Logger.log('Sync complete');
+
+    const duration = ((new Date() - startTime) / 1000).toFixed(1);
+    Logger.log('========== DOWNLOAD AND SYNC END (' + duration + 's) ==========');
+
+    logWebAppAccess({
+      timestamp: startTime,
+      userName: userName,
+      userEmail: userEmail,
+      eventType: 'CAPWATCH_DOWNLOAD_AND_SYNC',
+      status: 'SUCCESS',
+      durationSeconds: parseFloat(duration),
+      queryString: '',
+      parameters: JSON.stringify({ downloadResult: downloadResult, totalDuration: parseFloat(duration) }),
+      errorMessage: '',
+      errorStack: ''
+    });
+
+  } catch (error) {
+    const duration = ((new Date() - startTime) / 1000).toFixed(1);
+    Logger.log('Download and sync FAILED: ' + error.message);
+    Logger.log('========== DOWNLOAD AND SYNC END ==========');
+
+    logWebAppAccess({
+      timestamp: startTime,
+      userName: userName,
+      userEmail: userEmail,
+      eventType: 'CAPWATCH_DOWNLOAD_AND_SYNC',
+      status: 'ERROR',
+      durationSeconds: parseFloat(duration),
+      queryString: '',
+      parameters: '{}',
+      errorMessage: error.message,
+      errorStack: error.stack || ''
+    });
+
+    throw error;
+  }
+}
+
+/**
+ * Set up a daily trigger for downloadAndSync().
+ * Runs at 4 AM Eastern (3 AM CST) — after the CAPWATCH blackout window (12:00-2:30 AM CST).
+ * Run this function once during initial setup.
+ */
+function setupCapwatchTrigger() {
+  // Remove any existing triggers for downloadAndSync
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'downloadAndSync') {
+      ScriptApp.deleteTrigger(trigger);
+      Logger.log('Removed existing trigger for downloadAndSync');
+    }
+  });
+
+  // Create new daily trigger at 4 AM Eastern (3 AM CST, after CAPWATCH blackout)
+  ScriptApp.newTrigger('downloadAndSync')
+    .timeBased()
+    .everyDays(1)
+    .atHour(4)
+    .nearMinute(0)
+    .inTimezone('America/New_York')
+    .create();
+
+  Logger.log('Created daily trigger for downloadAndSync at 4 AM Eastern (3 AM CST)');
 }
 

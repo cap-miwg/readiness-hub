@@ -110,6 +110,7 @@ Configuration is stored securely in Script Properties (not in the code):
 | `GITHUB_OWNER` | GitHub username/org for feedback | - |
 | `GITHUB_REPO` | Repository name for feedback | `readiness-hub` |
 | `GITHUB_TOKEN` | Personal access token (add manually) | - |
+| `CAPWATCH_ORGID` | CAP organization ID for auto-download | - |
 
 **Finding Logo File ID:**
 - Upload your logo image to Google Drive
@@ -213,6 +214,36 @@ If you have an IT chatbot that should be notified of new issues, add these prope
 |----------|-------|
 | `CHATBOT_WEBAPP_URL` | URL to your IT chatbot web app |
 | `CHATBOT_API_KEY` | API key for the chatbot |
+
+## Optional: CAPWATCH Auto-Download
+
+If you don't already have CAPWATCH files being placed in your `SOURCE_FOLDER_ID` folder (e.g., via [gsuite-automation](https://github.com/cap-miwg/gsuite-automation) or manual upload), the app can download CAPWATCH data directly from the CAP eServices API.
+
+### Setup
+
+1. In Apps Script: Go to **Project Settings** > **Script Properties**
+2. Set `CAPWATCH_ORGID` to your organization ID (e.g., `223` for Michigan Wing)
+3. In the Apps Script editor, select `setCapwatchAuthorization` from the function dropdown and click **Run**
+4. Enter your eServices username and password when prompted
+5. Test by selecting `getCapwatch` and clicking **Run** — files should appear in your `SOURCE_FOLDER_ID` folder
+
+### Automated Daily Download + Sync
+
+To schedule daily automatic downloads:
+
+1. In the Apps Script editor, select `setupCapwatchTrigger` from the function dropdown
+2. Click **Run** — this creates a daily trigger at 4 AM Eastern (3 AM CST)
+3. The trigger downloads fresh CAPWATCH data, then syncs it to the database sheet
+
+The trigger time avoids the CAPWATCH API daily blackout window (12:00–2:30 AM CST).
+
+> **Note:** If you already have a separate `syncDriveToSheet` hourly trigger, you can keep both. The download+sync trigger handles the full pipeline; the hourly sync trigger provides additional refresh cycles throughout the day.
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| `CAPWATCH_ORGID` | Your CAP organization ID | `223` |
+
+**Credentials** are stored per-user in UserProperties (not in Script Properties). Each admin who needs to run the download must set their own credentials via `setCapwatchAuthorization()`.
 
 ## Optional: Cadet Rank Insignia Images
 
