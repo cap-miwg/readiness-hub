@@ -489,6 +489,21 @@ function createCadetDataService() {
           requirements.characterDevelopment.value = 'Not completed';
         }
       }
+
+      // Check Cadet Wingman Course (Achievement 1 - replaced Character Development)
+      if (requirements.cadetWingmanCourse) {
+        const cadetWingman = isTaskCompleted('329');
+        if (achvData.MoralLDateP && achvData.MoralLDateP !== '01/01/1900') {
+          requirements.cadetWingmanCourse.completed = true;
+          requirements.cadetWingmanCourse.value = `Completed on ${achvData.MoralLDateP}`;
+        } else if (cadetWingman) {
+          requirements.cadetWingmanCourse.completed = true;
+          requirements.cadetWingmanCourse.value = 'Completed';
+        } else {
+          requirements.cadetWingmanCourse.completed = false;
+          requirements.cadetWingmanCourse.value = 'Not completed';
+        }
+      }
     } else {
       // No achievement record yet - still check NEW system (Cadet Interactive Modules) in case cadet completed modules
       // before starting the achievement in the old system
@@ -579,14 +594,14 @@ function createCadetDataService() {
         requirements.characterDevelopment.completed = taskCharacterForum;
         requirements.characterDevelopment.value = taskCharacterForum ? 'Completed' : 'Not completed';
       }
+      if (requirements.cadetWingmanCourse) {
+        const cadetWingman = isTaskCompleted('329');
+        requirements.cadetWingmanCourse.completed = cadetWingman;
+        requirements.cadetWingmanCourse.value = cadetWingman ? 'Completed' : 'Not completed';
+      }
     }
 
     // Add milestone-specific requirements from PL_MemberTaskCredit
-    if (requirements.cadetWingmanCourse) { // Achievement 1 (C/Amn)
-      const cadetWingman = isTaskCompleted('329');
-      requirements.cadetWingmanCourse.completed = cadetWingman;
-      requirements.cadetWingmanCourse.value = cadetWingman ? 'Completed' : 'Not completed';
-    }
     if (requirements.wrightBrothersLeadershipExam) { // Wright Brothers
       const learnToLeadExam = isTaskCompleted('347');
       requirements.wrightBrothersLeadershipExam.completed = learnToLeadExam;
