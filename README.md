@@ -1,6 +1,6 @@
 # CAP Readiness Hub
 
-![Version](https://img.shields.io/badge/version-1.11.0-blue)
+![Version](https://img.shields.io/badge/version-1.11.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A Google Apps Script web application for Civil Air Patrol units to track member readiness, cadet progression, senior member qualifications, and emergency services status.
