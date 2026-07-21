@@ -383,9 +383,9 @@
           if (!member) return null;
           const id = member.CAPID;
 
-          const rawDuties = dataFiles.duty.filter(d => d.CAPID === id);
+          const rawDuties = lookupRows(getDataIndexes(dataFiles).dutyByCapid, id);
           const duties = rawDuties.map(d => {
-              const org = dataFiles.organization.find(o => o.ORGID === d.ORGID);
+              const org = lookupRow(getDataIndexes(dataFiles).orgByOrgId, d.ORGID);
               const orgString = org ? `${org.Region}-${org.Wing}-${org.Unit}` : "Unknown";
               return { 
                   name: d.Duty, 
@@ -395,7 +395,7 @@
                   displayName: `${d.Duty}${d.Asst === "1" ? " (A)" : ""}` 
               };
           });
-          const rawTracks = dataFiles.tracks.filter(t => t.CAPID === id);
+          const rawTracks = lookupRows(getDataIndexes(dataFiles).tracksByCapid, id);
           const tracks = rawTracks.map(t => ({ name: t.Track, level: t.TrackLevel, date: t.DateMod }));
           
           const dutiesWithStatus = duties.map(duty => {
@@ -427,11 +427,11 @@
           });
 
           const { progress: levelsProgress, currentLevel: highestLevel } = calculateLevelsProgress(member, configFiles, dataFiles, levelPathMap);
-          const level2Track = determineLevel2Track(dataFiles.memberTasks ? dataFiles.memberTasks.filter(mt => mt.CAPID === id) : []);
+          const level2Track = determineLevel2Track(lookupRows(getDataIndexes(dataFiles).memberTasksByCapid, id));
 
           let memberUnitName = "Unknown";
           if (dataFiles.organization) {
-              const memOrg = dataFiles.organization.find(o => o.ORGID === member.ORGID);
+              const memOrg = lookupRow(getDataIndexes(dataFiles).orgByOrgId, member.ORGID);
               if (memOrg) {
                   const r = memOrg.Region || "";
                   const w = memOrg.Wing || "";
@@ -637,8 +637,9 @@
         const getLevelBreakdown = (member, levelKey) => {
           const pathId = levelPathMap[levelKey];
           if (!pathId) return null;
-          const chosenTrack = member.level2Track || determineLevel2Track(dataFiles.memberTasks ? dataFiles.memberTasks.filter(mt => mt.CAPID === member.CAPID) : []);
-          const groups = configFiles.groups.filter(g => g.PathID === pathId);
+          const memberTaskRows = lookupRows(getDataIndexes(dataFiles).memberTasksByCapid, member.CAPID);
+          const chosenTrack = member.level2Track || determineLevel2Track(memberTaskRows);
+          const groups = lookupRows(getConfigIndexes(configFiles).groupsByPathId, pathId);
           const validGroups = groups.filter(g => (parseInt(g.NumberOfRequiredTasks)||0) > 0);
 
           const mappedGroups = validGroups.map(group => {
@@ -646,7 +647,7 @@
             let tasks = taskAssignments.map(ta => {
               const taskDef = configFiles.tasks.find(t => t.TaskID === ta.TaskID);
               if (!taskDef) return null;
-              const isDone = dataFiles.memberTasks.some(mt => mt.CAPID === member.CAPID && mt.TaskID === ta.TaskID && mt.StatusID === "8");
+              const isDone = memberTaskRows.some(mt => mt.TaskID === ta.TaskID && mt.StatusID === "8");
               const appliesTo = LEVEL2_TASK_TRACKS[taskDef.TaskID] || ["ALL"];
               return { ...taskDef, isDone, appliesTo };
             }).filter(Boolean);
@@ -1560,13 +1561,13 @@
 
                   // Level 2: honor track-specific applicability
                   if (levelId === 'L2P1' || levelId === 'L2P2') {
-                    const memberTrack = member.level2Track || determineLevel2Track(dataFiles.memberTasks ? dataFiles.memberTasks.filter(mt => mt.CAPID === member.CAPID) : []);
+                    const memberTrack = member.level2Track || determineLevel2Track(lookupRows(getDataIndexes(dataFiles).memberTasksByCapid, member.CAPID));
                     const appliesTo = LEVEL2_TASK_TRACKS[taskDef.TaskID] || ["ALL"];
                     if (memberTrack && !(appliesTo.includes("ALL") || appliesTo.includes(memberTrack))) return;
                   }
 
-                  const isDone = dataFiles.memberTasks.some(mt =>
-                    mt.CAPID === member.CAPID && mt.TaskID === taskDef.TaskID && mt.StatusID === "8"
+                  const isDone = lookupRows(getDataIndexes(dataFiles).memberTasksByCapid, member.CAPID).some(mt =>
+                    mt.TaskID === taskDef.TaskID && mt.StatusID === "8"
                   );
                   if (!isDone) {
                     taskNeedCount.get(taskKey).neededBy.push({
@@ -4645,6 +4646,8 @@
                   .filter(d => dutyOrgIds.includes(d.ORGID))
                   .filter(d => d.Duty && !d.Duty.toUpperCase().includes('#REF'))
               : [];
+            // Index the org-scoped subset, not the global table - scope matters here
+            const allCadetDutiesByCapid = groupRowsBy(allCadetDuties, 'CAPID');
             const councilCadetDuties = dataFiles.cadetDuty
               ? dataFiles.cadetDuty
                   .filter(d => councilOrgIds.includes(d.ORGID))
@@ -4927,8 +4930,7 @@
                 // Only include cadets whose home unit is the current org (avoid wing-wide flooding)
                 if (String(m.ORGID).trim() !== String(unitFilter).trim()) return false;
 
-                const hasNonFlightDuty = allCadetDuties.some(d =>
-                  d.CAPID === m.CAPID &&
+                const hasNonFlightDuty = lookupRows(allCadetDutiesByCapid, m.CAPID).some(d =>
                   !d.Duty.toUpperCase().includes('FLIGHT') &&
                   !d.Duty.toUpperCase().includes('ELEMENT')
                 );

@@ -34,22 +34,24 @@ const determineLevel2Track = (memberTasks = []) => {
 
 const calculateLevelsProgress = (member, configFiles, dataFiles, levelPathMap) => {
   const progress = {};
-  const memberTasks = (dataFiles.memberTasks || []).filter(mt => mt.CAPID === member.CAPID);
-  const memberPaths = (dataFiles.memberPaths || []).filter(mp => mp.CAPID === member.CAPID);
-  const memberLegacyLevels = (dataFiles.seniorLevels || []).filter(sl => sl.CAPID === member.CAPID);
+  const dataIdx = getDataIndexes(dataFiles);
+  const configIdx = getConfigIndexes(configFiles);
+  const memberTasks = lookupRows(dataIdx.memberTasksByCapid, member.CAPID);
+  const memberPaths = lookupRows(dataIdx.memberPathsByCapid, member.CAPID);
+  const memberLegacyLevels = lookupRows(dataIdx.seniorLevelsByCapid, member.CAPID);
 
   LEVELS.forEach(def => {
     const pathId = levelPathMap[def.id];
     let totalReq = 0, totalComp = 0;
 
     if (pathId && (configFiles.groups || []).length > 0) {
-      const groups = (configFiles.groups || []).filter(g => g.PathID === pathId);
+      const groups = lookupRows(configIdx.groupsByPathId, pathId);
       groups.forEach(group => {
         const req = parseInt(group.NumberOfRequiredTasks) || 0;
         if (req === 0) return;
         totalReq += req;
-        const groupTaskIds = (configFiles.assignments || []).filter(a => a.GroupID === group.GroupID).map(a => a.TaskID);
-        const comp = memberTasks.filter(mt => groupTaskIds.includes(mt.TaskID) && mt.StatusID === "8").length;
+        const groupTaskIds = configIdx.taskIdsByGroupId.get(indexKey(group.GroupID)) || new Set();
+        const comp = memberTasks.filter(mt => groupTaskIds.has(mt.TaskID) && mt.StatusID === "8").length;
         totalComp += Math.min(comp, req);
       });
     }
@@ -245,12 +247,11 @@ function createDataService() {
     return { levelsProgress: progress, highestLevel: currentLevel };
   };
 
-  const buildTracks = (member) => (_rawData.tracks || [])
-    .filter(t => t.CAPID === member.CAPID)
+  const buildTracks = (member) => lookupRows(getDataIndexes(_rawData).tracksByCapid, member.CAPID)
     .map(t => ({ name: t.Track, level: t.TrackLevel, date: t.DateMod }));
 
-  const buildSeniorAwards = (member) => (_rawData.seniorAwards || [])
-    .filter(a => a.CAPID === member.CAPID && a.Completed && a.Completed !== '01/01/1900')
+  const buildSeniorAwards = (member) => lookupRows(getDataIndexes(_rawData).seniorAwardsByCapid, member.CAPID)
+    .filter(a => a.Completed && a.Completed !== '01/01/1900')
     .map(a => ({
       award: a.Award,
       awardNo: a.AwardNo,
@@ -259,10 +260,9 @@ function createDataService() {
       dateMod: a.DateMod
     }));
 
-  const buildDuties = (member) => (_rawData.duty || [])
-    .filter(d => d.CAPID === member.CAPID)
+  const buildDuties = (member) => lookupRows(getDataIndexes(_rawData).dutyByCapid, member.CAPID)
     .map(d => {
-      const org = (_rawData.organization || []).find(o => o.ORGID === d.ORGID);
+      const org = lookupRow(getDataIndexes(_rawData).orgByOrgId, d.ORGID);
       const orgString = org ? `${org.Region}-${org.Wing}-${org.Unit}` : "Unknown";
       return {
         name: d.Duty,
@@ -319,14 +319,15 @@ function createDataService() {
       const isActive = status === "ACTIVE";
       return isSenior && isActive && validOrgSet.has(String(m.ORGID || "").trim());
     });
+    const dataIdx = getDataIndexes(_rawData);
     return membersInScope.map(member => {
-      const org = (_rawData.organization || []).find(o => o.ORGID === member.ORGID);
+      const org = lookupRow(dataIdx.orgByOrgId, member.ORGID);
       const memberUnitName = buildUnitName(org);
       const duties = buildDuties(member);
       const tracks = buildTracks(member);
       const { dutiesWithStatus, tracksWithStatus } = applyDutyTrackWarnings(duties, tracks);
       const { levelsProgress, highestLevel } = buildLevelsProgress(member);
-      const level2Track = determineLevel2Track((_rawData.memberTasks || []).filter(mt => mt.CAPID === member.CAPID));
+      const level2Track = determineLevel2Track(lookupRows(dataIdx.memberTasksByCapid, member.CAPID));
       const seniorAwards = buildSeniorAwards(member);
       const esQualifications = _esService.buildESQualifications(member, { forDashboard: true, forSenior: true });
       const esQualificationsAll = _esService.buildESQualifications(member, { forDashboard: false, forSenior: true });

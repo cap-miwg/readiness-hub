@@ -14,6 +14,9 @@ function createCadetDataService() {
   };
   let _esService = null;
 
+  // Per-cadet lookups against tables indexed once (see UtilsDataParsing)
+  const dataIdx = () => getDataIndexes(_rawData);
+
   const parsePayload = (payload) => {
     // Accept already-parsed data from dataFiles (not raw CSV strings)
     _rawData = {
@@ -48,22 +51,23 @@ function createCadetDataService() {
   };
 
   const getCurrentRank = (capid) => {
-    const ranks = _rawData.cadetRank.filter(r => r.CAPID === capid);
+    // Copy before sorting - the index owns the underlying bucket
+    const ranks = lookupRows(dataIdx().cadetRankByCapid, capid).slice();
     if (!ranks.length) return null;
     ranks.sort((a, b) => new Date(b.RankDate) - new Date(a.RankDate));
     return ranks[0];
   };
 
   const getApprovedAchievements = (capid) => {
-    return _rawData.cadetAchvAprs
-      .filter(a => a.CAPID === capid && a.Status === 'APR')
+    return lookupRows(dataIdx().cadetAchvAprsByCapid, capid)
+      .filter(a => a.Status === 'APR')
       .map(a => parseInt(a.CadetAchvID))
       .sort((a, b) => a - b);
   };
 
   const getAchievementApprovalDate = (capid, achievementId) => {
-    const approval = _rawData.cadetAchvAprs.find(
-      a => a.CAPID === capid && parseInt(a.CadetAchvID) === achievementId && a.Status === 'APR'
+    const approval = lookupRows(dataIdx().cadetAchvAprsByCapid, capid).find(
+      a => parseInt(a.CadetAchvID) === achievementId && a.Status === 'APR'
     );
     return approval ? approval.DateMod : null;
   };
@@ -194,8 +198,8 @@ function createCadetDataService() {
   };
 
   const checkEncampment = (capid) => {
-    const encampments = _rawData.cadetActivities.filter(a =>
-      a.CAPID === capid && a.Type === 'ENCAMP' && a.Completed && a.Completed !== '01/01/1900'
+    const encampments = lookupRows(dataIdx().cadetActivitiesByCapid, capid).filter(a =>
+      a.Type === 'ENCAMP' && a.Completed && a.Completed !== '01/01/1900'
     );
     return {
       completed: encampments.length > 0,
@@ -206,10 +210,10 @@ function createCadetDataService() {
 
   const checkCLS = (capid) => {
     const clsTypes = ['RCLS', 'COS', 'COS STAFF'];
-    const activities = _rawData.cadetActivities.filter(a => {
+    const activities = lookupRows(dataIdx().cadetActivitiesByCapid, capid).filter(a => {
       const activityType = String(a.Type || '').toUpperCase();
       const isCLS = clsTypes.includes(activityType) || activityType.startsWith('COS');
-      return a.CAPID === capid && isCLS && a.Completed && a.Completed !== '01/01/1900';
+      return isCLS && a.Completed && a.Completed !== '01/01/1900';
     });
     return {
       completed: activities.length > 0,
@@ -218,12 +222,12 @@ function createCadetDataService() {
   };
 
   const getAchievementRequirements = (capid, achievementID, timeInGrade = null) => {
-    const achvData = _rawData.cadetAchv.find(a => a.CAPID === capid && a.CadetAchvID === achievementID);
+    const achvData = lookupRows(dataIdx().cadetAchvByCapid, capid).find(a => a.CadetAchvID === achievementID);
 
     // Helper function to check if a PL task is completed
     const isTaskCompleted = (taskId) => {
-      return _rawData.memberTasks.some(mt =>
-        mt.CAPID === capid && mt.TaskID === taskId && mt.StatusID === "8"
+      return lookupRows(dataIdx().memberTasksByCapid, capid).some(mt =>
+        mt.TaskID === taskId && mt.StatusID === "8"
       );
     };
 
@@ -726,12 +730,12 @@ function createCadetDataService() {
       return { earned: false, reason: 'Extra credit not earned' };
     }
 
-    const achvData = _rawData.cadetAchv.find(a => a.CAPID === capid && a.CadetAchvID === achievementID);
+    const achvData = lookupRows(dataIdx().cadetAchvByCapid, capid).find(a => a.CadetAchvID === achievementID);
 
     // Helper function to check if a PL task is completed
     const isTaskCompleted = (taskId) => {
-      return _rawData.memberTasks.some(mt =>
-        mt.CAPID === capid && mt.TaskID === taskId && mt.StatusID === "8"
+      return lookupRows(dataIdx().memberTasksByCapid, capid).some(mt =>
+        mt.TaskID === taskId && mt.StatusID === "8"
       );
     };
 
@@ -810,8 +814,8 @@ function createCadetDataService() {
   };
 
   const getMilestoneAwards = (capid) => {
-    return _rawData.cadetAwards
-      .filter(a => a.CAPID === capid && a.Completed && a.Completed !== '01/01/1900')
+    return lookupRows(dataIdx().cadetAwardsByCapid, capid)
+      .filter(a => a.Completed && a.Completed !== '01/01/1900')
       .map(a => ({ award: a.Award, awardNo: a.AwardNo, completed: a.Completed }));
   };
 
@@ -904,10 +908,10 @@ function createCadetDataService() {
 
       // Get cadet duty positions
       const cadetDuties = _rawData.cadetDuty
-        ? _rawData.cadetDuty
-            .filter(d => d.CAPID === cadet.CAPID && d.Duty && !d.Duty.toUpperCase().includes('#REF'))
+        ? lookupRows(dataIdx().cadetDutyByCapid, cadet.CAPID)
+            .filter(d => d.Duty && !d.Duty.toUpperCase().includes('#REF'))
             .map(d => {
-              const org = _rawData.organization.find(o => o.ORGID === d.ORGID);
+              const org = lookupRow(dataIdx().orgByOrgId, d.ORGID);
               const orgString = org ? `${org.Region}-${org.Wing}-${org.Unit ? org.Unit.replace(/^0+/, '').padStart(3,'0') : '000'}` : "Unknown";
               return { name: d.Duty, date: d.DateMod, orgString };
             })

@@ -14,6 +14,19 @@ function createESDataService(rawConfig, rawData) {
   const _rawConfig = rawConfig;
   const _rawData = rawData;
 
+  // esMbrTasks and esMbrAchievements are the largest tables in the payload and
+  // were scanned end to end for every member. Index once, look up per member.
+  const dataIdx = () => getDataIndexes(_rawData);
+  const configIdx = () => getConfigIndexes(_rawConfig);
+  const achievementsFor = (capid) => lookupRows(dataIdx().esMbrAchievementsByCapid, capid);
+  const esTasksFor = (capid) => lookupRows(dataIdx().esMbrTasksByCapid, capid);
+  const achievementDef = (achvId) => lookupRow(configIdx().esAchievementsByAchvId, achvId);
+
+  const hasActiveAchievement = (capid, achvId) => achievementsFor(capid).some(a =>
+    a.AchvID === achvId &&
+    String(a.Status || '').toUpperCase() === 'ACTIVE'
+  );
+
   // ES Helper: Check if member is Skills Evaluator for a qualification
   const checkSkillsEvaluator = (capid, achv, functionalArea, member) => {
     // Skills Evaluator: Member holds qual for 1+ year AND has active SET achievement
@@ -55,18 +68,13 @@ function createESDataService(rawConfig, rawData) {
     // SET is AchvID 124 in the ES system
     const SET_ACHV_ID = '124';
 
-    const hasActiveSET = (_rawData.esMbrAchievements || []).some(a =>
-      a.CAPID === capid &&
-      a.AchvID === SET_ACHV_ID &&
-      String(a.Status || '').toUpperCase() === 'ACTIVE'
-    );
+    const hasActiveSET = hasActiveAchievement(capid, SET_ACHV_ID);
 
     if (!hasActiveSET) return false;
 
     // Special requirement for ICUT: Must also be in a communications duty position
     if (achv.AchvID === '217') { // ICUT
-      const memberDuties = (_rawData.duty || [])
-        .filter(d => d.CAPID === capid)
+      const memberDuties = lookupRows(dataIdx().dutyByCapid, capid)
         .map(d => String(d.Duty || '').toUpperCase().trim());
 
       const hasCommDuty = memberDuties.some(duty =>
@@ -91,13 +99,11 @@ function createESDataService(rawConfig, rawData) {
     const today = new Date();
 
     // Get member's ES achievements (all statuses)
-    const memberAchievements = (_rawData.esMbrAchievements || [])
-      .filter(a => a.CAPID === capid);
+    const memberAchievements = achievementsFor(capid);
 
     // Build qualification objects with full details
     const qualifications = memberAchievements.map(achv => {
-      const achvDef = (_rawConfig.esAchievements || [])
-        .find(def => def.AchvID === achv.AchvID);
+      const achvDef = achievementDef(achv.AchvID);
 
       if (!achvDef) return null;
 
@@ -246,7 +252,7 @@ function createESDataService(rawConfig, rawData) {
 
       // Add GES if missing
       if (!hasGES) {
-        const gesDef = (_rawConfig.esAchievements || []).find(a => a.AchvID === ES_DASHBOARD_SPECIAL.GES);
+        const gesDef = achievementDef(ES_DASHBOARD_SPECIAL.GES);
         if (gesDef) {
           uniqueQualifications.push({
             achvID: ES_DASHBOARD_SPECIAL.GES,
@@ -271,7 +277,7 @@ function createESDataService(rawConfig, rawData) {
 
       // Add OPSEC if missing
       if (!hasOPSEC) {
-        const opsecDef = (_rawConfig.esAchievements || []).find(a => a.AchvID === ES_DASHBOARD_SPECIAL.OPSEC);
+        const opsecDef = achievementDef(ES_DASHBOARD_SPECIAL.OPSEC);
         if (opsecDef) {
           uniqueQualifications.push({
             achvID: ES_DASHBOARD_SPECIAL.OPSEC,
@@ -311,8 +317,7 @@ function createESDataService(rawConfig, rawData) {
   const buildESPrerequisiteTree = (achvID, ancestry = []) => {
     const buildNode = (currentAchvID, currentAncestry = []) => {
       // Get achievement definition
-      const achvDef = (_rawConfig.esAchievements || [])
-        .find(a => a.AchvID === currentAchvID);
+      const achvDef = achievementDef(currentAchvID);
 
       if (!achvDef) return null;
 
@@ -437,12 +442,10 @@ function createESDataService(rawConfig, rawData) {
     const targetCAPID = String(capid || '').trim();
 
     // Get all task links for this achievement
-    const taskLinks = (_rawConfig.esAchvStepTasks || [])
-      .filter(link => String(link.AchvID || '').trim() === targetAchvID);
+    const taskLinks = lookupRows(configIdx().esAchvStepTasksByAchvId, targetAchvID);
 
     // Get member's completed tasks
-    const memberTasks = (_rawData.esMbrTasks || [])
-      .filter(t => String(t.CAPID || '').trim() === targetCAPID);
+    const memberTasks = esTasksFor(targetCAPID);
 
     // Group by StepID
     const stepMap = {};
@@ -531,17 +534,11 @@ function createESDataService(rawConfig, rawData) {
     specialCase.specialPrereqs.forEach(prereq => {
       if (prereq.type === 'OR') {
         // OR logic: Member needs at least ONE of the options
-        const hasAny = prereq.options.some(optionID =>
-          (_rawData.esMbrAchievements || []).some(a =>
-            a.CAPID === capid &&
-            a.AchvID === optionID &&
-            String(a.Status || '').toUpperCase() === 'ACTIVE'
-          )
-        );
+        const hasAny = prereq.options.some(optionID => hasActiveAchievement(capid, optionID));
         if (!hasAny) {
           // Get names of the options for display
           const optionNames = prereq.options.map(optID => {
-            const achvDef = (_rawConfig.esAchievements || []).find(a => a.AchvID === optID);
+            const achvDef = achievementDef(optID);
             return achvDef ? achvDef.Achv : optID;
           });
           missing.push(`One of: ${optionNames.join(' OR ')}`);
@@ -583,11 +580,7 @@ function createESDataService(rawConfig, rawData) {
           }
         } else {
           // For cadets, check Achievement 1 (Curry) in esMbrAchievements
-          hasRequired = (_rawData.esMbrAchievements || []).some(a =>
-            a.CAPID === capid &&
-            a.AchvID === requiredAchvID &&
-            String(a.Status || '').toUpperCase() === 'ACTIVE'
-          );
+          hasRequired = hasActiveAchievement(capid, requiredAchvID);
         }
 
         if (!hasRequired) {
@@ -600,16 +593,14 @@ function createESDataService(rawConfig, rawData) {
       } else if (prereq.type === 'TASK') {
         // Task requirement: Member must have completed a specific task
         // Check both general member tasks (PL_MemberTaskCredit) and ES member tasks (MbrTasks)
-        let hasTask = (_rawData.memberTasks || []).some(mt =>
-          mt.CAPID === capid &&
+        let hasTask = lookupRows(dataIdx().memberTasksByCapid, capid).some(mt =>
           mt.TaskID === prereq.taskID &&
           mt.StatusID === '8' // Completed/Active
         );
 
         // Also check ES member tasks (esMbrTasks) for ES-specific tasks
         if (!hasTask) {
-          hasTask = (_rawData.esMbrTasks || []).some(mt =>
-            String(mt.CAPID || '').trim() === String(capid || '').trim() &&
+          hasTask = esTasksFor(capid).some(mt =>
             String(mt.TaskID || '').trim() === String(prereq.taskID || '').trim() &&
             String(mt.Status || '').toUpperCase() === 'ACTIVE'
           );
@@ -617,11 +608,7 @@ function createESDataService(rawConfig, rawData) {
 
         // Special case: ICS 100 requirement (TaskID 131) can also be satisfied by IS-100 course (AchvID 176)
         if (!hasTask && prereq.taskID === '131') {
-          const hasIS100 = (_rawData.esMbrAchievements || []).some(a =>
-            a.CAPID === capid &&
-            a.AchvID === '176' && // IS-100 achievement ID
-            String(a.Status || '').toUpperCase() === 'ACTIVE'
-          );
+          const hasIS100 = hasActiveAchievement(capid, '176'); // IS-100 achievement
           hasTask = hasIS100;
         }
 
@@ -639,21 +626,11 @@ function createESDataService(rawConfig, rawData) {
       } else if (prereq.type === 'OR_WITH_CROSS_TRAINING') {
         // Complex OR: One of the options plus cross-training requirements
         const hasAny = prereq.options.some(option => {
-          const hasMain = (_rawData.esMbrAchievements || []).some(a =>
-            a.CAPID === capid &&
-            a.AchvID === option.achvID &&
-            String(a.Status || '').toUpperCase() === 'ACTIVE'
-          );
+          const hasMain = hasActiveAchievement(capid, option.achvID);
           if (!hasMain) return false;
 
           // Check cross-training requirements
-          const hasCrossTraining = option.crossTraining.some(ctID =>
-            (_rawData.esMbrAchievements || []).some(a =>
-              a.CAPID === capid &&
-              a.AchvID === ctID &&
-              String(a.Status || '').toUpperCase() === 'ACTIVE'
-            )
-          );
+          const hasCrossTraining = option.crossTraining.some(ctID => hasActiveAchievement(capid, ctID));
           return hasCrossTraining;
         });
         if (!hasAny) {
@@ -755,11 +732,7 @@ function createESDataService(rawConfig, rawData) {
           }
         } else {
           // For cadets, check Achievement 1 in esMbrAchievements
-          const hasAchv1 = (_rawData.esMbrAchievements || []).some(a =>
-            a.CAPID === capid &&
-            a.AchvID === '95' &&
-            String(a.Status || '').toUpperCase() === 'ACTIVE'
-          );
+          const hasAchv1 = hasActiveAchievement(capid, '95');
 
           if (!hasAchv1 && node.achvID !== achvID) {
             return { eligible: false, missing: ['Achievement 1 (Curry)'] };
@@ -767,11 +740,7 @@ function createESDataService(rawConfig, rawData) {
         }
       } else {
         // Regular achievement checking
-        const hasQual = (_rawData.esMbrAchievements || []).some(a =>
-          a.CAPID === capid &&
-          a.AchvID === node.achvID &&
-          String(a.Status || '').toUpperCase() === 'ACTIVE'
-        );
+        const hasQual = hasActiveAchievement(capid, node.achvID);
 
         if (!hasQual && node.achvID !== achvID) {
           return { eligible: false, missing: [node.name] };

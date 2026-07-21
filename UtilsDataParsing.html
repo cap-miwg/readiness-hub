@@ -23,6 +23,107 @@ const parseCSV = (text) => {
   });
 };
 
+/**
+ * ROW INDEXES
+ *
+ * The per-member builders used to re-scan an entire table for every member
+ * (`tasks.filter(t => t.CAPID === member.CAPID)`), so widening the scope from
+ * one squadron to a wing plus subunits multiplied the work by the member count
+ * rather than adding to it. These helpers group each table once so the same
+ * lookups become O(1).
+ *
+ * parseCSV already trims every value, so normalizing keys here matches both
+ * the strict (`a.CAPID === capid`) and defensive
+ * (`String(a.CAPID || '').trim() === ...`) comparisons being replaced.
+ *
+ * Returned arrays are the index's own buckets - read them, don't mutate them.
+ */
+const indexKey = (val) => String(val === undefined || val === null ? '' : val).trim();
+
+const groupRowsBy = (rows, field) => {
+  const map = new Map();
+  (rows || []).forEach(row => {
+    const key = indexKey(row[field]);
+    const bucket = map.get(key);
+    if (bucket) bucket.push(row);
+    else map.set(key, [row]);
+  });
+  return map;
+};
+
+// First row wins, matching the Array.prototype.find calls this replaces.
+const indexRowsBy = (rows, field) => {
+  const map = new Map();
+  (rows || []).forEach(row => {
+    const key = indexKey(row[field]);
+    if (!map.has(key)) map.set(key, row);
+  });
+  return map;
+};
+
+const EMPTY_ROWS = Object.freeze([]);
+const lookupRows = (map, key) => (map && map.get(indexKey(key))) || EMPTY_ROWS;
+const lookupRow = (map, key) => (map && map.get(indexKey(key))) || null;
+
+/**
+ * Indexes are cached against the identity of the raw data object, which is
+ * replaced wholesale on each parsePayload, so a new payload builds fresh
+ * indexes and the old ones become collectable.
+ */
+const _dataIndexCache = new WeakMap();
+const _configIndexCache = new WeakMap();
+
+const getDataIndexes = (dataFiles) => {
+  if (!dataFiles) return {};
+  const cached = _dataIndexCache.get(dataFiles);
+  if (cached) return cached;
+
+  const idx = {
+    dutyByCapid: groupRowsBy(dataFiles.duty, 'CAPID'),
+    tracksByCapid: groupRowsBy(dataFiles.tracks, 'CAPID'),
+    seniorAwardsByCapid: groupRowsBy(dataFiles.seniorAwards, 'CAPID'),
+    memberTasksByCapid: groupRowsBy(dataFiles.memberTasks, 'CAPID'),
+    memberPathsByCapid: groupRowsBy(dataFiles.memberPaths, 'CAPID'),
+    seniorLevelsByCapid: groupRowsBy(dataFiles.seniorLevels, 'CAPID'),
+    esMbrAchievementsByCapid: groupRowsBy(dataFiles.esMbrAchievements, 'CAPID'),
+    esMbrTasksByCapid: groupRowsBy(dataFiles.esMbrTasks, 'CAPID'),
+    orgByOrgId: indexRowsBy(dataFiles.organization, 'ORGID'),
+    // Cadet tables
+    cadetRankByCapid: groupRowsBy(dataFiles.cadetRank, 'CAPID'),
+    cadetAchvByCapid: groupRowsBy(dataFiles.cadetAchv, 'CAPID'),
+    cadetAchvAprsByCapid: groupRowsBy(dataFiles.cadetAchvAprs, 'CAPID'),
+    cadetActivitiesByCapid: groupRowsBy(dataFiles.cadetActivities, 'CAPID'),
+    cadetAwardsByCapid: groupRowsBy(dataFiles.cadetAwards, 'CAPID'),
+    cadetDutyByCapid: groupRowsBy(dataFiles.cadetDuty, 'CAPID')
+  };
+
+  _dataIndexCache.set(dataFiles, idx);
+  return idx;
+};
+
+const getConfigIndexes = (configFiles) => {
+  if (!configFiles) return {};
+  const cached = _configIndexCache.get(configFiles);
+  if (cached) return cached;
+
+  const assignmentsByGroupId = groupRowsBy(configFiles.assignments, 'GroupID');
+  const taskIdsByGroupId = new Map();
+  assignmentsByGroupId.forEach((rows, groupId) => {
+    taskIdsByGroupId.set(groupId, new Set(rows.map(a => a.TaskID)));
+  });
+
+  const idx = {
+    groupsByPathId: groupRowsBy(configFiles.groups, 'PathID'),
+    assignmentsByGroupId,
+    taskIdsByGroupId,
+    esAchievementsByAchvId: indexRowsBy(configFiles.esAchievements, 'AchvID'),
+    esAchvStepTasksByAchvId: groupRowsBy(configFiles.esAchvStepTasks, 'AchvID')
+  };
+
+  _configIndexCache.set(configFiles, idx);
+  return idx;
+};
+
 // Parse the AdditionalOptions column from PL_MemberTaskCredit (lightweight, resilient parser)
 const parseAdditionalOptions = (optionsString) => {
   if (!optionsString || typeof optionsString !== 'string') return {};

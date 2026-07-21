@@ -15,6 +15,10 @@ function createESUnitAnalysisService(rawConfig, rawData, esDataService) {
   const _rawData = rawData;
   const _esDataService = esDataService;
 
+  // Per-member lookups against tables indexed once (see UtilsDataParsing)
+  const dataIdx = () => getDataIndexes(_rawData);
+  const configIdx = () => getConfigIndexes(_rawConfig);
+
   // Helper: Get active members for an org (or multiple orgs)
   // Includes seniors and cadets with ES qualifications, excludes Patrons and Cadet Sponsors
   const getMembersForOrg = (orgId, options = {}) => {
@@ -43,12 +47,11 @@ function createESUnitAnalysisService(rawConfig, rawData, esDataService) {
 
   // Helper: Get all ES qualifications for a member (active only)
   const getMemberActiveQuals = (capid) => {
-    return (_rawData.esMbrAchievements || []).filter(a =>
-      a.CAPID === capid &&
+    return lookupRows(dataIdx().esMbrAchievementsByCapid, capid).filter(a =>
       String(a.Status || '').toUpperCase() === 'ACTIVE' &&
       !ES_EXCLUDED_ACHIEVEMENT_IDS.has(a.AchvID) &&
       !ES_EXCLUDED_FUNCTIONAL_AREAS.has(
-        (_rawConfig.esAchievements || []).find(def => def.AchvID === a.AchvID)?.FunctionalArea
+        lookupRow(configIdx().esAchievementsByAchvId, a.AchvID)?.FunctionalArea
       )
     );
   };
@@ -56,11 +59,10 @@ function createESUnitAnalysisService(rawConfig, rawData, esDataService) {
   // Helper: Get all ES qualifications for a member (any status)
   // Deduplicates so each AchvID appears only once with the most relevant status
   const getMemberAllQuals = (capid) => {
-    const rawQuals = (_rawData.esMbrAchievements || []).filter(a =>
-      a.CAPID === capid &&
+    const rawQuals = lookupRows(dataIdx().esMbrAchievementsByCapid, capid).filter(a =>
       !ES_EXCLUDED_ACHIEVEMENT_IDS.has(a.AchvID) &&
       !ES_EXCLUDED_FUNCTIONAL_AREAS.has(
-        (_rawConfig.esAchievements || []).find(def => def.AchvID === a.AchvID)?.FunctionalArea
+        lookupRow(configIdx().esAchievementsByAchvId, a.AchvID)?.FunctionalArea
       )
     );
 
