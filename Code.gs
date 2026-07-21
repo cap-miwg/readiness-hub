@@ -284,7 +284,7 @@ function syncDriveToSheet() {
     // Clear cache at the start to ensure fresh data is available after sync
     Logger.log("Clearing cache...");
     const cache = CacheService.getScriptCache();
-    cache.remove("app-data-payload-v6");
+    clearCachedPayload_(cache);
     Logger.log("Cache cleared successfully");
   } catch (e) {
     Logger.log("WARNING: Failed to clear cache: " + e.toString());
@@ -490,6 +490,130 @@ function syncDriveToSheet() {
 }
 
 /**
+ * CHUNKED SCRIPT CACHE
+ *
+ * CacheService caps a single value at 100KB, so the multi-megabyte app payload
+ * can never be stored under one key - every put silently failed and every load
+ * paid the full sheet read. These helpers split the payload across numbered
+ * keys and record the count in a manifest key.
+ *
+ * substring() counts UTF-16 code units but the 100KB cap is UTF-8 bytes. A
+ * single code unit can encode to 3 bytes, so CHUNK_SIZE is set so that even
+ * an all-3-byte chunk (30000 * 3 = 90KB) stays under the cap. Accented
+ * characters in member names are enough to hit this - it is not theoretical.
+ */
+const CACHE_BASE_KEY = "app-data-payload-v6";
+const CACHE_CHUNK_SIZE = 30000;
+const CACHE_MAX_CHUNKS = 400;
+const CACHE_BATCH_SIZE = 100; // putAll/getAll are limited per call
+
+function cacheManifestKey_() {
+  return CACHE_BASE_KEY + '.meta';
+}
+
+function cacheChunkKeys_(count) {
+  const keys = [];
+  for (let i = 0; i < count; i++) keys.push(CACHE_BASE_KEY + '.' + i);
+  return keys;
+}
+
+/**
+ * Read the payload back out of the chunked cache.
+ * Chunks expire independently, so a partial set is treated as a miss.
+ * @returns {string|null} The cached payload, or null if absent/incomplete.
+ */
+function readCachedPayload_(cache) {
+  const manifestRaw = cache.get(cacheManifestKey_());
+  if (!manifestRaw) return null;
+
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestRaw);
+  } catch (e) {
+    Logger.log("Cache manifest is corrupt, treating as miss: " + e.toString());
+    return null;
+  }
+
+  const count = manifest && manifest.chunks;
+  if (!count || count < 1) return null;
+
+  const keys = cacheChunkKeys_(count);
+  const found = {};
+  for (let i = 0; i < keys.length; i += CACHE_BATCH_SIZE) {
+    const batch = keys.slice(i, i + CACHE_BATCH_SIZE);
+    const values = cache.getAll(batch);
+    Object.keys(values).forEach(k => { found[k] = values[k]; });
+  }
+
+  const parts = [];
+  for (let i = 0; i < count; i++) {
+    const chunk = found[keys[i]];
+    if (chunk === undefined || chunk === null) {
+      Logger.log("Cache incomplete: chunk " + i + " of " + count + " missing, treating as miss");
+      return null;
+    }
+    parts.push(chunk);
+  }
+
+  return parts.join('');
+}
+
+/**
+ * Split the payload across cache keys. The manifest is written last so a
+ * partially-written set is never advertised to readers.
+ * @returns {boolean} True if the payload was cached.
+ */
+function writeCachedPayload_(cache, jsonString, ttlSeconds) {
+  const count = Math.ceil(jsonString.length / CACHE_CHUNK_SIZE);
+
+  if (count > CACHE_MAX_CHUNKS) {
+    Logger.log("Payload too large to cache: " + count + " chunks exceeds limit of " + CACHE_MAX_CHUNKS);
+    return false;
+  }
+
+  const entries = {};
+  for (let i = 0; i < count; i++) {
+    entries[CACHE_BASE_KEY + '.' + i] = jsonString.substring(i * CACHE_CHUNK_SIZE, (i + 1) * CACHE_CHUNK_SIZE);
+  }
+
+  const keys = Object.keys(entries);
+  for (let i = 0; i < keys.length; i += CACHE_BATCH_SIZE) {
+    const batch = {};
+    keys.slice(i, i + CACHE_BATCH_SIZE).forEach(k => { batch[k] = entries[k]; });
+    cache.putAll(batch, ttlSeconds);
+  }
+
+  cache.put(cacheManifestKey_(), JSON.stringify({ chunks: count, savedAt: new Date().toISOString() }), ttlSeconds);
+  Logger.log("Cached payload as " + count + " chunks");
+  return true;
+}
+
+/**
+ * Drop the manifest first so readers miss immediately rather than racing a
+ * partial delete, then clear the chunks.
+ */
+function clearCachedPayload_(cache) {
+  const manifestRaw = cache.get(cacheManifestKey_());
+  cache.remove(cacheManifestKey_());
+  cache.remove(CACHE_BASE_KEY); // legacy single-key format
+
+  let count = CACHE_MAX_CHUNKS;
+  if (manifestRaw) {
+    try {
+      const parsed = JSON.parse(manifestRaw);
+      if (parsed && parsed.chunks) count = parsed.chunks;
+    } catch (e) {
+      // Fall back to clearing the full possible range
+    }
+  }
+
+  const keys = cacheChunkKeys_(count);
+  for (let i = 0; i < keys.length; i += CACHE_BATCH_SIZE) {
+    cache.removeAll(keys.slice(i, i + CACHE_BATCH_SIZE));
+  }
+}
+
+/**
  * API: Read from Sheet -> Reassemble -> Send
  */
 function getAppData() {
@@ -502,8 +626,8 @@ function getAppData() {
   Logger.log("User: " + userName + " (" + userEmail + ")");
 
   const cache = CacheService.getScriptCache();
-  // Bump version to force refresh if schema changes
-  const cachedData = cache.get("app-data-payload-v6");
+  // Bump CACHE_BASE_KEY to force refresh if schema changes
+  const cachedData = readCachedPayload_(cache);
 
   if (cachedData) {
     const endTime = new Date();
@@ -643,10 +767,13 @@ function getAppData() {
 
     Logger.log("Storing in cache (TTL: 21600 seconds / 6 hours)...");
     try {
-      cache.put("app-data-payload-v6", jsonString, 21600);
-      Logger.log("Successfully cached payload");
+      if (writeCachedPayload_(cache, jsonString, 21600)) {
+        Logger.log("Successfully cached payload");
+      }
     } catch(e) {
-      Logger.log("Cache storage failed (payload may be too large): " + e.toString());
+      Logger.log("Cache storage failed: " + e.toString());
+      // Leave no half-written set behind for the next reader
+      try { clearCachedPayload_(cache); } catch (e2) { /* best effort */ }
     }
 
     const endTime = new Date();
