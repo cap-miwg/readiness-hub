@@ -1183,7 +1183,12 @@ const PROMOTION_RULES = {
   "1ST LT": { next: "Capt", tigMonths: 30, level: 3 },
   "CAPT": { next: "Maj", tigMonths: 48, level: 4 },
   "MAJ": { next: "Lt Col", tigMonths: 60, level: 5 },
-  "LT COL": { next: "Col", tigMonths: 60, level: 5 },
+  // No "LT COL" entry: colonel is not a time-in-grade promotion. Per CAPR 35-5
+  // para 1.5.3 the grade is tied to specific positions (CAP Command Council,
+  // region deputy commanders, Chief of the Chaplain Corps, Chief of the Legal
+  // Officer Corps, CAP Inspector General, CAP Liaison to the Pentagon), and
+  // only the CSAG may otherwise promote to colonel. Lt Cols therefore have no
+  // promotion pathway to track, same as Col.
   "FO": { next: "TFO", tigMonths: 18, level: 2 },
   "TFO": { next: "SFO", tigMonths: 30, level: 3 },
   "SFO": { next: "Capt", tigMonths: 0, level: 3 },
