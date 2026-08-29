@@ -1,11 +1,23 @@
-import type { FastifyInstance } from 'fastify'
-
 /**
- * REST API under /api. Placeholder registration; the API module
- * implementation replaces this.
+ * REST API registration point (index.ts calls registerApi once). Every /api
+ * route runs behind requireAuth; admin routes add requireAdmin after it. The
+ * global CSRF and access-log hooks are installed by the auth module.
  */
+
+import type { FastifyInstance } from 'fastify'
+import { registerHomeOrgidHook, registerMetaRoutes } from './meta.js'
+import { registerOrgRoutes } from './orgs.js'
+import { registerMemberRoutes } from './members.js'
+import { registerFeedbackRoutes } from './feedback.js'
+import { registerAdminRoutes } from './admin.js'
+import { registerReportRoutes } from './reports.js'
+
 export async function registerApi(app: FastifyInstance): Promise<void> {
-  app.get('/api/meta', async (_req, reply) => {
-    reply.code(501).send({ error: 'api not implemented yet' })
-  })
+  registerHomeOrgidHook(app)
+  registerMetaRoutes(app)
+  registerOrgRoutes(app)
+  registerMemberRoutes(app)
+  registerFeedbackRoutes(app)
+  registerAdminRoutes(app)
+  await registerReportRoutes(app)
 }

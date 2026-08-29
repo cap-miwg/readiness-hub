@@ -10,6 +10,7 @@ import { migrate } from './db/migrate.js'
 import { pool } from './db/pool.js'
 import { fetchCapwatchZip } from './ingest/fetcher.js'
 import { ingestZip, type IngestLog, type IngestResult } from './ingest/run.js'
+import { seedDemo } from './seed/seedDemo.js'
 
 const log: IngestLog = {
   info: m => console.log(m),
@@ -82,7 +83,8 @@ async function main() {
       return
     }
     case 'seed-demo':
-      throw new Error('seed-demo: not implemented yet (the synthetic demo fixture ships in a later wave)')
+      report(await seedDemo(log, { force }))
+      return
     default:
       console.error('usage: cli.js <ingest <zip> [--force] [--dry-run] | fetch [--force] | seed-demo>')
       process.exitCode = 2

@@ -1,12 +1,43 @@
 import { Link } from 'react-router-dom'
-import { Building2, Clock, Github, Users } from 'lucide-react'
-import { APP_NAME_FALLBACK, useMeta } from '../api/client'
+import { Github } from 'lucide-react'
+import { ApiError, APP_NAME_FALLBACK, useMeta } from '../api/client'
 import { BUILD_VERSION } from '../components/Layout'
-import { Banner, Card, Spinner, StatTile } from '../components/ui'
+import { orgScopeSearch, useOrgScope } from '../lib/urlState'
+import { Banner, Card } from '../components/ui'
+import { useEffectiveScope, useOverview, overviewPath } from '../features/overview/useOverviewData'
+
+function HeroTile({
+  label,
+  value,
+  testid,
+}: {
+  label: string
+  value: string
+  testid: string
+}) {
+  return (
+    <div className="rounded-lg bg-white/10 p-3" data-testid={testid}>
+      <div className="text-xs uppercase opacity-80">{label}</div>
+      <div className="text-xl font-bold">{value}</div>
+    </div>
+  )
+}
 
 export default function Home() {
   const metaQ = useMeta()
+  const { scope } = useOrgScope()
+  const { orgid, descendants, resolving, orgsError } = useEffectiveScope()
+  const overviewQ = useOverview(orgid, descendants)
   const meta = metaQ.data
+  const overview = overviewQ.data
+
+  const scopeSearch = orgScopeSearch(scope)
+  const pending = resolving || (orgid !== null && overviewQ.isPending)
+  const tileValue = (n: number | undefined): string =>
+    pending ? '...' : n !== undefined ? n.toLocaleString() : '--'
+
+  const loadError = orgsError ?? overviewQ.error ?? null
+  const noDataset = loadError instanceof ApiError && loadError.status === 404
 
   return (
     <div className="space-y-6">
@@ -18,21 +49,30 @@ export default function Home() {
             One place for commanders, senior members, and cadets to monitor readiness, training,
             and staffing.
           </p>
+          {overview && (
+            <p className="mt-1 text-xs text-blue-200">
+              {overview.org.name} ({overview.org.unitLabel})
+              {descendants ? ', including sub-units' : ''}
+            </p>
+          )}
           <div className="mt-4 flex flex-wrap gap-3">
             <Link
-              to="/seniors"
+              to={{ pathname: '/seniors', search: scopeSearch }}
+              data-testid="home-hero-seniors"
               className="rounded-lg bg-white px-4 py-2 font-semibold text-blue-700 hover:shadow"
             >
               Senior Dashboard
             </Link>
             <Link
-              to="/cadets"
+              to={{ pathname: '/cadets', search: scopeSearch }}
+              data-testid="home-hero-cadets"
               className="rounded-lg border border-white/30 bg-blue-500 px-4 py-2 font-semibold text-white hover:bg-blue-400"
             >
               Cadet Dashboard
             </Link>
             <Link
-              to="/unit"
+              to={{ pathname: '/unit', search: scopeSearch }}
+              data-testid="home-hero-unit"
               className="rounded-lg border border-white/30 bg-indigo-500 px-4 py-2 font-semibold text-white hover:bg-indigo-400"
             >
               Unit Overview
@@ -40,81 +80,71 @@ export default function Home() {
           </div>
         </div>
         <div className="grid min-w-[240px] grid-cols-2 gap-3">
-          <div className="rounded-lg bg-white/10 p-3">
-            <div className="text-xs uppercase opacity-80">Members</div>
-            <div className="text-xl font-bold">
-              {metaQ.isPending ? '...' : (meta?.memberCount ?? 0).toLocaleString()}
-            </div>
-          </div>
-          <div className="rounded-lg bg-white/10 p-3">
-            <div className="text-xs uppercase opacity-80">Units</div>
-            <div className="text-xl font-bold">
-              {metaQ.isPending ? '...' : (meta?.orgCount ?? 0).toLocaleString()}
-            </div>
-          </div>
+          <HeroTile
+            label="Total Strength"
+            value={tileValue(overview?.totals.members)}
+            testid="home-tile-total-strength"
+          />
+          <HeroTile
+            label="Senior Members"
+            value={tileValue(overview?.totals.seniors)}
+            testid="home-tile-seniors"
+          />
+          <HeroTile
+            label="Cadets"
+            value={tileValue(overview?.totals.cadets)}
+            testid="home-tile-cadets"
+          />
+          <HeroTile
+            label="Units in Scope"
+            value={tileValue(overview?.totals.unitsInScope)}
+            testid="home-tile-units-in-scope"
+          />
         </div>
       </div>
 
-      {metaQ.error && (
-        <Banner kind="error">
-          Could not load dashboard metadata from /api/meta: {metaQ.error.message}
+      {loadError !== null && (
+        <Banner kind={noDataset ? 'warn' : 'error'}>
+          {noDataset
+            ? `No dashboard data yet: ${loadError.message}. An admin can run the first CAPWATCH ingest from the Admin page.`
+            : `Could not load unit stats${orgid !== null ? ` from ${overviewPath(orgid, descendants)}` : ' (unit list unavailable)'}: ${loadError.message}`}
         </Banner>
       )}
 
-      {metaQ.isPending && (
-        <div className="flex justify-center py-4">
-          <Spinner label="Loading metadata..." />
-        </div>
-      )}
-
-      {meta && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatTile label="Total members" value={meta.memberCount.toLocaleString()} icon={Users} accent="blue" />
-          <StatTile
-            label="Units in scope"
-            value={meta.orgCount.toLocaleString()}
-            icon={Building2}
-            accent="indigo"
-          />
-          <StatTile
-            label="Data as of"
-            value={meta.downloadDate ? new Date(meta.downloadDate).toLocaleDateString() : 'No data'}
-            sublabel={
-              meta.lastIngestAt
-                ? `Ingested ${new Date(meta.lastIngestAt).toLocaleString()}`
-                : 'No ingest has completed yet'
-            }
-            icon={Clock}
-            accent={meta.downloadDate ? 'green' : 'amber'}
-          />
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card>
+        <Card data-testid="home-card-commanders">
           <h3 className="font-bold text-slate-900">For Commanders</h3>
           <p className="mt-1 text-sm text-slate-600">
             Snapshot of readiness, staffing, and upcoming expirations.
           </p>
-          <Link to="/unit" className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline">
+          <Link
+            to={{ pathname: '/unit', search: scopeSearch }}
+            className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline"
+          >
             Open Unit Overview
           </Link>
         </Card>
-        <Card>
+        <Card data-testid="home-card-seniors">
           <h3 className="font-bold text-slate-900">Senior Members</h3>
           <p className="mt-1 text-sm text-slate-600">
             Education and training, promotions, duty coverage.
           </p>
-          <Link to="/seniors" className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline">
+          <Link
+            to={{ pathname: '/seniors', search: scopeSearch }}
+            className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline"
+          >
             Go to Senior Dashboard
           </Link>
         </Card>
-        <Card>
+        <Card data-testid="home-card-cadets">
           <h3 className="font-bold text-slate-900">Cadets</h3>
           <p className="mt-1 text-sm text-slate-600">
             Milestones, leadership billets, participation.
           </p>
-          <Link to="/cadets" className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline">
+          <Link
+            to={{ pathname: '/cadets', search: scopeSearch }}
+            className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:underline"
+          >
             Go to Cadet Dashboard
           </Link>
         </Card>
