@@ -6,7 +6,9 @@ ENV VITE_APP_VERSION=$APP_VERSION
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
-COPY server/src/shared /build/server/src/shared
+# The shared contracts type-import from server/src/domain, so the web
+# typecheck needs the full server source tree (types only; nothing is bundled).
+COPY server/src /build/server/src
 COPY web/ ./
 RUN npm run build
 

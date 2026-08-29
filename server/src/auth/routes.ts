@@ -179,6 +179,11 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
       role: session.role,
       authMode: config.AUTH_MODE,
     }
+    // homeOrgid enrichment lives in the api module (computed_member lookup);
+    // dynamic import keeps auth free of a static api dependency.
+    const { resolveHomeOrgid } = await import('../api/meta.js')
+    const homeOrgid = await resolveHomeOrgid(session.email).catch(() => null)
+    if (homeOrgid !== null) me.homeOrgid = homeOrgid
     reply.send(me)
   })
 

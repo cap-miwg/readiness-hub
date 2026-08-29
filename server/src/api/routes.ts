@@ -5,7 +5,7 @@
  */
 
 import type { FastifyInstance } from 'fastify'
-import { registerHomeOrgidHook, registerMetaRoutes } from './meta.js'
+import { registerMetaRoutes } from './meta.js'
 import { registerOrgRoutes } from './orgs.js'
 import { registerMemberRoutes } from './members.js'
 import { registerFeedbackRoutes } from './feedback.js'
@@ -13,7 +13,6 @@ import { registerAdminRoutes } from './admin.js'
 import { registerReportRoutes } from './reports.js'
 
 export async function registerApi(app: FastifyInstance): Promise<void> {
-  registerHomeOrgidHook(app)
   registerMetaRoutes(app)
   registerOrgRoutes(app)
   registerMemberRoutes(app)

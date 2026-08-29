@@ -52,28 +52,6 @@ export async function resolveHomeOrgid(email: string): Promise<number | null> {
   }
 }
 
-/**
- * /api/me itself is registered by the auth module; this hook enriches its
- * payload with homeOrgid (MeResponse.homeOrgid, optional by contract) without
- * touching auth code. Fastify resolves instance hooks at ready time, so a
- * root-scope hook added here applies to the earlier-registered route.
- */
-export function registerHomeOrgidHook(app: FastifyInstance): void {
-  app.addHook('preSerialization', async (req, _reply, payload: unknown) => {
-    if (
-      req.method !== 'GET' ||
-      req.routeOptions.url !== '/api/me' ||
-      req.rhSession === undefined ||
-      payload === null ||
-      typeof payload !== 'object' ||
-      'homeOrgid' in payload
-    ) {
-      return payload
-    }
-    const homeOrgid = await resolveHomeOrgid(req.rhSession.email)
-    return homeOrgid !== null ? { ...payload, homeOrgid } : payload
-  })
-}
 
 interface LastRunRow {
   finished_at: Date

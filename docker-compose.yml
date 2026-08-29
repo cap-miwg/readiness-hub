@@ -37,6 +37,7 @@ services:
       ESERVICES_USERNAME: ${ESERVICES_USERNAME:-}
       ESERVICES_PASSWORD: ${ESERVICES_PASSWORD:-}
       CAPWATCH_FETCH_CRON: ${CAPWATCH_FETCH_CRON:-}
+      DEV_ALLOW_REAL_INGEST: ${DEV_ALLOW_REAL_INGEST:-}
       TZ: ${TZ:-America/New_York}
     ports:
       # Bound to localhost by default. To serve the network, change the bind
