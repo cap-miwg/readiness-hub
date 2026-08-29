@@ -11,7 +11,17 @@ import { migrate } from './db/migrate.js'
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public')
 
 async function main() {
+  if (config.AUTH_MODE === 'dev' && config.GOOGLE_CLIENT_ID) {
+    throw new Error(
+      'AUTH_MODE=dev with GOOGLE_CLIENT_ID set looks like a misconfigured production deployment. Set AUTH_MODE=google or clear the Google credentials.',
+    )
+  }
   const app = Fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 })
+  if (config.AUTH_MODE === 'dev') {
+    app.log.warn(
+      'AUTH_MODE=dev: authentication is a user picker. Keep this deployment bound to localhost. Real-data ingest requires DEV_ALLOW_REAL_INGEST=true.',
+    )
+  }
 
   await app.register(fastifyCookie, { secret: config.SESSION_SECRET })
   await app.register(fastifyMultipart, {

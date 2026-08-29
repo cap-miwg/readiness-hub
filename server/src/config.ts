@@ -15,6 +15,13 @@ const schema = z.object({
   ESERVICES_USERNAME: z.string().default(''),
   ESERVICES_PASSWORD: z.string().default(''),
   CAPWATCH_FETCH_CRON: z.string().default(''),
+  /** Override the derived org-tree anchor (defaults to the LCA of member home orgs). */
+  ANCHOR_ORGID: z.coerce.number().optional(),
+  /** dev auth mode refuses non-demo ingest unless this is set explicitly. */
+  DEV_ALLOW_REAL_INGEST: z
+    .string()
+    .default('')
+    .transform(v => v === 'true' || v === '1'),
   TZ: z.string().default('America/New_York'),
 })
 

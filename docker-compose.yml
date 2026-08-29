@@ -38,7 +38,9 @@ services:
       CAPWATCH_FETCH_CRON: ${CAPWATCH_FETCH_CRON:-}
       TZ: ${TZ:-America/New_York}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      # Bound to localhost by default. To serve the network, change the bind
+      # address AND switch to AUTH_MODE=google behind TLS (see DEPLOYMENT.md).
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
