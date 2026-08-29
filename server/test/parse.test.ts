@@ -87,6 +87,21 @@ describe('parseCsvTable', () => {
     expect(out.rows).toEqual([[5, 'E', null, null]])
     expect(out.dropped.rejects).toBe(0)
   })
+
+  it('applies the MbrContact rowFilter: only email contact types are ever stored', () => {
+    const contactSpec = TABLES_BY_FILE.get('MbrContact.txt') as TableSpec
+    const csv =
+      'CAPID,Type,Priority,Contact,DoNotContact\r\n' +
+      '1,EMAIL,PRIMARY,a@example.org,False\r\n' +
+      '2," cadet parent email ",PRIMARY,p@example.org,False\r\n' +
+      '3,HOME PHONE,PRIMARY,555-0100,False\r\n' +
+      '4,CELL PHONE,SECONDARY,555-0101,False\r\n'
+    const out = parseCsvTable(contactSpec, buf(csv))
+    expect(out.rows.map(r => r[0])).toEqual([1, 2])
+    expect(out.droppedRows).toBe(2)
+    // Filtered rows are minimization, not parse failures.
+    expect(out.dropped.rejects).toBe(0)
+  })
 })
 
 describe('convertCell', () => {

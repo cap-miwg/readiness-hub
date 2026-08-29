@@ -333,6 +333,31 @@ describe('assembleMemberRow: cadet and deriveCadetState', () => {
   })
 })
 
+describe('buildOrgComputeContext anchor derivation', () => {
+  it('anchors on the unfiltered home orgids: include list narrowed to CADET, anchor unchanged', () => {
+    const input = emptyInput()
+    input.organizations = [
+      org(1000, '001', { type: 'WING', name: 'Michigan Wing', scope: 'WING' }),
+      org(2001, '205', { nextLevel: 1000 }),
+      org(2002, '206', { nextLevel: 1000 }),
+    ]
+    // Post-filter dataset: with org.member_types narrowed to ['CADET'], only
+    // the cadet in 2001 survives; the senior's home org 2002 remains in the
+    // raw member rows that ingest/run.ts deriveOrgTree anchors on.
+    input.members = [member(100001, 2001)]
+    const dataset = buildDataset(input)
+    const allMemberHomeOrgids = [2001, 2002]
+
+    const ctx = buildOrgComputeContext(dataset, undefined, allMemberHomeOrgids)
+    expect(ctx.anchorOrgid).toBe(1000)
+    expect(ctx.subtreeOrgids.has(2002)).toBe(true)
+
+    // Without the unfiltered orgids the LCA collapses to the cadet's squadron;
+    // that is the run.ts divergence the third parameter exists to prevent.
+    expect(buildOrgComputeContext(dataset).anchorOrgid).toBe(2001)
+  })
+})
+
 describe('assembleOrgRows', () => {
   const asOf = d('2026-03-31')
 
@@ -409,6 +434,46 @@ describe('assembleOrgRows', () => {
 
     // A staff node with nobody beneath it is present but flagged vacant.
     expect(byId.get('ig')?.vacant).toBe(true)
+
+    // Every duty-holder matched a node, so no Other Staff safety net appears.
+    expect(byId.has('other_staff')).toBe(false)
+  })
+
+  it('attaches duty-holders matched by no node under Other Staff instead of dropping them', () => {
+    const input = emptyInput()
+    input.organizations = [org(2001, '205')]
+    input.members = [
+      member(600001, 2001, { type: 'SENIOR', rank: 'Capt', nameLast: 'Senior' }),
+      member(600002, 2001, { type: 'SENIOR', rank: 'Maj', nameLast: 'Historian' }),
+    ]
+    // HISTORIAN and TESTING OFFICER match no rendered node in the traditional
+    // structure (v1 modeled them only in the wing Chief-of-Staff layout).
+    input.dutyPositions.push(
+      duty(600001, 2001, 'COMMANDER'),
+      duty(600002, 2001, 'HISTORIAN'),
+      duty(600002, 2001, 'TESTING OFFICER', { asst: true }),
+    )
+    const dataset = buildDataset(input)
+    const squadron = dataset.orgByOrgid.get(2001) as OrganizationRow
+    const chart = buildOrgChart(
+      dataset,
+      squadron,
+      new Set([2001]),
+      dataset.membersByOrgid.get(2001) ?? [],
+    )
+
+    const byId = new Map(chart.children.map(c => [c.id, c] as const))
+    const other = byId.get('other_staff')
+    expect(other).toBeDefined()
+    expect(other?.vacant).toBe(false)
+    expect(other?.members).toHaveLength(1)
+    expect(other?.members[0]?.capid).toBe(600002)
+    // One entry per person, duty titles shown.
+    expect(other?.members[0]?.display).toBe(
+      'Maj Historian, M600002 (HISTORIAN, TESTING OFFICER (A))',
+    )
+    // Duty-holders never land in Additional Members (duty-less only).
+    expect(byId.has('additional_members')).toBe(false)
   })
 })
 

@@ -2,10 +2,10 @@
  * Scheduled CAPWATCH fetch. Skipped entirely when CAPWATCH_FETCH_CRON or the
  * eServices credentials are unset. An 'auth' failure persists a marker in
  * app_settings and is never retried until the credentials fingerprint changes
- * (eServices returns 403 for bad credentials, lapsed attestation, and a
- * charter number in the ORGID slot alike, so retrying is pure noise).
- * Transient failures retry up to 2 times, 15 minutes apart, deferred past the
- * NHQ download blackout.
+ * or a fetch succeeds elsewhere (admin endpoint, CLI); eServices returns 403
+ * for bad credentials, lapsed attestation, and a charter number in the ORGID
+ * slot alike, so retrying is pure noise. Transient failures retry up to
+ * 2 times, 15 minutes apart, deferred past the NHQ download blackout.
  */
 import { createHash } from 'node:crypto'
 import cron from 'node-cron'
@@ -13,7 +13,7 @@ import type { FastifyBaseLogger } from 'fastify'
 import { config } from '../config.js'
 import { pool } from '../db/pool.js'
 import { fetchCapwatchZip } from './fetcher.js'
-import { ingestZip, type IngestLog } from './run.js'
+import { INGEST_LOCK_KEY, ingestZip, type IngestLog } from './run.js'
 
 export const AUTH_FAILURE_KEY = 'ingest.auth_failure'
 export const MAX_TRANSIENT_RETRIES = 2
@@ -77,7 +77,11 @@ async function setAuthFailureMarker(message: string): Promise<void> {
   )
 }
 
-async function clearAuthFailureMarker(): Promise<void> {
+/**
+ * Any successful fetch proves the credentials work, so every fetch path (the
+ * scheduler here, the admin fetch endpoint, the CLI) clears the marker.
+ */
+export async function clearAuthFailureMarker(): Promise<void> {
   await pool.query('DELETE FROM app_settings WHERE key = $1', [AUTH_FAILURE_KEY])
 }
 
@@ -92,7 +96,9 @@ function asIngestLog(log: FastifyBaseLogger): IngestLog {
 async function runScheduledFetch(log: FastifyBaseLogger, attempt: number): Promise<void> {
   const marker = await getAuthFailureMarker()
   if (marker && marker.fingerprint === credentialsFingerprint()) {
-    log.warn('scheduler: skipping fetch, a persisted auth failure is unresolved (fix credentials and restart)')
+    log.warn(
+      'scheduler: skipping fetch, a persisted auth failure is unresolved (fix the credential or ORGID configuration, or clear the marker via a successful fetch; restarting does not help)',
+    )
     return
   }
 
@@ -128,22 +134,70 @@ async function runScheduledFetch(log: FastifyBaseLogger, attempt: number): Promi
   }
 }
 
-/** Mark runs left in 'running' by a crash or restart as failed. */
+/**
+ * Mark runs left in 'running' by a crash or restart as failed. Guarded by
+ * pg_try_advisory_lock on the ingest lock: when another process (a second
+ * replica, the CLI) is mid-ingest, its run row legitimately says 'running'
+ * and must not be clobbered, so recovery is skipped for this boot.
+ */
 async function bootRecovery(log: FastifyBaseLogger): Promise<void> {
-  const res = await pool.query(
-    `UPDATE ingest_runs SET status = 'failed', finished_at = now(),
-       error = 'marked failed at boot: run was left in running state'
-     WHERE status = 'running'`,
-  )
-  if ((res.rowCount ?? 0) > 0) {
-    log.warn(`scheduler: boot recovery marked ${res.rowCount} stuck ingest run(s) failed`)
+  const client = await pool.connect()
+  try {
+    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS locked', [INGEST_LOCK_KEY])
+    if (!lock.rows[0]?.locked) {
+      log.warn('scheduler: boot recovery skipped, a live ingest holds the lock elsewhere')
+      return
+    }
+    try {
+      const res = await client.query(
+        `UPDATE ingest_runs SET status = 'failed', finished_at = now(),
+           error = 'marked failed at boot: run was left in running state'
+         WHERE status = 'running'`,
+      )
+      if ((res.rowCount ?? 0) > 0) {
+        log.warn(`scheduler: boot recovery marked ${res.rowCount} stuck ingest run(s) failed`)
+      }
+    } finally {
+      await client.query('SELECT pg_advisory_unlock($1)', [INGEST_LOCK_KEY]).catch(() => {})
+    }
+  } finally {
+    client.release()
   }
+}
+
+/**
+ * Daily access_log sweep: rows older than the 90-day retention window are
+ * deleted. audit_log (admin mutations) is intentionally never pruned.
+ */
+const ACCESS_LOG_RETENTION_CRON = '30 4 * * *'
+export const ACCESS_LOG_RETENTION_DAYS = 90
+
+function startAccessLogSweep(log: FastifyBaseLogger): void {
+  cron.schedule(
+    ACCESS_LOG_RETENTION_CRON,
+    () => {
+      pool
+        .query(`DELETE FROM access_log WHERE at < now() - interval '90 days'`)
+        .then(res => {
+          if ((res.rowCount ?? 0) > 0) {
+            log.info(`scheduler: pruned ${res.rowCount} access_log rows older than ${ACCESS_LOG_RETENTION_DAYS} days`)
+          }
+        })
+        .catch(err =>
+          log.error(`scheduler: access_log sweep failed: ${err instanceof Error ? err.message : String(err)}`),
+        )
+    },
+    { timezone: config.TZ },
+  )
 }
 
 export function startScheduler(log: FastifyBaseLogger): void {
   bootRecovery(log).catch(err =>
     log.error(`scheduler: boot recovery failed: ${err instanceof Error ? err.message : String(err)}`),
   )
+
+  // Always scheduled, independent of the CAPWATCH fetch configuration.
+  startAccessLogSweep(log)
 
   if (!config.CAPWATCH_FETCH_CRON) {
     log.info('scheduler: CAPWATCH_FETCH_CRON unset, scheduled fetch disabled')
@@ -182,9 +236,12 @@ export interface IngestHealth {
 
 /** For /healthz wiring so a free uptime monitor can alert on staleness. */
 export async function getIngestHealth(): Promise<IngestHealth> {
+  // Adoption-sideload runs carry no download_date; staleness tracks the
+  // latest run that ingested an actual CAPWATCH extract.
   const runRes = await pool.query(
     `SELECT finished_at, download_date FROM ingest_runs
-     WHERE status = 'succeeded' ORDER BY finished_at DESC LIMIT 1`,
+     WHERE status = 'succeeded' AND download_date IS NOT NULL
+     ORDER BY finished_at DESC LIMIT 1`,
   )
   const row = runRes.rows[0] as { finished_at: Date; download_date: Date | null } | undefined
   const marker = await getAuthFailureMarker()

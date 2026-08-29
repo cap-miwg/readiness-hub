@@ -103,10 +103,23 @@ export interface OrgComputeContext {
   descendants: ReadonlyMap<number, ReadonlySet<number>>
 }
 
-export function buildOrgComputeContext(dataset: Dataset, anchorOverride?: number): OrgComputeContext {
+/**
+ * memberHomeOrgids: the UNFILTERED member home orgids
+ * (loadDatasetInput allMemberHomeOrgids), so anchor derivation matches
+ * ingest/run.ts deriveOrgTree exactly. dataset.members is already narrowed by
+ * the org.member_types include list; deriving the LCA from it would move the
+ * anchor when the list is narrowed and drop computed_org rows for orgs the
+ * staged org_closure still serves. The dataset.members fallback exists for
+ * fixtures that carry no separate raw member set.
+ */
+export function buildOrgComputeContext(
+  dataset: Dataset,
+  anchorOverride?: number,
+  memberHomeOrgids?: Iterable<number>,
+): OrgComputeContext {
   const tree = buildOrgClosure(
     dataset.organizations.map(o => ({ orgid: o.orgid, nextLevel: o.nextLevel })),
-    dataset.members.map(m => m.orgid),
+    memberHomeOrgids ?? dataset.members.map(m => m.orgid),
     anchorOverride,
   )
   const descendants = new Map<number, Set<number>>()
@@ -384,7 +397,9 @@ export function assembleMemberRow(
 // officer/enlisted structure (:4914-5034), the additional-members node
 // (:5075-5096), and the traditional senior staff structure (:4849-4905).
 // The wing-only Chief of Staff layout (:4750-4788) is simplified to the
-// traditional structure; flagged in MIGRATION notes.
+// traditional structure; duty-holders whose titles match no rendered node
+// (Chief of Staff, Historian, Testing Officer, ...) attach under an
+// Other Staff node instead of vanishing. Flagged in docs/MIGRATION-V1.md.
 
 const COMMANDER_EXCLUDE = ['DEPUTY', 'CADET', 'VICE', 'ADVISOR'] as const
 
@@ -735,6 +750,48 @@ export function buildOrgChart(
   }
 
   rootChildren.push(...staffNodes)
+
+  // Safety net for duty titles the fixed structure does not model (the v1
+  // wing Chief-of-Staff chain, Senior Enlisted Leader, advisors, Testing
+  // Officer, Historian, Health Services, Plans and Programs, sUAS Officer,
+  // Counterdrug, Development/Diversity, ...): any in-scope active senior who
+  // holds a duty but landed in no rendered node attaches under Other Staff
+  // with the duty title shown, so no duty-holder vanishes from the chart.
+  // Additional Members below catches only the duty-less.
+  const placedCapids = new Set<number>()
+  const collectPlaced = (n: OrgChartNode): void => {
+    for (const m of n.members) if (m.capid !== null) placedCapids.add(m.capid)
+    for (const child of n.children) collectPlaced(child)
+  }
+  for (const m of commanderMembers) if (m.capid !== null) placedCapids.add(m.capid)
+  for (const child of rootChildren) collectPlaced(child)
+  const otherStaff = sortMembers(
+    scopeMembers
+      .filter(m => {
+        const t = m.type.toUpperCase()
+        return (
+          (t === 'SENIOR' || t === 'LIFE') &&
+          m.mbrStatus.toUpperCase() === 'ACTIVE' &&
+          assignedCapids.has(m.capid) &&
+          !placedCapids.has(m.capid)
+        )
+      })
+      .map(m => {
+        const titles = [
+          ...duties.filter(d => d.capid === m.capid),
+          ...cadetDuties.filter(d => d.capid === m.capid),
+        ].map(d => `${d.duty}${d.asst ? ' (A)' : ''}`)
+        return {
+          capid: m.capid,
+          display: `${chartDisplay(m, false)} (${[...new Set(titles)].join(', ')})`,
+          asst: false,
+        }
+      }),
+  )
+  if (otherStaff.length > 0) {
+    rootChildren.push(node('other_staff', 'Other Staff', 'senior', otherStaff))
+  }
+
   if (unassignedSeniors.length > 0) {
     rootChildren.push(
       node('additional_members', `Additional Members (${unassignedSeniors.length})`, 'senior', unassignedSeniors),
@@ -915,7 +972,7 @@ export async function runCompute(
   const loaded = await loadDatasetInput(client, suffix)
   const dataset = buildDataset(loaded.input)
   const asOf = new Date()
-  const ctx = buildOrgComputeContext(dataset, config.ANCHOR_ORGID)
+  const ctx = buildOrgComputeContext(dataset, config.ANCHOR_ORGID, loaded.allMemberHomeOrgids)
   const levelPathMap = deriveLevelPathMap(dataset.plPaths)
 
   const memberRows: CellValue[][] = []

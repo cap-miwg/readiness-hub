@@ -20,6 +20,8 @@ export interface ParsedTable {
   columns: string[]
   /** Row values aligned to `columns`. */
   rows: CellValue[][]
+  /** Rows removed by the spec's rowFilter (PII minimization); not rejects. */
+  droppedRows: number
   dropped: {
     /** Upstream header names present in the file but not allowlisted. */
     columns: string[]
@@ -151,6 +153,7 @@ export function parseCsvTable(spec: TableSpec, buf: Buffer): ParsedTable {
       table: spec.table,
       columns: Object.keys(spec.columns).map(toSnake),
       rows: [],
+      droppedRows: 0,
       dropped: { columns: [], rejects: 0 },
     }
   }
@@ -171,6 +174,7 @@ export function parseCsvTable(spec: TableSpec, buf: Buffer): ParsedTable {
 
   const rows: CellValue[][] = []
   let rejects = 0
+  let droppedRows = 0
   for (let r = 1; r < records.length; r++) {
     const record = records[r]
     if (!record) continue
@@ -189,6 +193,14 @@ export function parseCsvTable(spec: TableSpec, buf: Buffer): ParsedTable {
       if (reject) rejects++
       row[c] = value
     }
+    if (spec.rowFilter) {
+      const byHeader: Record<string, unknown> = {}
+      for (let c = 0; c < specHeaders.length; c++) byHeader[specHeaders[c] as string] = row[c]
+      if (!spec.rowFilter(byHeader)) {
+        droppedRows++
+        continue
+      }
+    }
     rows.push(row)
   }
 
@@ -197,6 +209,7 @@ export function parseCsvTable(spec: TableSpec, buf: Buffer): ParsedTable {
     table: spec.table,
     columns: specHeaders.map(toSnake),
     rows,
+    droppedRows,
     dropped: { columns: droppedColumns, rejects },
   }
 }

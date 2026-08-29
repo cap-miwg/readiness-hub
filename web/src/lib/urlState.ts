@@ -19,11 +19,17 @@ export interface OrgScope {
   descendants: boolean
 }
 
+/** The synthetic Unassigned pseudo-node (contracts.ts, OrgTreeNode). */
+export const UNASSIGNED_ORGID = -1
+
 export function readOrgScope(params: URLSearchParams): OrgScope {
   const raw = params.get(ORG_PARAM)
   const parsed = raw === null ? Number.NaN : Number(raw)
+  // Real orgids are non-negative; -1 alone is valid because it addresses the
+  // Unassigned pseudo-node the server appends under the anchor.
+  const valid = Number.isSafeInteger(parsed) && (parsed >= 0 || parsed === UNASSIGNED_ORGID)
   return {
-    orgid: Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null,
+    orgid: valid ? parsed : null,
     descendants: params.get(DESCENDANTS_PARAM) === '1',
   }
 }
@@ -44,24 +50,31 @@ export function orgScopeSearch(scope: OrgScope): string {
   return s ? `?${s}` : ''
 }
 
+/** replace: programmatic reconciliation should not add history entries. */
+export interface SetScopeOptions {
+  replace?: boolean
+}
+
 export function useOrgScope(): {
   scope: OrgScope
-  setScope: (next: OrgScope) => void
-  setOrgid: (orgid: number | null) => void
+  setScope: (next: OrgScope, opts?: SetScopeOptions) => void
+  setOrgid: (orgid: number | null, opts?: SetScopeOptions) => void
   setDescendants: (descendants: boolean) => void
 } {
   const [params, setParams] = useSearchParams()
   const scope = useMemo(() => readOrgScope(params), [params])
 
   const setScope = useCallback(
-    (next: OrgScope) => {
-      setParams(prev => writeOrgScope(prev, next))
+    (next: OrgScope, opts?: SetScopeOptions) => {
+      setParams(prev => writeOrgScope(prev, next), { replace: opts?.replace === true })
     },
     [setParams],
   )
   const setOrgid = useCallback(
-    (orgid: number | null) => {
-      setParams(prev => writeOrgScope(prev, { ...readOrgScope(prev), orgid }))
+    (orgid: number | null, opts?: SetScopeOptions) => {
+      setParams(prev => writeOrgScope(prev, { ...readOrgScope(prev), orgid }), {
+        replace: opts?.replace === true,
+      })
     },
     [setParams],
   )

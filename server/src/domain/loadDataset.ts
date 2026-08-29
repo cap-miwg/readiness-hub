@@ -71,6 +71,13 @@ export interface LoadedDataset {
    * orgs from /api/orgs and the picker (v1 parity: picker-only exclusion).
    */
   excludedOrgids: Set<number>
+  /**
+   * Home orgids of EVERY member row, before the member-type include list is
+   * applied. The compute step derives the org tree anchor from these so it
+   * matches ingest/run.ts deriveOrgTree, which anchors on all parsed member
+   * home orgids; a narrowed include list must not move the anchor.
+   */
+  allMemberHomeOrgids: number[]
 }
 
 type Row = Record<string, unknown>
@@ -559,8 +566,19 @@ export async function loadDatasetInput(
 
   const read = (table: string) => readTable(client, table, suffix)
 
+  // Anchor input must be the UNFILTERED member home orgids, mirroring
+  // ingest/run.ts deriveOrgTree (every numeric members.orgid, no member-type
+  // filter); otherwise a narrowed include list moves compute's LCA away from
+  // the closure the ingest stages.
+  const memberRows = await read('members')
+  const allMemberHomeOrgids: number[] = []
+  for (const r of memberRows) {
+    const orgid = nn(r.orgid)
+    if (orgid !== null) allMemberHomeOrgids.push(orgid)
+  }
+
   const input: DatasetInput = {
-    members: mapRows(await read('members'), mapMember).filter(m =>
+    members: mapRows(memberRows, mapMember).filter(m =>
       includeTypes.has(m.type.trim().toUpperCase()),
     ),
     organizations: mapRows(await read('organizations'), mapOrganization),
@@ -604,5 +622,5 @@ export async function loadDatasetInput(
     if (excludedNormalized.has(normalizeUnit(org.unit))) excludedOrgids.add(org.orgid)
   }
 
-  return { input, settings, excludedOrgids }
+  return { input, settings, excludedOrgids, allMemberHomeOrgids }
 }

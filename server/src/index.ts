@@ -7,13 +7,36 @@ import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { config } from './config.js'
 import { migrate } from './db/migrate.js'
+import { pool } from './db/pool.js'
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public')
+
+/**
+ * Dev auth is a user picker; refusing to boot over a database that holds real
+ * (non-demo) member data closes the gap where data was ingested legitimately
+ * and the deployment later flipped to AUTH_MODE=dev.
+ */
+async function refuseDevOverRealData(): Promise<void> {
+  if (config.AUTH_MODE !== 'dev' || config.DEV_ALLOW_REAL_INGEST) return
+  const res = await pool.query(
+    `SELECT id FROM ingest_runs
+     WHERE status = 'succeeded' AND source NOT IN ('demo') AND download_date IS NOT NULL
+     LIMIT 1`,
+  )
+  if ((res.rowCount ?? 0) > 0) {
+    throw new Error(
+      'AUTH_MODE=dev refuses to serve real member data: the database contains a succeeded ' +
+        'non-demo CAPWATCH ingest, and dev auth is an unauthenticated user picker. Either set ' +
+        'AUTH_MODE=google (real authentication), set DEV_ALLOW_REAL_INGEST=true for local ' +
+        'analysis on a localhost bind, or run docker compose down -v to drop the data.',
+    )
+  }
+}
 
 async function main() {
   if (config.AUTH_MODE === 'dev' && config.GOOGLE_CLIENT_ID) {
     throw new Error(
-      'AUTH_MODE=dev with GOOGLE_CLIENT_ID set looks like a misconfigured production deployment. Set AUTH_MODE=google or clear the Google credentials.',
+      'AUTH_MODE=dev with GOOGLE_CLIENT_ID set looks like a misconfigured production deployment. Set AUTH_MODE=google.',
     )
   }
   const app = Fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 })
@@ -35,6 +58,7 @@ async function main() {
   })
 
   await migrate(msg => app.log.info(msg))
+  await refuseDevOverRealData()
 
   // Feature modules register themselves here (auth, api, admin, scheduler).
   const { registerAuth } = await import('./auth/routes.js')

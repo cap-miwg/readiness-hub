@@ -7,12 +7,14 @@ import {
   Clock,
   LogOut,
   Menu,
+  MessageSquare,
   RefreshCw,
   User,
 } from 'lucide-react'
 import clsx from 'clsx'
 import type { MeResponse, OrgTreeNode } from '@shared/contracts'
 import { APP_NAME_FALLBACK, logout, useMeta, useOrgs } from '../api/client'
+import FeedbackModal from '../features/feedback/FeedbackModal'
 import { orgScopeSearch, useOrgScope } from '../lib/urlState'
 import { Badge, Banner, Spinner } from './ui'
 
@@ -67,6 +69,7 @@ function dataAge(downloadDate: string | null, nowMs: number): DataAge | null {
 function UserMenu({ me }: { me: MeResponse }) {
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -123,6 +126,18 @@ function UserMenu({ me }: { me: MeResponse }) {
           <div className="mt-1 border-t border-slate-100 pt-1">
             <button
               type="button"
+              data-testid="feedback-open"
+              onClick={() => {
+                setOpen(false)
+                setFeedbackOpen(true)
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <MessageSquare className="h-4 w-4" aria-hidden />
+              Send feedback
+            </button>
+            <button
+              type="button"
               onClick={() => void onLogout()}
               disabled={signingOut}
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -133,6 +148,7 @@ function UserMenu({ me }: { me: MeResponse }) {
           </div>
         </div>
       )}
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   )
 }
@@ -156,6 +172,27 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
     () => (orgsQ.data ? flattenOrgTree(orgsQ.data.tree) : []),
     [orgsQ.data],
   )
+
+  // Scope reconciliation once the org tree is known. No orgid in the URL:
+  // default to the viewer's home unit when it is in the tree (else fall
+  // through to the anchor as before). An orgid that is not in the tree (unit
+  // gone after a re-ingest, or a stale shared link): reset to the default so
+  // the picker never renders an empty selection and pages never 404 against
+  // a dead scope. -1 stays valid whenever the synthetic Unassigned node is in
+  // the tree, because flattenOrgTree then includes it. Writes replace the
+  // history entry: neither adjustment is a user navigation.
+  useEffect(() => {
+    if (!orgsQ.data) return
+    const known = new Set(flatOrgs.map(o => o.orgid))
+    if (scope.orgid === null) {
+      if (me.homeOrgid !== undefined && known.has(me.homeOrgid)) {
+        setOrgid(me.homeOrgid, { replace: true })
+      }
+    } else if (!known.has(scope.orgid)) {
+      setOrgid(null, { replace: true })
+    }
+  }, [orgsQ.data, flatOrgs, scope.orgid, me.homeOrgid, setOrgid])
+
   const selectedOrgid = scope.orgid ?? orgsQ.data?.anchorOrgid ?? null
   const age = dataAge(meta?.downloadDate ?? null, nowMs)
   const versionMismatch =

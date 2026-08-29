@@ -20,9 +20,12 @@ COPY server/ ./
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
+ARG APP_VERSION=2.0.0-dev
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 ENV NODE_ENV=production
+# Same version string the web bundle was built with; /api/meta prefers it.
+ENV APP_VERSION=$APP_VERSION
 COPY --from=server-build /build/server/node_modules ./node_modules
 COPY --from=server-build /build/server/dist ./dist
 COPY --from=server-build /build/server/migrations ./migrations

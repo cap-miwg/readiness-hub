@@ -527,9 +527,11 @@ export function generateCadetNoPromotionReport(data: ReportData): ReportResult {
   const threshold = 120
   const rows: Row[] = []
   for (const m of pool) {
+    // Deliberate change kept ONLY in this report:
     // computed_member.last_promotion_on is the achievement's approval-based
-    // effective date (domain/cadet.ts lastPromotionDate); v1 read CadetRank
-    // RankDate directly.
+    // effective date (domain/cadet.ts lastPromotionDate), the date cadet TIG
+    // actually runs from; v1 read CadetRank RankDate directly. The
+    // recent-promotions report keys on CadetRank.RankDate for v1 parity.
     if (m.lastPromotionOn === null) continue
     const days = daysSince(m.lastPromotionOn, data.asOf)
     if (days !== null && days > threshold) {
@@ -1033,19 +1035,25 @@ export function generateRecentPromotionsReport(data: ReportData): ReportResult {
   const windowDays = 60
   const rows: Row[] = []
   for (const m of pool) {
-    if (m.lastPromotionOn === null) continue
-    const days = daysSince(m.lastPromotionOn, data.asOf)
-    if (days === null || days < 0 || days > windowDays) continue
+    // v1 keyed strictly on the most recent CadetRank.RankDate for both the
+    // window and the Promoted column (Index.html:2478-2488); the From/To
+    // grades come from the same rank history. The approval-date basis
+    // (last_promotion_on) is used only by the cadet-no-promotion report,
+    // where it is a commented deliberate change.
     const history = (ranksByCapid.get(m.capid) ?? [])
       .slice()
       .sort((a, b) => (b.rankDate?.getTime() ?? 0) - (a.rankDate?.getTime() ?? 0))
+    const latest = history[0]
+    if (latest === undefined || latest.rankDate === null) continue
+    const days = daysSince(latest.rankDate, data.asOf)
+    if (days === null || days < 0 || days > windowDays) continue
     rows.push({
       capid: m.capid,
       memberName: memberName(m),
       unit: unitDisplayName(data.orgs, m.orgid),
       rank: m.rank,
       previousRank: history[1]?.rank ?? 'N/A',
-      promotionDate: isoDate(m.lastPromotionOn),
+      promotionDate: isoDate(latest.rankDate),
       daysSincePromotion: days,
       timeframe: days <= 30 ? '30-day' : '60-day',
     })

@@ -40,6 +40,8 @@ jobs:
           context: .
           push: false
           tags: readiness-hub:ci
+          build-args: |
+            APP_VERSION=2.0.0-dev
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -66,4 +68,6 @@ jobs:
           tags: |
             ghcr.io/cap-miwg/readiness-hub:${{ github.ref_name }}
             ghcr.io/cap-miwg/readiness-hub:v2-latest
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
           cache-from: type=gha

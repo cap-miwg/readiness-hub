@@ -5,6 +5,7 @@ import {
   generateMembershipLapseReport,
   generateNearPromotionReport,
   generatePromotionEligibilityReport,
+  generateRecentPromotionsReport,
   generateTlcComplianceReport,
 } from '../src/reports/generators.js'
 import { emptyReportData, type JsonLevelsProgress, type ReportData, type ReportMember } from '../src/reports/types.js'
@@ -209,6 +210,51 @@ describe('membership expiring soon', () => {
     expect(row['capid']).toBe(10)
     expect(row['daysUntil']).toBe(22)
     expect(row['urgency']).toBe('critical')
+  })
+})
+
+describe('recent promotions keyed on CadetRank.RankDate (v1 parity)', () => {
+  const cadetBase = {
+    memberType: 'CADET',
+    rank: 'C/SrA',
+    isSeniorScope: false,
+    isCadetScope: true,
+  } as const
+
+  it('windows and dates rows on the latest rank date, not the approval date', () => {
+    // Approval-based last_promotion_on sits outside the 60-day window; the
+    // latest CadetRank.RankDate is 19 days before the fixed asOf.
+    const cadet = member(10, { ...cadetBase, lastPromotionOn: new Date(2026, 0, 1) })
+    const data = fixtureData({
+      members: [cadet],
+      cadetRanks: [
+        { capid: 10, rank: 'C/A1C', rankDate: new Date(2026, 2, 1) },
+        { capid: 10, rank: 'C/SrA', rankDate: new Date(2026, 7, 10) },
+      ],
+    })
+    const result = generateRecentPromotionsReport(data)
+    expect(result.rows).toHaveLength(1)
+    const row = result.rows[0] as Record<string, unknown>
+    expect(row['promotionDate']).toBe('2026-08-10')
+    expect(row['daysSincePromotion']).toBe(19)
+    expect(row['timeframe']).toBe('30-day')
+    // From/To still come from the rank history and the member row.
+    expect(row['previousRank']).toBe('C/A1C')
+    expect(row['rank']).toBe('C/SrA')
+  })
+
+  it('excludes a cadet whose latest rank date is outside the window even with a recent approval date', () => {
+    const cadet = member(11, { ...cadetBase, lastPromotionOn: new Date(2026, 7, 20) })
+    const data = fixtureData({
+      members: [cadet],
+      cadetRanks: [{ capid: 11, rank: 'C/Amn', rankDate: new Date(2026, 0, 5) }],
+    })
+    expect(generateRecentPromotionsReport(data).rows).toHaveLength(0)
+  })
+
+  it('skips cadets with no rank history rows', () => {
+    const cadet = member(12, { ...cadetBase, lastPromotionOn: new Date(2026, 7, 20) })
+    expect(generateRecentPromotionsReport(fixtureData({ members: [cadet] })).rows).toHaveLength(0)
   })
 })
 

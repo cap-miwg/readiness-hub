@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import type { MeResponse, MetaResponse, OrgsResponse } from '@shared/contracts'
+import type {
+  FeedbackRequest,
+  FeedbackResponse,
+  MeResponse,
+  MetaResponse,
+  OrgsResponse,
+} from '@shared/contracts'
 
 /**
  * Typed fetch wrapper for the Readiness Hub API. Same-origin cookies, JSON
@@ -186,4 +192,12 @@ export async function devLogin(email: string): Promise<void> {
 
 export async function logout(): Promise<void> {
   await apiFetch<unknown>('/auth/logout', { method: 'POST', skipAuthRedirect: true })
+}
+
+/**
+ * POST /api/feedback. Stored server-side and mirrored to a GitHub issue when
+ * the deployment has a token; rate limited (429) at 5/hour per user.
+ */
+export async function submitFeedback(request: FeedbackRequest): Promise<FeedbackResponse> {
+  return apiFetch<FeedbackResponse>('/api/feedback', { method: 'POST', body: request })
 }

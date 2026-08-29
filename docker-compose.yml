@@ -17,7 +17,11 @@ services:
       retries: 30
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Keeps the web bundle's baked-in version in step with the server.
+        APP_VERSION: ${APP_VERSION:-2.0.0-dev}
     image: readiness-hub:v2
     restart: unless-stopped
     depends_on:
@@ -34,6 +38,7 @@ services:
       ALLOWED_DOMAINS: ${ALLOWED_DOMAINS:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       CAPWATCH_ORGID: ${CAPWATCH_ORGID:-}
+      ANCHOR_ORGID: ${ANCHOR_ORGID:-}
       ESERVICES_USERNAME: ${ESERVICES_USERNAME:-}
       ESERVICES_PASSWORD: ${ESERVICES_PASSWORD:-}
       CAPWATCH_FETCH_CRON: ${CAPWATCH_FETCH_CRON:-}

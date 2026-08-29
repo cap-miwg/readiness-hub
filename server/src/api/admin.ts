@@ -12,6 +12,7 @@ import { pool } from '../db/pool.js'
 import { audit } from '../auth/audit.js'
 import { requireAdmin, requireAuth } from '../auth/guard.js'
 import { fetchCapwatchZip } from '../ingest/fetcher.js'
+import { clearAuthFailureMarker } from '../ingest/scheduler.js'
 import { ADOPTION_TABLES } from '../ingest/tables.js'
 import {
   ingestAdoptionCsvs,
@@ -132,6 +133,12 @@ async function handleIngestFetch(req: FastifyRequest, reply: FastifyReply): Prom
     reply.code(502).send({ error: fetched.message })
     return
   }
+
+  // A successful fetch proves the credentials work; clear the scheduler's
+  // persisted auth-failure marker so scheduled fetches resume.
+  await clearAuthFailureMarker().catch(err =>
+    req.log.warn(`could not clear the auth-failure marker: ${errorMessage(err)}`),
+  )
 
   try {
     const result = await ingestZip(fetched.zip, { source: 'fetch', force }, asIngestLog(req.log))

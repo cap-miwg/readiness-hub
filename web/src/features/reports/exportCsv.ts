@@ -5,7 +5,18 @@ import { formatCell, slugify } from './format'
 /** Excel needs a BOM to open UTF-8 CSVs with the right encoding. */
 const BOM = '﻿'
 
-function csvEscape(cell: string): string {
+/**
+ * OWASP CSV-injection guidance: a cell starting with = + - @ tab or CR is
+ * treated as a formula by Excel/Sheets, so member-supplied text (names,
+ * remarks) could execute on an operator's machine. A leading single quote
+ * makes Excel render the cell as literal text.
+ */
+function neutralizeFormula(cell: string): string {
+  return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell
+}
+
+function csvEscape(raw: string): string {
+  const cell = neutralizeFormula(raw)
   if (/[",\r\n]/.test(cell)) return `"${cell.replaceAll('"', '""')}"`
   return cell
 }

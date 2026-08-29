@@ -7,7 +7,7 @@
  * without a database.
  */
 import type pg from 'pg'
-import { TABLES } from './tables.js'
+import { TABLES, type TableSpec } from './tables.js'
 import type { CellValue, ParsedTable } from './parse.js'
 import type { ClosureRow } from './orgTree.js'
 
@@ -56,6 +56,52 @@ export function checkRequiredTables(parsed: ReadonlyMap<string, ParsedTable>): G
   }
   if (problems.length > 0) return { ok: false, reason: `required tables failed: ${problems.join(', ')}` }
   return { ok: true }
+}
+
+/**
+ * A present-but-empty file for a NON-required table is treated as absent: it
+ * is never staged, so the previous live rows survive the swap instead of
+ * being wiped by an empty table. Required tables still abort via
+ * checkRequiredTables.
+ */
+export function skipEmptyOptionalTable(spec: TableSpec, rowCount: number): boolean {
+  return !spec.required && rowCount === 0
+}
+
+/**
+ * DownLoadDate regression gate: an extract older than the current dataset's
+ * download_date must not silently replace it (e.g. re-uploading a stale zip).
+ * Null on either side passes: the caller warns on a null incoming date, and a
+ * null previous date means there is nothing to regress from.
+ */
+export function checkDownloadDateGate(
+  incoming: Date | null,
+  previous: Date | null,
+  force: boolean,
+): GateResult {
+  if (incoming === null || previous === null) return { ok: true }
+  if (incoming.getTime() >= previous.getTime()) return { ok: true }
+  if (force) return { ok: true }
+  return {
+    ok: false,
+    reason:
+      `download date regression: incoming extract ${incoming.toISOString()} is older than ` +
+      `the current dataset ${previous.toISOString()} (re-run with force to override)`,
+  }
+}
+
+/**
+ * download_date of the last succeeded CAPWATCH ingest. Demo runs are excluded:
+ * the demo fixture carries a fixed synthetic DownLoadDate, and replacing demo
+ * data with a real extract is always intentional.
+ */
+export async function getPreviousDownloadDate(client: pg.PoolClient): Promise<Date | null> {
+  const res = await client.query(
+    `SELECT download_date FROM ingest_runs
+     WHERE status = 'succeeded' AND download_date IS NOT NULL AND source <> 'demo'
+     ORDER BY finished_at DESC LIMIT 1`,
+  )
+  return (res.rows[0]?.download_date as Date | undefined) ?? null
 }
 
 /**

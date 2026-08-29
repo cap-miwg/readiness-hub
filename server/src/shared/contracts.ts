@@ -442,6 +442,8 @@ export interface IngestFileStat {
   rows: number
   droppedColumns: string[]
   rejects: number
+  /** Rows removed by a registry rowFilter (e.g. non-EMAIL MbrContact types). */
+  droppedRows?: number
 }
 
 /** One ingest_runs row (GET /api/admin/runs, latest 50). */

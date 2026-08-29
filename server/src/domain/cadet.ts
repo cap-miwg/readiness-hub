@@ -124,11 +124,16 @@ export interface TimeInGrade {
 export function getTimeInGrade(effectiveDate: Date | null, asOf: Date): TimeInGrade {
   if (!effectiveDate) return { days: 0, weeks: 0, isEligible: false, eligibleOn: null }
   const days = daysSince(effectiveDate, asOf)
+  const eligibleOn = addDays(effectiveDate, CADET_TIME_IN_GRADE_DAYS)
   return {
     days,
     weeks: Math.floor(days / 7),
-    isEligible: days >= CADET_TIME_IN_GRADE_DAYS,
-    eligibleOn: addDays(effectiveDate, CADET_TIME_IN_GRADE_DAYS),
+    // Eligibility keys on the same boundary the read layer re-derives from the
+    // stored tigEligibleOn (timeSensitive.deriveCadetState: asOf >= eligibleOn).
+    // v1 used Math.ceil(daysSince) >= 56, which could flip eligible a few
+    // hours earlier on a partial day 56; documented sub-day deviation.
+    isEligible: asOf.getTime() >= eligibleOn.getTime(),
+    eligibleOn,
   }
 }
 

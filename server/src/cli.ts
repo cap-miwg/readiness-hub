@@ -9,6 +9,7 @@ import { config } from './config.js'
 import { migrate } from './db/migrate.js'
 import { pool } from './db/pool.js'
 import { fetchCapwatchZip } from './ingest/fetcher.js'
+import { clearAuthFailureMarker } from './ingest/scheduler.js'
 import { ingestZip, type IngestLog, type IngestResult } from './ingest/run.js'
 import { seedDemo } from './seed/seedDemo.js'
 
@@ -79,6 +80,9 @@ async function main() {
         process.exitCode = 1
         return
       }
+      // A successful fetch proves the credentials work; clear the scheduler's
+      // persisted auth-failure marker so scheduled fetches resume.
+      await clearAuthFailureMarker()
       report(await ingestZip(fetched.zip, { source: 'fetch', force, dryRun }, log))
       return
     }

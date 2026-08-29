@@ -18,6 +18,7 @@ import {
   checkHfzStatus,
   checkHonorCredit,
   getAchievementRequirements,
+  getTimeInGrade,
   processCadet,
   processCadets,
 } from '../src/domain/cadet.js'
@@ -396,6 +397,26 @@ describe('cadet constants', () => {
 })
 
 describe('time in grade and the six-state machine', () => {
+  it('flips eligibility exactly at effective + 56 days, matching the read-time boundary', () => {
+    const effective = d('2026-03-01')
+    const eligibleOn = new Date(effective.getTime() + 56 * DAY_MS)
+    // Partial day 56: v1's Math.ceil(daysSince) >= 56 already said eligible
+    // here; v2 keys on the same asOf >= eligibleOn boundary that
+    // timeSensitive.deriveCadetState re-derives from the stored date.
+    const partialDay56 = new Date(eligibleOn.getTime() - 6 * 60 * 60 * 1000)
+    expect(getTimeInGrade(effective, partialDay56).isEligible).toBe(false)
+    expect(getTimeInGrade(effective, eligibleOn).isEligible).toBe(true)
+    expect(getTimeInGrade(effective, partialDay56).eligibleOn?.toISOString().slice(0, 10)).toBe(
+      '2026-04-26',
+    )
+    expect(getTimeInGrade(null, eligibleOn)).toEqual({
+      days: 0,
+      weeks: 0,
+      isEligible: false,
+      eligibleOn: null,
+    })
+  })
+
   it('is TIME_PENDING at 30 days TIG and READY at 60 days, asOf-shifted', () => {
     const ds = buildFixture()
     const cadet = ds.memberByCapid.get(100001)

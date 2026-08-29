@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildInsertStatements,
+  checkDownloadDateGate,
   checkRequiredTables,
   checkShrinkGuard,
   createStagingSql,
   MAX_INSERT_PARAMS,
   SHRINK_GUARD_TABLES,
+  skipEmptyOptionalTable,
   stagingName,
 } from '../src/ingest/load.js'
 import type { ParsedTable } from '../src/ingest/parse.js'
-import { TABLES } from '../src/ingest/tables.js'
+import { TABLES, type TableSpec } from '../src/ingest/tables.js'
 
 function mkParsed(table: string, file: string, rowCount: number): ParsedTable {
   return {
@@ -17,6 +19,7 @@ function mkParsed(table: string, file: string, rowCount: number): ParsedTable {
     table,
     columns: ['capid'],
     rows: Array.from({ length: rowCount }, (_, i) => [i + 1]),
+    droppedRows: 0,
     dropped: { columns: [], rejects: 0 },
   }
 }
@@ -94,6 +97,50 @@ describe('checkShrinkGuard', () => {
 
   it('does not fire on a first run (no previous counts)', () => {
     expect(checkShrinkGuard(new Map([['members', 5]]), new Map(), false)).toEqual({ ok: true })
+  })
+})
+
+describe('skipEmptyOptionalTable', () => {
+  const optional = TABLES.find(t => !t.required) as TableSpec
+  const required = TABLES.find(t => t.required) as TableSpec
+
+  it('treats a present-but-empty non-required file as absent, so live rows survive', () => {
+    expect(skipEmptyOptionalTable(optional, 0)).toBe(true)
+  })
+
+  it('never skips a non-empty file or a required table (required empties abort instead)', () => {
+    expect(skipEmptyOptionalTable(optional, 1)).toBe(false)
+    expect(skipEmptyOptionalTable(required, 0)).toBe(false)
+    expect(skipEmptyOptionalTable(required, 5)).toBe(false)
+  })
+})
+
+describe('checkDownloadDateGate', () => {
+  const older = new Date('2026-08-01T03:00:00Z')
+  const newer = new Date('2026-08-15T03:00:00Z')
+
+  it('aborts when the incoming extract is older than the current dataset', () => {
+    const result = checkDownloadDateGate(older, newer, false)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toContain('download date regression')
+      expect(result.reason).toContain('2026-08-01')
+      expect(result.reason).toContain('2026-08-15')
+    }
+  })
+
+  it('passes for a newer or equal incoming extract', () => {
+    expect(checkDownloadDateGate(newer, older, false)).toEqual({ ok: true })
+    expect(checkDownloadDateGate(newer, new Date(newer), false)).toEqual({ ok: true })
+  })
+
+  it('passes when either side is null (caller warns on a null incoming date)', () => {
+    expect(checkDownloadDateGate(null, newer, false)).toEqual({ ok: true })
+    expect(checkDownloadDateGate(older, null, false)).toEqual({ ok: true })
+  })
+
+  it('force overrides the gate', () => {
+    expect(checkDownloadDateGate(older, newer, true)).toEqual({ ok: true })
   })
 })
 

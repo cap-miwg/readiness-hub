@@ -17,9 +17,18 @@ import { capidFromEmail, isoTimestamp, normalizeUnit, subtreeOrgidsOf } from './
 
 let cachedVersion: string | null = null
 
-/** Server package.json version; the SPA prompts reload on mismatch. */
+/**
+ * Deployment version; the SPA prompts reload on mismatch. Prefers the
+ * APP_VERSION baked into the image (which also versioned the web bundle),
+ * falling back to server package.json for bare-node dev runs.
+ */
 export function appVersion(): string {
   if (cachedVersion !== null) return cachedVersion
+  const fromEnv = process.env.APP_VERSION
+  if (fromEnv) {
+    cachedVersion = fromEnv
+    return cachedVersion
+  }
   try {
     const pkgPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -61,9 +70,12 @@ interface LastRunRow {
 export function registerMetaRoutes(app: FastifyInstance): void {
   app.get('/api/meta', { preHandler: requireAuth }, async (_req, reply) => {
     const [runRes, memberRes, closure, settings] = await Promise.all([
+      // download_date IS NOT NULL keeps adoption-sideload runs (which carry
+      // no DownLoadDate) from wiping the extract age off the header badge.
       pool.query<LastRunRow>(
         `SELECT finished_at, download_date FROM ingest_runs
-         WHERE status = 'succeeded' ORDER BY finished_at DESC LIMIT 1`,
+         WHERE status = 'succeeded' AND download_date IS NOT NULL
+         ORDER BY finished_at DESC LIMIT 1`,
       ),
       pool.query<{ n: number }>('SELECT count(*)::int AS n FROM computed_member'),
       loadClosure(),

@@ -21,6 +21,9 @@ const VERIFIER_COOKIE = 'rh_oidc_verifier'
 const OIDC_COOKIE_PATH = '/auth'
 const OIDC_COOKIE_MAX_AGE_S = 600
 
+/** 'domain' is one of the ?error= codes the SPA login page knows how to map. */
+export const LOGIN_REJECTED_REDIRECT = '/login?error=domain'
+
 function oidcCookieOptions(baseUrl: string) {
   return {
     httpOnly: true,
@@ -147,7 +150,10 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof LoginRejectedError) {
         await audit(err.email ?? 'unknown', 'auth.login.rejected', { reason: err.message })
-        reply.code(403).type('text/html').send(errorPage(err.message))
+        // Land domain-rejected sign-ins back on the SPA login page, which
+        // maps this code to a friendly message (web Login.tsx). The generic
+        // exchange-failure path below keeps the standalone HTML error page.
+        reply.redirect(LOGIN_REJECTED_REDIRECT, 302)
         return
       }
       req.log.error({ err }, 'oidc callback failed')

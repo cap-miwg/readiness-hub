@@ -29,6 +29,25 @@ export interface TableSpec {
   columns: Record<string, ColumnType>
   /** Required: ingest aborts if the file is missing or empty. */
   required: boolean
+  /**
+   * Optional row-level filter applied after typed parsing. The row is keyed by
+   * the CAPWATCH header names in `columns`; returning false drops the row
+   * before it is ever staged (counted in FileStat.droppedRows, not rejects).
+   * Used for PII minimization: rows the app never renders are never stored.
+   */
+  rowFilter?: (row: Record<string, unknown>) => boolean
+}
+
+/**
+ * PII minimization for MbrContact: the app renders only email contact types,
+ * so home/cell/work phone numbers (roughly half of members are cadets, i.e.
+ * minors) are dropped at parse and never stored.
+ */
+const KEPT_CONTACT_TYPES = new Set(['EMAIL', 'CADET PARENT EMAIL'])
+
+export function keepMbrContactRow(row: Record<string, unknown>): boolean {
+  const t = row['Type']
+  return typeof t === 'string' && KEPT_CONTACT_TYPES.has(t.trim().toUpperCase())
 }
 
 export const TABLES: TableSpec[] = [
@@ -85,6 +104,7 @@ export const TABLES: TableSpec[] = [
       Contact: 'string',
       DoNotContact: 'bool',
     },
+    rowFilter: keepMbrContactRow,
   },
   {
     file: 'DutyPosition.txt',

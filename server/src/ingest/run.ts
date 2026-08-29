@@ -14,12 +14,15 @@ import { DOWNLOAD_DATE_FILE, extractRegistryFiles } from './zip.js'
 import { buildOrgClosure, type OrgTreeResult } from './orgTree.js'
 import {
   INCOMING_SUFFIX,
+  checkDownloadDateGate,
   checkRequiredTables,
   checkShrinkGuard,
   dropIncomingTables,
   getPreviousCounts,
+  getPreviousDownloadDate,
   loadParsedTable,
   rebuildOrgClosure,
+  skipEmptyOptionalTable,
   swapIncomingTables,
   type IngestLog,
 } from './load.js'
@@ -42,6 +45,8 @@ export interface FileStat {
   rows: number
   droppedColumns: string[]
   rejects: number
+  /** Rows removed by the table's rowFilter (PII minimization), never stored. */
+  droppedRows: number
 }
 
 export interface IngestResult {
@@ -83,6 +88,7 @@ function fileStatsOf(parsed: readonly ParsedTable[]): FileStat[] {
     rows: p.rows.length,
     droppedColumns: p.dropped.columns,
     rejects: p.dropped.rejects,
+    droppedRows: p.droppedRows,
   }))
 }
 
@@ -107,7 +113,10 @@ function deriveOrgTree(parsedByTable: ReadonlyMap<string, ParsedTable>): OrgTree
     orgid === null ? [] : [{ orgid, nextLevel: nextLevels[i] ?? null }],
   )
   const homeOrgids = columnValues(members, 'orgid').filter((v): v is number => v !== null)
-  return buildOrgClosure(orgs, homeOrgids, config.ANCHOR_ORGID)
+  // Compose passes ANCHOR_ORGID through as an empty string when unset, which
+  // zod coerces to 0; 0 is never a real orgid, so treat it as no override.
+  const anchorOverride = config.ANCHOR_ORGID ? config.ANCHOR_ORGID : undefined
+  return buildOrgClosure(orgs, homeOrgids, anchorOverride)
 }
 
 async function insertRunRow(
@@ -160,12 +169,21 @@ export async function ingestZip(
     const buf = files.get(spec.file)
     if (!buf) continue
     const parsed = parseCsvTable(spec, buf)
+    if (skipEmptyOptionalTable(spec, parsed.rows.length)) {
+      log.warn(
+        `ingest: ${spec.file} is present but empty; treating it as absent so the previous ${spec.table} rows survive`,
+      )
+      continue
+    }
     parsedByTable.set(parsed.table, parsed)
     if (parsed.dropped.columns.length > 0) {
       log.info(`ingest: ${spec.file} dropped columns ${parsed.dropped.columns.join(', ')}`)
     }
     if (parsed.dropped.rejects > 0) {
       log.warn(`ingest: ${spec.file} counted ${parsed.dropped.rejects} rejects`)
+    }
+    if (parsed.droppedRows > 0) {
+      log.info(`ingest: ${spec.file} row filter dropped ${parsed.droppedRows} rows (never stored)`)
     }
   }
   const downloadBuf = files.get(DOWNLOAD_DATE_FILE)
@@ -179,20 +197,31 @@ export async function ingestZip(
     skippedEntries: skipped,
   }
 
+  if (downloadDate === null) {
+    log.warn('ingest: DownLoadDate.txt missing or unparseable; the download-date regression gate is skipped')
+  }
+
   if (opts.dryRun) {
     const required = checkRequiredTables(parsedByTable)
     if (!required.ok) return { ...base, ok: false, runId: null, anchorOrgid: null, error: required.reason }
     const client = await pool.connect()
     let shrink: ReturnType<typeof checkShrinkGuard>
+    let dateGate: ReturnType<typeof checkDownloadDateGate>
     let tree: OrgTreeResult
     try {
       const newCounts = new Map(parsedList.map(p => [p.table, p.rows.length]))
       shrink = checkShrinkGuard(newCounts, await getPreviousCounts(client), opts.force ?? false)
+      dateGate = checkDownloadDateGate(
+        downloadDate,
+        await getPreviousDownloadDate(client),
+        opts.force ?? false,
+      )
       tree = deriveOrgTree(parsedByTable)
     } finally {
       client.release()
     }
     if (!shrink.ok) return { ...base, ok: false, runId: null, anchorOrgid: null, error: shrink.reason }
+    if (!dateGate.ok) return { ...base, ok: false, runId: null, anchorOrgid: null, error: dateGate.reason }
     log.info(`ingest: dry run ok, anchor ${tree.anchorOrgid}`)
     return { ...base, ok: true, runId: null, anchorOrgid: tree.anchorOrgid, error: null }
   }
@@ -218,6 +247,16 @@ export async function ingestZip(
         log.error(`ingest: aborted: ${shrink.reason}`)
         return { ...base, ok: false, runId, anchorOrgid: null, error: shrink.reason }
       }
+      const dateGate = checkDownloadDateGate(
+        downloadDate,
+        await getPreviousDownloadDate(client),
+        opts.force ?? false,
+      )
+      if (!dateGate.ok) {
+        await finishRunRow(client, runId, { status: 'aborted', error: dateGate.reason, downloadDate, fileStats, skippedEntries: skipped })
+        log.error(`ingest: aborted: ${dateGate.reason}`)
+        return { ...base, ok: false, runId, anchorOrgid: null, error: dateGate.reason }
+      }
 
       const tree = deriveOrgTree(parsedByTable)
       log.info(`ingest: anchor org ${tree.anchorOrgid}, subtree of ${tree.subtreeOrgids.size} orgs`)
@@ -229,13 +268,16 @@ export async function ingestZip(
       try {
         await swapIncomingTables(client, log)
         await rebuildOrgClosure(client, tree.closureRows)
+        // Same transaction as the swap: run status and the dataset flip
+        // atomically, so a crash here can never leave a live dataset whose
+        // run row still says 'running'.
+        await finishRunRow(client, runId, { status: 'succeeded', error: null, downloadDate, fileStats, skippedEntries: skipped })
         await client.query('COMMIT')
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {})
         throw err
       }
 
-      await finishRunRow(client, runId, { status: 'succeeded', error: null, downloadDate, fileStats, skippedEntries: skipped })
       log.info(`ingest: run ${runId} succeeded (${fileStats.reduce((n, f) => n + f.rows, 0)} rows)`)
       return { ...base, ok: true, runId, anchorOrgid: tree.anchorOrgid, error: null }
     } catch (err) {
@@ -271,14 +313,25 @@ export async function ingestAdoptionCsvs(
   assertIngestAllowed(opts.source)
 
   const parsedList: ParsedTable[] = []
+  let emptySkipped = 0
   for (const spec of ADOPTION_TABLES) {
     const buf = buffers.get(spec.file)
     if (!buf) continue
-    parsedList.push(parseCsvTable(spec, buf))
+    const parsed = parseCsvTable(spec, buf)
+    if (skipEmptyOptionalTable(spec, parsed.rows.length)) {
+      emptySkipped++
+      log.warn(
+        `ingest: ${spec.file} is present but empty; treating it as absent so the previous ${spec.table} rows survive`,
+      )
+      continue
+    }
+    parsedList.push(parsed)
   }
   if (parsedList.length === 0) {
     throw new Error(
-      `adoption ingest: no recognized files; expected ${ADOPTION_TABLES.map(t => t.file).join(' or ')}`,
+      emptySkipped > 0
+        ? 'adoption ingest: every provided file was empty; nothing to stage'
+        : `adoption ingest: no recognized files; expected ${ADOPTION_TABLES.map(t => t.file).join(' or ')}`,
     )
   }
   const fileStats = fileStatsOf(parsedList)
@@ -294,12 +347,13 @@ export async function ingestAdoptionCsvs(
       await client.query('BEGIN')
       try {
         await swapIncomingTables(client, log)
+        // Same transaction as the swap; see ingestZip.
+        await finishRunRow(client, runId, { status: 'succeeded', error: null, downloadDate: null, fileStats, skippedEntries: [] })
         await client.query('COMMIT')
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {})
         throw err
       }
-      await finishRunRow(client, runId, { status: 'succeeded', error: null, downloadDate: null, fileStats, skippedEntries: [] })
       log.info(`ingest: adoption run ${runId} succeeded`)
       return { ok: true, runId, downloadDate: null, anchorOrgid: null, fileStats, skippedEntries: [], error: null }
     } catch (err) {
