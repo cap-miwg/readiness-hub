@@ -6,6 +6,7 @@ const schema = z.object({
   DATABASE_URL: z.string().default('postgres://readiness:readiness@localhost:5432/readiness'),
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 chars'),
   AUTH_MODE: z.enum(['dev', 'google']).default('dev'),
+  APP_NAME: z.string().default('Readiness Hub'),
   BASE_URL: z.string().default('http://localhost:8080'),
   GOOGLE_CLIENT_ID: z.string().default(''),
   GOOGLE_CLIENT_SECRET: z.string().default(''),

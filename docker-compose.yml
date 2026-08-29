@@ -27,6 +27,7 @@ services:
       DATABASE_URL: postgres://readiness:${DB_PASSWORD}@db:5432/readiness
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       AUTH_MODE: ${AUTH_MODE:-dev}
+      APP_NAME: ${APP_NAME:-Readiness Hub}
       BASE_URL: ${BASE_URL:-http://localhost:8080}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
