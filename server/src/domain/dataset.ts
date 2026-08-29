@@ -122,6 +122,7 @@ export interface CadetAchvAprRow {
   status: string // APR | PENDING | ...
   awardNo: string | null
   dateMod: Date | null
+  dateCreated: Date | null
 }
 
 export interface CadetAchvFullReportRow {

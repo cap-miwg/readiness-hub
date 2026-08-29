@@ -85,12 +85,10 @@ export function getApprovedAchievements(dataset: Dataset, capid: number): number
 }
 
 /**
- * Approval date of one achievement: the APR row's DateMod
- * (ServicesCadetDataService.html:64-69). When that date is the null sentinel,
- * fall back to CadetAchvFullReport.AprDate matched by achievement name, as
- * the v1 cadet profile does (ComponentsCadetComponents.html:374-408). v1
- * prefers the approval row's DateCreated there; v2 does not ingest
- * DateCreated (see ingest/tables.ts), so DateMod is the primary source.
+ * Approval date of one achievement: the APR row's DateCreated, then DateMod
+ * (v1 prefers DateCreated: ComponentsCadetComponents.html:384-390,
+ * ServicesCadetDataService.html:64-69). When both are the null sentinel,
+ * fall back to CadetAchvFullReport.AprDate matched by achievement name.
  */
 export function resolveApprovalDate(
   dataset: Dataset,
@@ -100,6 +98,7 @@ export function resolveApprovalDate(
   const apr = (dataset.cadetAchvAprsByCapid.get(capid) ?? []).find(
     a => a.cadetAchvId === achievementId && a.status === 'APR',
   )
+  if (apr?.dateCreated) return apr.dateCreated
   if (apr?.dateMod) return apr.dateMod
   const name = CADET_ACHIEVEMENT_NAMES.get(achievementId)?.toLowerCase()
   if (name) {

@@ -8,20 +8,12 @@
  * NHQ download blackout.
  */
 import { createHash } from 'node:crypto'
-// @ts-ignore -- node-cron 3.x ships no declarations; @types/node-cron is a
-// devDependency for the package.json owner to add, after which this shim can go.
-import cronUntyped from 'node-cron'
+import cron from 'node-cron'
 import type { FastifyBaseLogger } from 'fastify'
 import { config } from '../config.js'
 import { pool } from '../db/pool.js'
 import { fetchCapwatchZip } from './fetcher.js'
 import { ingestZip, type IngestLog } from './run.js'
-
-interface CronApi {
-  validate(expression: string): boolean
-  schedule(expression: string, task: () => void, options?: { timezone?: string }): unknown
-}
-const cron = cronUntyped as CronApi
 
 export const AUTH_FAILURE_KEY = 'ingest.auth_failure'
 export const MAX_TRANSIENT_RETRIES = 2

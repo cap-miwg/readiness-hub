@@ -157,16 +157,18 @@ describe('senior level constants', () => {
 })
 
 describe('promotion rules: corrected vs v1 (CAPR 35-5, MIGRATION-V1.md)', () => {
-  it('diffs are exactly the five documented rows', () => {
+  it('diffs are exactly the six documented rows', () => {
     // Removed: Lt Col -> Col (special appointment, CAPR 35-5 section 3.2).
     expect(Object.keys(v1PromotionRules).filter(k => !(k in PROMOTION_RULES))).toEqual(['LT COL'])
     expect(Object.keys(PROMOTION_RULES).filter(k => !(k in v1PromotionRules))).toEqual([])
 
-    const unchanged = ['2D LT', '1ST LT', 'FO', 'TFO', 'SFO', 'SSGT', 'TSGT', 'SMSGT']
+    const unchanged = ['2D LT', '1ST LT', 'FO', 'TFO', 'SSGT', 'TSGT', 'SMSGT']
     for (const key of unchanged) {
       expect(PROMOTION_RULES[key], `rule ${key} should be unchanged`).toEqual(v1PromotionRules[key])
     }
 
+    // SFO: fig 2 says Captain needs 30 months as 1st Lt or SFO (v1 had 0).
+    expect(PROMOTION_RULES['SFO']).toEqual({ ...v1PromotionRules['SFO'], tigMonths: 30 })
     // CAPT: fig 2 says 4 years (v1 had 36 months).
     expect(PROMOTION_RULES['CAPT']).toEqual({ ...v1PromotionRules['CAPT'], tigMonths: 48 })
     // MAJ: fig 2 says 5 years (v1 had 48 months).

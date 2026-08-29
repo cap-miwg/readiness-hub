@@ -15,6 +15,8 @@ export interface MeResponse {
 
 export interface MetaResponse {
   appVersion: string
+  /** Deployment-configurable display name; defaults to "Readiness Hub". */
+  appName: string
   /** Last successful ingest, ISO timestamp, null before first ingest. */
   lastIngestAt: string | null
   /** CAPWATCH DownLoadDate of the current dataset (extract generation time). */

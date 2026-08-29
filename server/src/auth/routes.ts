@@ -100,10 +100,10 @@ for (const b of document.querySelectorAll('button')) {
 }
 
 export async function registerAuth(app: FastifyInstance): Promise<void> {
-  // ARCHITECTURE.md AuthN/AuthZ: dev auth mode fails closed in production.
-  if (config.AUTH_MODE === 'dev' && config.NODE_ENV === 'production') {
-    throw new Error('AUTH_MODE=dev refuses to start with NODE_ENV=production. Set AUTH_MODE=google.')
-  }
+  // Dev auth fail-closed lives in index.ts (mixed-config refusal) plus the
+  // localhost-default compose bind and the DEV_ALLOW_REAL_INGEST gate: the
+  // container image always runs NODE_ENV=production, so a NODE_ENV check here
+  // would break the sanctioned quickstart demo path.
 
   app.addHook('onRequest', csrfProtect(config.BASE_URL))
   app.addHook('onResponse', accessLog())

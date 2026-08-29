@@ -28,7 +28,11 @@ async function main() {
     limits: { fileSize: 250 * 1024 * 1024, files: 1 },
   })
 
-  app.get('/healthz', async () => ({ ok: true }))
+  app.get('/healthz', async () => {
+    const { getIngestHealth } = await import('./ingest/scheduler.js')
+    const ingest = await getIngestHealth().catch(() => null)
+    return { ok: true, ingest }
+  })
 
   await migrate(msg => app.log.info(msg))
 

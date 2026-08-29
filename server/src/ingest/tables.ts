@@ -191,6 +191,9 @@ export const TABLES: TableSpec[] = [
       Status: 'string',
       AwardNo: 'string',
       DateMod: 'date',
+      // v1 prefers DateCreated over DateMod as the approval date
+      // (ComponentsCadetComponents.html:384-390); TIG depends on it.
+      DateCreated: 'date',
     },
   },
   {

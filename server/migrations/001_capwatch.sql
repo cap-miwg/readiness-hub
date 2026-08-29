@@ -136,7 +136,8 @@ CREATE TABLE cadet_achv_aprs (
   cadet_achv_id integer,
   status text,
   award_no text,
-  date_mod date
+  date_mod date,
+  date_created date
 );
 CREATE INDEX cadet_achv_aprs_capid_idx ON cadet_achv_aprs (capid);
 

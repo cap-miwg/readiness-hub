@@ -3,7 +3,9 @@
   "version": "2.0.0-dev",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -26,6 +28,7 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.15.17",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.14",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",

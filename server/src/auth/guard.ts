@@ -42,6 +42,8 @@ export interface CsrfInput {
   csrfHeader: string | undefined
   /** host (hostname:port) of the deployment BASE_URL. */
   baseHost: string
+  /** Host header of the request itself, if any. */
+  requestHost?: string | undefined
 }
 
 export type CsrfResult = { ok: true } | { ok: false; reason: string }
@@ -69,7 +71,11 @@ export function csrfDecision(input: CsrfInput): CsrfResult {
     return { ok: false, reason: 'missing Origin and Referer on a state-changing request' }
   }
   const sourceHost = hostOf(source)
-  if (sourceHost === null || sourceHost !== input.baseHost) {
+  // Same-origin means the configured BASE_URL host, or the host the request
+  // itself arrived on (covers the Vite dev proxy and direct-port access
+  // behind a reverse proxy; the browser sets Origin, not the attacker).
+  const allowed = sourceHost !== null && (sourceHost === input.baseHost || sourceHost === input.requestHost)
+  if (!allowed) {
     return { ok: false, reason: 'cross-origin request rejected' }
   }
   if (input.path === '/api/admin' || input.path.startsWith('/api/admin/')) {
@@ -92,6 +98,7 @@ export function csrfProtect(baseUrl: string) {
       refererHeader: req.headers.referer,
       csrfHeader: Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader,
       baseHost,
+      requestHost: req.headers.host,
     })
     if (!result.ok) {
       reply.code(403).send({ error: result.reason })

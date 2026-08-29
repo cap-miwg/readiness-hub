@@ -1,6 +1,8 @@
 # Readiness Hub v2. Build context is the repo root.
 
 FROM node:22-alpine AS web-build
+ARG APP_VERSION=2.0.0-dev
+ENV VITE_APP_VERSION=$APP_VERSION
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci

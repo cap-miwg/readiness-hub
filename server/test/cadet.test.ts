@@ -96,7 +96,7 @@ function rank(capid: number, rankName: string, rankDate: Date): CadetRankRow {
 }
 
 function apr(capid: number, cadetAchvId: number, dateMod: Date | null): CadetAchvAprRow {
-  return { capid, cadetAchvId, status: 'APR', awardNo: null, dateMod }
+  return { capid, cadetAchvId, status: 'APR', awardNo: null, dateMod, dateCreated: null }
 }
 
 function fullReport(capid: number, achvName: string, aprDate: Date): CadetAchvFullReportRow {

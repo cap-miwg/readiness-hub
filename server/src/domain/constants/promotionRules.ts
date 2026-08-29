@@ -43,7 +43,8 @@ export const PROMOTION_RULES: Readonly<Record<string, PromotionRule>> = {
   // CAPR 35-5 fig 10 (flight officers, unchanged from v1).
   FO: { next: 'TFO', tigMonths: 18, level: 2 },
   TFO: { next: 'SFO', tigMonths: 30, level: 3 },
-  SFO: { next: 'Capt', tigMonths: 0, level: 3 },
+  // CAPR 35-5 fig 2: Captain requires 30 months as 1st Lt or SFO (v1 had 0).
+  SFO: { next: 'Capt', tigMonths: 30, level: 3 },
   // CAPR 35-5 figs 8/9 (NCOs, unchanged from v1 except the MSGT label below).
   SSGT: { next: 'TSgt', tigMonths: 12, level: 2 },
   TSGT: { next: 'MSgt', tigMonths: 24, level: 3, dutyReq: 'Unit NCO', dutyMonths: 24 },
