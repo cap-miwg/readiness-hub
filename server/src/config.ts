@@ -1,0 +1,41 @@
+import { z } from 'zod'
+
+const schema = z.object({
+  NODE_ENV: z.string().default('development'),
+  PORT: z.coerce.number().default(8080),
+  DATABASE_URL: z.string().default('postgres://readiness:readiness@localhost:5432/readiness'),
+  SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 chars'),
+  AUTH_MODE: z.enum(['dev', 'google']).default('dev'),
+  BASE_URL: z.string().default('http://localhost:8080'),
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
+  ALLOWED_DOMAINS: z.string().default(''),
+  ADMIN_EMAILS: z.string().default(''),
+  CAPWATCH_ORGID: z.string().default(''),
+  ESERVICES_USERNAME: z.string().default(''),
+  ESERVICES_PASSWORD: z.string().default(''),
+  CAPWATCH_FETCH_CRON: z.string().default(''),
+  TZ: z.string().default('America/New_York'),
+})
+
+export type Config = z.infer<typeof schema> & {
+  allowedDomains: string[]
+  adminEmails: string[]
+}
+
+function load(): Config {
+  const parsed = schema.safeParse(process.env)
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
+    throw new Error(`Invalid configuration: ${issues}`)
+  }
+  const csv = (s: string) =>
+    s.split(',').map(v => v.trim().toLowerCase()).filter(Boolean)
+  return {
+    ...parsed.data,
+    allowedDomains: csv(parsed.data.ALLOWED_DOMAINS),
+    adminEmails: csv(parsed.data.ADMIN_EMAILS),
+  }
+}
+
+export const config = load()
