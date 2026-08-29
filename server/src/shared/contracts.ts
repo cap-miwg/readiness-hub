@@ -22,3 +22,18 @@ export interface MetaResponse {
   memberCount: number
   orgCount: number
 }
+
+/** One node of the anchor-subtree org tree served by /api/orgs. */
+export interface OrgTreeNode {
+  orgid: number
+  name: string
+  unit: string
+  type: string
+  scope: string
+  children: OrgTreeNode[]
+}
+
+export interface OrgsResponse {
+  anchorOrgid: number
+  tree: OrgTreeNode
+}
