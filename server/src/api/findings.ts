@@ -30,6 +30,7 @@ import type {
 } from '../shared/contracts.js'
 import { resolveOrgScope } from './orgs.js'
 import { loadComputedOrg } from './scope.js'
+import { isoDate } from './util.js'
 
 // --- Pure: finding sources and ranking ---
 
@@ -83,6 +84,15 @@ export function scopeSearchOf(orgid: number, descendants: boolean): string {
   return `?orgid=${orgid}${descendants ? '&descendants=1' : ''}`
 }
 
+/**
+ * Section-open param appended to Unit Overview deep links so the link lands
+ * on the section it names instead of the top of the page. Contract agreed
+ * with the web layer: param name 'section', values are the Unit Overview
+ * Section ids (recruiting|es|participation|logistics|workspace|cadet-program|
+ * pd|personnel). Every ES-related finding opens the es section.
+ */
+export const ES_SECTION_PARAM = '&section=es'
+
 function plural(n: number, singular: string, pluralForm?: string): string {
   return n === 1 ? singular : (pluralForm ?? `${singular}s`)
 }
@@ -135,7 +145,7 @@ export function rankFindings(
       id: 'es-quals-expired',
       category: 'action',
       text: `${expiredTotal} Emergency Services ${plural(expiredTotal, 'qualification')} expired in the last 60 days: ${qualBreakdownOf(sources.expiredQuals)}.`,
-      href: `/unit${scope}`,
+      href: `/unit${scope}${ES_SECTION_PARAM}`,
       actionLabel: 'Review expirations',
       magnitude: expiredTotal,
     })
@@ -145,7 +155,7 @@ export function rankFindings(
       id: `spof-${slugOf(position)}`,
       category: 'action',
       text: `${position} rests on one qualified member.`,
-      href: `/unit${scope}`,
+      href: `/unit${scope}${ES_SECTION_PARAM}`,
       actionLabel: 'View position',
       magnitude: 1,
     })
@@ -196,7 +206,7 @@ export function rankFindings(
       id: 'es-quals-expiring-30',
       category: 'watch',
       text: `${n} Emergency Services ${plural(n, 'qualification expires', 'qualifications expire')} within 30 days.`,
-      href: `/unit${scope}`,
+      href: `/unit${scope}${ES_SECTION_PARAM}`,
       actionLabel: 'Review expirations',
       magnitude: n,
     })
@@ -259,6 +269,88 @@ export function rankFindings(
     ...rest,
     rank: i + 1,
   }))
+}
+
+// --- Pure: qualification counting on a deduped basis ---
+
+/** One dashboard-view qualification row for one member, straight off the jsonb. */
+export interface QualStatusRow {
+  capid: number
+  /** Qualification display name (e.g. "GTM2 - Ground Team Member Level 2"). */
+  name: string
+  /** 'Active' | 'Training' | 'Expired' (other statuses are not fetched). */
+  status: string
+  /** Expiration calendar date, ISO yyyy-mm-dd; null when open-ended. */
+  expiration: string | null
+}
+
+/** Lower wins the (capid, qual) slot: Training/Active suppress Expired. */
+const QUAL_STATUS_PRIORITY: Readonly<Record<string, number>> = {
+  ACTIVE: 0,
+  TRAINING: 1,
+  EXPIRED: 2,
+}
+
+/** asOf shifted by whole days, as an ISO calendar day for string comparison. */
+function shiftedIsoDay(asOf: Date, days: number): string {
+  const d = new Date(asOf)
+  d.setDate(d.getDate() + days)
+  return isoDate(d) ?? ''
+}
+
+export interface QualFindingCounts {
+  expiredQuals: ExpiredQualCount[]
+  qualsExpiring30: number
+}
+
+/**
+ * Expired/expiring counts over a DEDUPED basis: per (capid, qual name) only
+ * the best-status row counts (Active beats Training beats Expired; ties keep
+ * the latest expiration). The stored es_summary dedupes seniors but not
+ * cadets, so counting raw rows double-counted every cadet who held both a
+ * Training and an Expired row for the same qualification.
+ */
+export function qualFindingCountsOf(
+  rows: readonly QualStatusRow[],
+  asOf: Date,
+): QualFindingCounts {
+  const best = new Map<string, QualStatusRow>()
+  for (const row of rows) {
+    const key = `${row.capid}|${row.name}`
+    const current = best.get(key)
+    if (current === undefined) {
+      best.set(key, row)
+      continue
+    }
+    const rowPriority = QUAL_STATUS_PRIORITY[row.status.toUpperCase()] ?? 9
+    const currentPriority = QUAL_STATUS_PRIORITY[current.status.toUpperCase()] ?? 9
+    if (
+      rowPriority < currentPriority ||
+      (rowPriority === currentPriority && (row.expiration ?? '') > (current.expiration ?? ''))
+    ) {
+      best.set(key, row)
+    }
+  }
+
+  const day = isoDate(asOf) ?? ''
+  const day60Back = shiftedIsoDay(asOf, -60)
+  const day30Out = shiftedIsoDay(asOf, 30)
+  const expiredByName = new Map<string, number>()
+  let qualsExpiring30 = 0
+  for (const row of best.values()) {
+    if (row.expiration === null) continue
+    const status = row.status.toUpperCase()
+    if (status === 'EXPIRED' && row.expiration < day && row.expiration >= day60Back) {
+      expiredByName.set(row.name, (expiredByName.get(row.name) ?? 0) + 1)
+    }
+    if (status === 'ACTIVE' && row.expiration >= day && row.expiration <= day30Out) {
+      qualsExpiring30++
+    }
+  }
+  const expiredQuals = [...expiredByName.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+  return { expiredQuals, qualsExpiring30 }
 }
 
 // --- Pure: cadet fact counting (shared fetch for three findings) ---
@@ -370,9 +462,11 @@ export function strengthDeltaOf(orgStats: Jsonified<UnitOrgStatsMetrics> | null)
 
 // --- DB loaders ---
 
-interface DbQualCountRow {
+interface DbQualStatusRow {
+  capid: number
   name: string | null
-  n: number
+  status: string | null
+  expiration: string | null
 }
 
 interface DbMembershipRow {
@@ -391,67 +485,64 @@ interface DbCadetFactsRow {
   hfz_valid_until: Date | null
 }
 
-function isoDay(asOf: Date): string {
-  return asOf.toISOString().slice(0, 10)
-}
-
-/** Aggregate every finding source for the scope in a handful of queries. */
+/**
+ * Aggregate every finding source for the scope in a handful of queries.
+ * "Today" is the app-local calendar day derived once from asOf (api/util.ts
+ * isoDate) and passed into every date-window query as a parameter; nothing
+ * here leans on the database session's CURRENT_DATE or on UTC, so the day
+ * boundary matches the TZ the app runs in.
+ */
 export async function loadFindingSources(
   scopeOrgids: readonly number[],
   asOf: Date,
 ): Promise<Omit<FindingSources, 'spofPositions'>> {
-  const day = isoDay(asOf)
-  const [expiredQualsRes, membershipRes, expiring30Res, cadetRes, approvalRes] =
-    await Promise.all([
-      pool.query<DbQualCountRow>(
-        `SELECT q->>'name' AS name, count(*)::int AS n
-         FROM computed_member m
-         CROSS JOIN LATERAL jsonb_array_elements(m.es_summary->'qualifications') q
-         WHERE m.orgid = ANY($1::int[])
-           AND q->>'status' = 'Expired'
-           AND (q->>'expiration') IS NOT NULL
-           AND (q->>'expiration')::date < $2::date
-           AND (q->>'expiration')::date >= $2::date - 60
-         GROUP BY 1 ORDER BY n DESC, name`,
-        [scopeOrgids, day],
-      ),
-      pool.query<DbMembershipRow>(
-        `SELECT
-           count(*) FILTER (WHERE expiration < $2::date)::int AS expired,
-           count(*) FILTER (WHERE expiration >= $2::date
-                              AND expiration <= $2::date + 30)::int AS in30,
-           count(*) FILTER (WHERE expiration > $2::date + 30
-                              AND expiration <= $2::date + 60)::int AS in60
-         FROM computed_member
-         WHERE orgid = ANY($1::int[]) AND expiration IS NOT NULL`,
-        [scopeOrgids, day],
-      ),
-      pool.query<DbCountRow>(
-        `SELECT count(*)::int AS n
-         FROM computed_member m
-         CROSS JOIN LATERAL jsonb_array_elements(m.es_summary->'qualifications') q
-         WHERE m.orgid = ANY($1::int[])
-           AND q->>'status' = 'Active'
-           AND (q->>'expiration') IS NOT NULL
-           AND (q->>'expiration')::date >= $2::date
-           AND (q->>'expiration')::date <= $2::date + 30`,
-        [scopeOrgids, day],
-      ),
-      pool.query<DbCadetFactsRow>(
-        `SELECT cadet_state_facts, tig_complete_on, hfz_valid_until
-         FROM computed_member
-         WHERE is_cadet_scope AND cadet_state_facts IS NOT NULL
-           AND orgid = ANY($1::int[])`,
-        [scopeOrgids],
-      ),
-      pool.query<DbCountRow>(
-        `SELECT count(DISTINCT c.capid)::int AS n
-         FROM pl_member_path_credit c
-         JOIN computed_member m ON m.capid = c.capid
-         WHERE m.is_senior_scope AND m.orgid = ANY($1::int[]) AND c.status_id = 26`,
-        [scopeOrgids],
-      ),
-    ])
+  const day = isoDate(asOf) ?? asOf.toISOString().slice(0, 10)
+  const [qualRes, membershipRes, cadetRes, approvalRes] = await Promise.all([
+    // Raw dashboard-view qual rows; the dedupe + window counting is pure
+    // (qualFindingCountsOf) so the suppress-Expired rule is unit-tested.
+    pool.query<DbQualStatusRow>(
+      `SELECT m.capid, q->>'name' AS name, q->>'status' AS status,
+              left(q->>'expiration', 10) AS expiration
+       FROM computed_member m
+       CROSS JOIN LATERAL jsonb_array_elements(m.es_summary->'qualifications') q
+       WHERE m.orgid = ANY($1::int[])
+         AND q->>'status' IN ('Active', 'Training', 'Expired')
+         AND coalesce(q->>'name', '') <> ''`,
+      [scopeOrgids],
+    ),
+    pool.query<DbMembershipRow>(
+      `SELECT
+         count(*) FILTER (WHERE expiration < $2::date)::int AS expired,
+         count(*) FILTER (WHERE expiration >= $2::date
+                            AND expiration <= $2::date + 30)::int AS in30,
+         count(*) FILTER (WHERE expiration > $2::date + 30
+                            AND expiration <= $2::date + 60)::int AS in60
+       FROM computed_member
+       WHERE orgid = ANY($1::int[]) AND expiration IS NOT NULL`,
+      [scopeOrgids, day],
+    ),
+    pool.query<DbCadetFactsRow>(
+      `SELECT cadet_state_facts, tig_complete_on, hfz_valid_until
+       FROM computed_member
+       WHERE is_cadet_scope AND cadet_state_facts IS NOT NULL
+         AND orgid = ANY($1::int[])`,
+      [scopeOrgids],
+    ),
+    pool.query<DbCountRow>(
+      `SELECT count(DISTINCT c.capid)::int AS n
+       FROM pl_member_path_credit c
+       JOIN computed_member m ON m.capid = c.capid
+       WHERE m.is_senior_scope AND m.orgid = ANY($1::int[]) AND c.status_id = 26`,
+      [scopeOrgids],
+    ),
+  ])
+
+  const qualRows: QualStatusRow[] = qualRes.rows.flatMap(r =>
+    r.name !== null && r.name !== '' && r.status !== null
+      ? [{ capid: r.capid, name: r.name, status: r.status, expiration: r.expiration }]
+      : [],
+  )
+  const qualCounts = qualFindingCountsOf(qualRows, asOf)
 
   const cadetRows: CadetFactRow[] = cadetRes.rows.map(r => ({
     facts: r.cadet_state_facts as CadetStateFacts,
@@ -462,13 +553,11 @@ export async function loadFindingSources(
   const membership = membershipRes.rows[0] ?? { expired: 0, in30: 0, in60: 0 }
 
   return {
-    expiredQuals: expiredQualsRes.rows
-      .filter(r => r.name !== null && r.name !== '')
-      .map(r => ({ name: r.name as string, count: r.n })),
+    expiredQuals: qualCounts.expiredQuals,
     expiredMemberships: membership.expired,
     membershipsExpiring30: membership.in30,
     membershipsExpiring60: membership.in60,
-    qualsExpiring30: expiring30Res.rows[0]?.n ?? 0,
+    qualsExpiring30: qualCounts.qualsExpiring30,
     ...cadetCounts,
     seniorsAwaitingApproval: approvalRes.rows[0]?.n ?? 0,
   }

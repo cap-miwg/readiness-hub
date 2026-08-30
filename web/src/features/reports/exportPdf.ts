@@ -1,5 +1,6 @@
 import type { jsPDF } from 'jspdf'
 import type { ReportMeta, ReportResult } from '@shared/reportContracts'
+import { formatExtractDay } from '../../components/dates'
 import { formatCell, slugify } from './format'
 
 /** Lazy-load the PDF stack so it stays out of the main bundle. */
@@ -27,6 +28,17 @@ export function orientationFor(reportId: string, columnCount: number): PdfOrient
   return 'portrait'
 }
 
+/**
+ * Extract provenance for the printed page ("As of" is reserved for extract
+ * dates): the CAPWATCH extract day the rows were built from, with the export
+ * day in parentheses.
+ */
+export function pdfProvenanceLine(result: ReportResult, exportedAtIso: string): string {
+  const exported = formatExtractDay(exportedAtIso)
+  if (result.extractDate == null) return `Extract date unknown (exported ${exported})`
+  return `Data as of ${formatExtractDay(result.extractDate)} (exported ${exported})`
+}
+
 function addHeader(doc: jsPDF, title: string, result: ReportResult): number {
   let y = 15
   doc.setFontSize(16)
@@ -40,7 +52,7 @@ function addHeader(doc: jsPDF, title: string, result: ReportResult): number {
   y += 5
   doc.text(`Members in scope: ${result.scope.memberCount}`, 15, y)
   y += 5
-  doc.text(`Generated: ${new Date(result.generatedAt).toLocaleString()}`, 15, y)
+  doc.text(pdfProvenanceLine(result, new Date().toISOString()), 15, y)
   return y + 8
 }
 

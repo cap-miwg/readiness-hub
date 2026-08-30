@@ -1,6 +1,12 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Building2 } from 'lucide-react'
-import type { FindingsResponse, OverviewResponse } from '@shared/contracts'
+import type {
+  CadetsResponse,
+  FindingsResponse,
+  OverviewResponse,
+  SeniorsResponse,
+} from '@shared/contracts'
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { ParticipationResponse } from '@shared/participationContracts'
 import type { LogisticsResponse } from '@shared/logisticsContracts'
@@ -12,7 +18,7 @@ import {
   Spinner,
   VerdictMark,
 } from '../components/ui'
-import { ExpandCollapseAll, Section } from '../components/Section'
+import { ExpandCollapseAll, Section, sectionDomId } from '../components/Section'
 import type { ApiError } from '../api/client'
 import { useOrgScope } from '../lib/urlState'
 import { AdoptionSection, aggregateAdoption } from '../features/overview/AdoptionSection'
@@ -24,17 +30,30 @@ import { RecruitingSection, recruitingStatus } from '../features/overview/Recrui
 import { ratingLabel } from '../features/overview/esShared'
 import { bandWord, FiguresStrip, plural, type BandRating } from '../features/overview/overviewShared'
 import {
+  awaitingApprovalCount,
+  cadetProgramRollup,
+  CadetProgramBody,
+  expirationBuckets,
+  expiringSoonCount,
+  PdBody,
+  PersonnelBody,
+} from '../features/overview/rosterSections'
+import {
   adoptionPath,
+  cadetsPath,
   findingsPath,
   logisticsPath,
   overviewPath,
   participationPath,
+  seniorsPath,
   useAdoption,
+  useCadetsOverview,
   useEffectiveScope,
   useFindings,
   useLogistics,
   useOverview,
   useParticipation,
+  useSeniorsOverview,
 } from '../features/overview/useOverviewData'
 
 /*
@@ -58,9 +77,11 @@ function verdictSentence(findings: FindingsResponse): {
   if (n === 0) {
     return { lead: 'Broadly healthy.', linkText: null, tail: ' Everything reads clean.' }
   }
+  // With action findings the queue link IS the sentence; a "Needs attention"
+  // lead would say "attention" twice in six words.
   const anyAction = findings.findings.some(f => f.category === 'action')
   return {
-    lead: anyAction ? 'Needs attention.' : 'Broadly healthy.',
+    lead: anyAction ? '' : 'Broadly healthy.',
     linkText: `${n} ${plural(n, 'finding needs', 'findings need')} attention`,
     tail: '; everything else reads clean.',
   }
@@ -111,7 +132,7 @@ function Masthead({
             label: 'Members',
             value: overview.totals.members.toLocaleString(),
             testid: 'overview-stat-total-members',
-            ...(typeof overview.strengthDelta12mo === 'number'
+            ...(typeof overview.strengthDelta12mo === 'number' && overview.strengthDelta12mo !== 0
               ? {
                   delta: `${overview.strengthDelta12mo > 0 ? '+' : ''}${overview.strengthDelta12mo} / 12 mo`,
                 }
@@ -207,11 +228,17 @@ function OverviewBody({
   findingsQ,
   participationQ,
   logisticsQ,
+  cadetsQ,
+  seniorsQ,
+  deepLinkSection,
 }: {
   overview: OverviewResponse
   findingsQ: UseQueryResult<FindingsResponse, ApiError>
   participationQ: UseQueryResult<ParticipationResponse, ApiError>
   logisticsQ: UseQueryResult<LogisticsResponse, ApiError>
+  cadetsQ: UseQueryResult<CadetsResponse, ApiError>
+  seniorsQ: UseQueryResult<SeniorsResponse, ApiError>
+  deepLinkSection: string | null
 }) {
   const { setDescendants } = useOrgScope()
   const adoptionQ = useAdoption(overview.orgid, overview.descendants)
@@ -224,6 +251,21 @@ function OverviewBody({
   const adoption = adoptionQ.data ?? null
   const adoptionRate = adoption !== null ? aggregateAdoption(adoption.units).adoptionRate : null
 
+  const nowMs = Date.now()
+  const cadetRollup = cadetsQ.data !== undefined ? cadetProgramRollup(cadetsQ.data.rows, nowMs) : null
+  const pdAwaiting = seniorsQ.data !== undefined ? awaitingApprovalCount(seniorsQ.data.rows) : null
+  const buckets =
+    cadetsQ.data !== undefined && seniorsQ.data !== undefined
+      ? expirationBuckets(
+          [
+            ...cadetsQ.data.rows.map(r => r.expiration),
+            ...seniorsQ.data.rows.map(r => r.expiration),
+          ],
+          nowMs,
+        )
+      : null
+  const expiringSoon = buckets !== null ? expiringSoonCount(buckets) : null
+
   const recruitingTitle =
     overview.viewMode === 'aggregate'
       ? 'Aggregate Recruiting and Retention'
@@ -234,10 +276,22 @@ function OverviewBody({
   const sectionIds = [
     'recruiting',
     'es',
+    'cadet-program',
+    'pd',
+    'personnel',
     'participation',
     'logistics',
     ...(adoption !== null ? ['workspace'] : []),
   ]
+
+  // ?section=<id> deep links (e.g. the ES findings' &section=es) expand the
+  // target Section via forceOpen and bring it into view on arrival.
+  useEffect(() => {
+    if (deepLinkSection === null) return
+    document
+      .getElementById(sectionDomId(SECTION_PAGE, deepLinkSection))
+      ?.scrollIntoView({ block: 'start' })
+  }, [deepLinkSection])
 
   return (
     <div>
@@ -288,6 +342,7 @@ function OverviewBody({
         id="recruiting"
         title={recruitingTitle}
         defaultOpen={recruiting.alerts.length > 0}
+        forceOpen={deepLinkSection === 'recruiting'}
         status={
           <>
             {recruiting.score !== null && <span className="font-semibold">{recruiting.score}</span>}
@@ -315,6 +370,7 @@ function OverviewBody({
         page={SECTION_PAGE}
         id="es"
         title="Emergency Services"
+        forceOpen={deepLinkSection === 'es'}
         status={
           <>
             <span className="font-semibold">{es.score}</span>
@@ -335,8 +391,120 @@ function OverviewBody({
 
       <Section
         page={SECTION_PAGE}
+        id="cadet-program"
+        title="Cadet Program"
+        forceOpen={deepLinkSection === 'cadet-program'}
+        status={
+          cadetRollup === null ? undefined : (
+            <>
+              <span className="font-semibold">{cadetRollup.ready}</span>
+              <span>ready</span>
+              {cadetRollup.hfzExpired > 0 ? (
+                <VerdictMark kind="watch" label={`${cadetRollup.hfzExpired} blocked`} />
+              ) : (
+                <NoAlerts />
+              )}
+            </>
+          )
+        }
+      >
+        {cadetsQ.isPending && <Spinner label="Loading the cadet roster..." />}
+        {cadetsQ.error !== null && (
+          <Banner kind="warn">
+            The cadet roster could not be loaded from{' '}
+            {cadetsPath(overview.orgid, overview.descendants)}: {cadetsQ.error.message}
+          </Banner>
+        )}
+        {cadetsQ.data !== undefined && cadetRollup !== null && (
+          <CadetProgramBody
+            cadets={cadetsQ.data}
+            rollup={cadetRollup}
+            orgid={overview.orgid}
+            descendants={overview.descendants}
+          />
+        )}
+      </Section>
+
+      <Section
+        page={SECTION_PAGE}
+        id="pd"
+        title="Professional Development"
+        forceOpen={deepLinkSection === 'pd'}
+        status={
+          pdAwaiting === null ? undefined : (
+            <>
+              {pdAwaiting > 0 && (
+                <span>
+                  <span className="font-semibold">{pdAwaiting}</span> awaiting approval
+                </span>
+              )}
+              <span>Steady</span>
+              <NoAlerts />
+            </>
+          )
+        }
+      >
+        {seniorsQ.isPending && <Spinner label="Loading the senior roster..." />}
+        {seniorsQ.error !== null && (
+          <Banner kind="warn">
+            The senior roster could not be loaded from{' '}
+            {seniorsPath(overview.orgid, overview.descendants)}: {seniorsQ.error.message}
+          </Banner>
+        )}
+        {seniorsQ.data !== undefined && pdAwaiting !== null && (
+          <PdBody
+            seniors={seniorsQ.data}
+            awaiting={pdAwaiting}
+            orgid={overview.orgid}
+            descendants={overview.descendants}
+          />
+        )}
+      </Section>
+
+      <Section
+        page={SECTION_PAGE}
+        id="personnel"
+        title="Personnel and Expirations"
+        forceOpen={deepLinkSection === 'personnel'}
+        status={
+          expiringSoon === null ? undefined : (
+            <>
+              <span className="font-semibold">{expiringSoon}</span>
+              <span>expiring soon</span>
+              {expiringSoon > 0 ? <VerdictMark kind="watch" label="Watch" /> : <NoAlerts />}
+            </>
+          )
+        }
+      >
+        {(cadetsQ.isPending || seniorsQ.isPending) && (
+          <Spinner label="Loading membership expirations..." />
+        )}
+        {cadetsQ.error !== null && (
+          <Banner kind="warn">
+            The cadet roster could not be loaded from{' '}
+            {cadetsPath(overview.orgid, overview.descendants)}: {cadetsQ.error.message}
+          </Banner>
+        )}
+        {seniorsQ.error !== null && (
+          <Banner kind="warn">
+            The senior roster could not be loaded from{' '}
+            {seniorsPath(overview.orgid, overview.descendants)}: {seniorsQ.error.message}
+          </Banner>
+        )}
+        {buckets !== null && (
+          <PersonnelBody
+            buckets={buckets}
+            orgid={overview.orgid}
+            descendants={overview.descendants}
+          />
+        )}
+      </Section>
+
+      <Section
+        page={SECTION_PAGE}
         id="participation"
         title="Participation"
+        forceOpen={deepLinkSection === 'participation'}
         status={
           pStatus === null ? undefined : !pStatus.recorded ? (
             <VerdictMark kind="notRecorded" label={<span className="text-ink2">Not recorded</span>} />
@@ -370,6 +538,7 @@ function OverviewBody({
         page={SECTION_PAGE}
         id="logistics"
         title="Logistics"
+        forceOpen={deepLinkSection === 'logistics'}
         status={
           lStatus === null ? undefined : !lStatus.recorded ? (
             <VerdictMark kind="notRecorded" label={<span className="text-ink2">Not recorded</span>} />
@@ -403,6 +572,7 @@ function OverviewBody({
           page={SECTION_PAGE}
           id="workspace"
           title="Workspace Adoption"
+          forceOpen={deepLinkSection === 'workspace'}
           status={
             <>
               {adoptionRate !== null && <span className="font-semibold">{adoptionRate}%</span>}
@@ -425,11 +595,17 @@ function OverviewBody({
 
 export default function UnitOverview() {
   const { orgid, descendants, resolving, orgsError } = useEffectiveScope()
+  const [searchParams] = useSearchParams()
+  const deepLinkSection = searchParams.get('section')
   // Parallel queries: the masthead, queue, and sections stream in together.
+  // Cadet and senior rosters load on mount too, so the collapsed Cadet
+  // Program / Professional Development / Personnel headers carry real status.
   const overviewQ = useOverview(orgid, descendants)
   const findingsQ = useFindings(orgid, descendants)
   const participationQ = useParticipation(orgid, descendants)
   const logisticsQ = useLogistics(orgid, descendants)
+  const cadetsQ = useCadetsOverview(orgid, descendants)
+  const seniorsQ = useSeniorsOverview(orgid, descendants)
 
   return (
     <div>
@@ -485,6 +661,9 @@ export default function UnitOverview() {
           findingsQ={findingsQ}
           participationQ={participationQ}
           logisticsQ={logisticsQ}
+          cadetsQ={cadetsQ}
+          seniorsQ={seniorsQ}
+          deepLinkSection={deepLinkSection}
         />
       )}
     </div>

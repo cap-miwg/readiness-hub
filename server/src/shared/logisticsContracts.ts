@@ -24,13 +24,20 @@ export interface VehicleRow {
   /** Vehicle type (veh_type), e.g. van/sedan, served verbatim. */
   type: string | null
   roadable: boolean | null
-  /** Odometer reading, digits parsed defensively; null when unparseable. */
+  /** Odometer reading, parsed defensively; null when unparseable. */
   odometer: number | null
-  /** Most recent usage_date on record, ISO yyyy-mm-dd. */
+  /**
+   * Most recent usage MONTH on record as 'yyyy-mm' (vehicles_usage rows are
+   * monthly summaries dated the 1st, so day precision would be a lie). The
+   * web renders the month, e.g. 'Jul 2026'.
+   */
   lastUsedOn: string | null
   /** Most recent date_of_maint on record, ISO yyyy-mm-dd. */
   lastMaintOn: string | null
-  /** Sum of parseable usage TotalMiles over the 90 days before the request. */
+  /**
+   * Signed sum of parseable usage TotalMiles over the 90 days before the
+   * request (negative correction rows subtract), clamped at >= 0.
+   */
   miles90: number
 }
 
@@ -40,7 +47,12 @@ export interface VehicleSummary {
   roadable: number
   /** Vehicles explicitly marked not roadable. */
   downCount: number
-  /** Vehicles with no usage recorded in the 60 days before the request. */
+  /**
+   * Vehicles with no usage row covering the current or previous two calendar
+   * months. Usage rows are monthly summaries, so a row dated the 1st covers
+   * its whole month; the 3-month band matches the 60-day intent plus the
+   * reporting lag.
+   */
   unusedIn60d: number
 }
 
@@ -55,10 +67,14 @@ export interface EquipmentSummary {
   total: number
   /** Sorted by count descending, then status ascending. */
   byStatus: EquipmentStatusCount[]
-  /** Rows carrying an issued-to member CAPID. */
+  /**
+   * Rows issued to a real member CAPID (> 0; ORMS writes 0 as the unissued
+   * sentinel). The CAPID itself is never served (D9: counts, not members).
+   */
   issuedCount: number
 }
 
+/** No issued-to CAPID here by design: member identifiers stay server-side. */
 export interface EquipmentRow {
   assetCode: string | null
   noun: string | null
@@ -67,7 +83,6 @@ export interface EquipmentRow {
   /** In-service value (inserv), served verbatim. */
   inService: string | null
   status: string | null
-  issuedCapid: number | null
   issuedOn: string | null
 }
 

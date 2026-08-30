@@ -57,8 +57,18 @@ export interface SectionProps {
    */
   status?: ReactNode
   defaultOpen?: boolean
+  /**
+   * Deep-link expansion (?section=<id>): true opens the section regardless
+   * of its persisted state, without writing that state back (transient).
+   */
+  forceOpen?: boolean
   className?: string
   children: ReactNode
+}
+
+/** The DOM id on a Section's root, the scrollIntoView target for deep links. */
+export function sectionDomId(page: string, id: string): string {
+  return `sect-${page}-${id}`
 }
 
 export function Section({
@@ -67,12 +77,19 @@ export function Section({
   title,
   status,
   defaultOpen = false,
+  forceOpen = false,
   className,
   children,
 }: SectionProps) {
-  const [open, setOpen] = useState(() => readStored(page, id) ?? defaultOpen)
+  const [open, setOpen] = useState(() => forceOpen || (readStored(page, id) ?? defaultOpen))
   const [everOpened, setEverOpened] = useState(open)
   const bodyId = `section-${page}-${id}`
+
+  useEffect(() => {
+    if (!forceOpen) return
+    setOpen(true)
+    setEverOpened(true)
+  }, [forceOpen])
 
   useEffect(() => {
     const fn: SectionListener = (p, ids, next) => {
@@ -95,7 +112,7 @@ export function Section({
   }
 
   return (
-    <section className={clsx('border-t border-hairline', className)}>
+    <section id={sectionDomId(page, id)} className={clsx('scroll-mt-20 border-t border-hairline', className)}>
       <button
         type="button"
         onClick={toggle}

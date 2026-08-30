@@ -6,11 +6,12 @@ import type { MeResponse } from '@shared/contracts'
 import { APP_NAME_FALLBACK, logout, useMeta, useOrgs } from '../api/client'
 import FeedbackModal from '../features/feedback/FeedbackModal'
 import { orgScopeSearch, useOrgScope } from '../lib/urlState'
-import AsOfChip, { dataAgeOf } from './AsOfChip'
+import AsOfChip, { chipStateOf } from './AsOfChip'
+import { formatExtractDay } from './dates'
 import BrandMark from './BrandMark'
 import UnitSelector from './UnitSelector'
 import { flattenOrgTree } from './charter'
-import { Badge, Banner } from './ui'
+import { Badge, Banner, VerdictGlyph } from './ui'
 
 /*
  * The Quiet Authority shell (V2-DESIGN-PLAN.md section 4): one white 56px
@@ -185,7 +186,7 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
 
   const scopeSearch = orgScopeSearch(scope)
   const drawerItems = me.role === 'admin' ? [...NAV_ITEMS, ADMIN_ITEM] : [...NAV_ITEMS]
-  const age = dataAgeOf(meta?.downloadDate ?? null, nowMs)
+  const chipState = meta !== undefined ? chipStateOf(meta, nowMs) : null
 
   const onLogout = async () => {
     setSigningOut(true)
@@ -251,17 +252,20 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
               onSelect={orgid => setOrgid(orgid)}
               onDescendantsChange={setDescendants}
             />
+            {/* Below lg the chip collapses to its dot (tap = same popover);
+                the full line stays available in the drawer. */}
             <div className="hidden lg:block">
               <AsOfChip meta={meta} pending={metaQ.isPending} nowMs={nowMs} />
             </div>
-            <div className="hidden lg:block">
-              <UserMenu
-                me={me}
-                onFeedback={() => setFeedbackOpen(true)}
-                onLogout={() => void onLogout()}
-                signingOut={signingOut}
-              />
+            <div className="lg:hidden">
+              <AsOfChip meta={meta} pending={metaQ.isPending} nowMs={nowMs} compact />
             </div>
+            <UserMenu
+              me={me}
+              onFeedback={() => setFeedbackOpen(true)}
+              onLogout={() => void onLogout()}
+              signingOut={signingOut}
+            />
           </div>
         </div>
 
@@ -291,14 +295,28 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
               <div className="truncate text-xs text-ink2">
                 {me.email} ({me.role})
               </div>
-              {age !== null && meta?.downloadDate && (
-                <div className={clsx('tnum mt-1 text-xs', age.stale ? 'text-scarlet' : 'text-ink2')}>
-                  {age.stale && <span className="sr-only">Alert: data may be stale. </span>}
-                  Data as of{' '}
-                  {new Date(meta.downloadDate).toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'short',
-                  })}
+              {chipState !== null && meta?.downloadDate && (
+                <div
+                  className={clsx(
+                    'tnum mt-1 flex items-center gap-1.5 text-xs',
+                    chipState === 'failed' ? 'text-scarlet' : 'text-ink2',
+                  )}
+                >
+                  {chipState === 'failed' && (
+                    <>
+                      <VerdictGlyph kind="action" />
+                      <span className="sr-only">Alert: the last data ingest failed. </span>
+                    </>
+                  )}
+                  {chipState === 'aging' && (
+                    <>
+                      <VerdictGlyph kind="watch" />
+                      <span className="sr-only">Warning: data may be stale. </span>
+                    </>
+                  )}
+                  {chipState === 'failed'
+                    ? `Ingest failed · data as of ${formatExtractDay(meta.downloadDate)}`
+                    : `Data as of ${formatExtractDay(meta.downloadDate)}${chipState === 'aging' ? ' · aging' : ''}`}
                 </div>
               )}
             </div>

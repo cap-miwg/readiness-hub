@@ -509,13 +509,16 @@ function InsightsTab({ es }: { es: EsAnalysis }) {
         <div className="border-t border-hairline pt-3">
           <p className="kicker text-ink">Single points of failure</p>
           <div className="mt-2">
+            {/* ACTION mark for every SPOF, matching the findings queue's
+                category. Above single-unit self scope the server strips the
+                member name (D9); the row degrades to the anonymous phrase. */}
             {es.risks.singlePointsOfFailure.map(spof => (
               <div
                 key={`${spof.capid}-${spof.position}`}
                 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-hairline py-2 text-sm last:border-b-0"
               >
                 <VerdictMark
-                  kind={spof.severity === 'high' ? 'action' : 'watch'}
+                  kind="action"
                   label={
                     <span className="font-medium">
                       {spof.positionName} ({spof.position})
@@ -523,7 +526,7 @@ function InsightsTab({ es }: { es: EsAnalysis }) {
                   }
                 />
                 <span className="text-xs text-ink2">
-                  {spof.member}: {spof.impact}
+                  {spof.member ?? 'one qualified member'}: {spof.impact}
                 </span>
               </div>
             ))}

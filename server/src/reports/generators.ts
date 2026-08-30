@@ -558,8 +558,12 @@ function isRealExpiration(expiration: Date | null): expiration is Date {
 }
 
 function expirationUrgency(days: number): string {
+  if (days < 0) return 'expired'
   return days <= 30 ? 'critical' : days <= 60 ? 'warning' : 'caution'
 }
+
+/** Already-expired lookback: the memberships-expired finding links here. */
+const LAPSE_EXPIRED_LOOKBACK_DAYS = 365
 
 export function generateMembershipLapseReport(data: ReportData): ReportResult {
   const columns = [
@@ -576,7 +580,11 @@ export function generateMembershipLapseReport(data: ReportData): ReportResult {
   for (const m of pool) {
     if (!isRealExpiration(m.expiration)) continue
     const days = daysUntil(m.expiration, data.asOf)
-    if (days !== null && days >= 0 && days <= 90) {
+    // Includes memberships that already expired (up to a year back) while the
+    // member remains on the ACTIVE roster: the memberships-expired finding
+    // deep-links to this report, so those rows must appear, urgency
+    // 'expired', sorted first (negative daysUntil sorts ahead naturally).
+    if (days !== null && days >= -LAPSE_EXPIRED_LOOKBACK_DAYS && days <= 90) {
       rows.push({
         capid: m.capid,
         memberName: memberName(m),

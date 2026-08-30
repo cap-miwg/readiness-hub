@@ -560,8 +560,10 @@ export function FilterMenu({ label, options, selected, onChange, searchable }: F
         )}
         <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
       </button>
+      {/* Below md the popover becomes a bottom sheet (the thumb-reach
+          contract): fixed to the viewport bottom with a Done control. */}
       {open && (
-        <div className="absolute left-0 z-50 mt-1 w-64 rounded-md border border-hairline bg-paper p-2 shadow-lg">
+        <div className="absolute left-0 z-50 mt-1 w-64 rounded-md border border-hairline bg-paper p-2 shadow-lg max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:mt-0 max-md:flex max-md:max-h-[80vh] max-md:w-auto max-md:flex-col max-md:overflow-auto max-md:rounded-b-none max-md:rounded-t-lg max-md:border-x-0 max-md:border-b-0 max-md:border-t max-md:p-3 max-md:shadow-xl">
           {showSearch && (
             <div className="relative mb-2">
               <Search className="absolute left-2 top-2 h-4 w-4 text-muted" aria-hidden />
@@ -574,7 +576,7 @@ export function FilterMenu({ label, options, selected, onChange, searchable }: F
               />
             </div>
           )}
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto max-md:max-h-none max-md:min-h-0 max-md:flex-1">
             {visible.length === 0 && (
               <div className="px-2 py-3 text-center text-xs text-ink2">No matches</div>
             )}
@@ -614,6 +616,16 @@ export function FilterMenu({ label, options, selected, onChange, searchable }: F
               </button>
             </div>
           )}
+          <div className="mt-2 shrink-0 border-t border-hairline pt-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              data-testid="filter-menu-done"
+              className="w-full rounded-md bg-symbol px-3 py-2 text-sm font-semibold text-paper hover:bg-symbol/90"
+            >
+              Done
+            </button>
+          </div>
         </div>
       )}
     </div>

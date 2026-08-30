@@ -1,4 +1,5 @@
 import type { ReportMeta, ReportResult } from '@shared/reportContracts'
+import { formatExtractDay } from '../../components/dates'
 import { downloadBlob } from './download'
 import { formatCell, slugify } from './format'
 
@@ -21,8 +22,22 @@ function csvEscape(raw: string): string {
   return cell
 }
 
-export function buildReportCsv(result: ReportResult): string {
+/**
+ * Provenance preamble ("As of" is reserved for extract dates): the day the
+ * CAPWATCH extract was built, then the day the file left the app.
+ */
+export function csvPreamble(result: ReportResult, exportedAtIso: string): string {
+  const exported = formatExtractDay(exportedAtIso)
+  if (result.extractDate == null) return `# Extract date unknown, exported ${exported}`
+  return `# Data as of ${formatExtractDay(result.extractDate)}, exported ${exported}`
+}
+
+export function buildReportCsv(
+  result: ReportResult,
+  exportedAtIso: string = new Date().toISOString(),
+): string {
   const lines: string[] = []
+  lines.push(csvPreamble(result, exportedAtIso))
   lines.push(result.columns.map(c => csvEscape(c.header)).join(','))
   for (const row of result.rows) {
     lines.push(result.columns.map(c => csvEscape(formatCell(row[c.key]))).join(','))

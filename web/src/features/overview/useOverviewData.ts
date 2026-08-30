@@ -1,5 +1,11 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import type { AdoptionResponse, FindingsResponse, OverviewResponse } from '@shared/contracts'
+import type {
+  AdoptionResponse,
+  CadetsResponse,
+  FindingsResponse,
+  OverviewResponse,
+  SeniorsResponse,
+} from '@shared/contracts'
 import type { ParticipationResponse } from '@shared/participationContracts'
 import type { LogisticsResponse } from '@shared/logisticsContracts'
 import { ApiError, apiFetch, useOrgs } from '../../api/client'
@@ -111,6 +117,51 @@ export function useLogistics(
     queryFn: () => {
       if (orgid === null) throw new ApiError(0, 'no org selected')
       return apiFetch<LogisticsResponse>(logisticsPath(orgid, descendants))
+    },
+    enabled: orgid !== null,
+    staleTime: 60_000,
+  })
+}
+
+export function cadetsPath(orgid: number, descendants: boolean): string {
+  return `/api/orgs/${orgid}/cadets${descendants ? '?descendants=1' : ''}`
+}
+
+export function seniorsPath(orgid: number, descendants: boolean): string {
+  return `/api/orgs/${orgid}/seniors${descendants ? '?descendants=1' : ''}`
+}
+
+/**
+ * Unfiltered cadet roster for the scope, feeding the Cadet Program and
+ * Personnel sections. Fetched on mount so the collapsed headers carry real
+ * status. Keys are namespaced apart from the Cadets page (whose key carries
+ * its filter search string).
+ */
+export function useCadetsOverview(
+  orgid: number | null,
+  descendants: boolean,
+): UseQueryResult<CadetsResponse, ApiError> {
+  return useQuery<CadetsResponse, ApiError>({
+    queryKey: ['overview-cadets', orgid, descendants],
+    queryFn: () => {
+      if (orgid === null) throw new ApiError(0, 'no org selected')
+      return apiFetch<CadetsResponse>(cadetsPath(orgid, descendants))
+    },
+    enabled: orgid !== null,
+    staleTime: 60_000,
+  })
+}
+
+/** Unfiltered senior roster for the scope (Professional Development, Personnel). */
+export function useSeniorsOverview(
+  orgid: number | null,
+  descendants: boolean,
+): UseQueryResult<SeniorsResponse, ApiError> {
+  return useQuery<SeniorsResponse, ApiError>({
+    queryKey: ['overview-seniors', orgid, descendants],
+    queryFn: () => {
+      if (orgid === null) throw new ApiError(0, 'no org selected')
+      return apiFetch<SeniorsResponse>(seniorsPath(orgid, descendants))
     },
     enabled: orgid !== null,
     staleTime: 60_000,

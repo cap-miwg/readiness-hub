@@ -59,6 +59,15 @@ export function resolveMemberMatch(inputs: MatchInputs): number | null {
   return null
 }
 
+/**
+ * Comparison key for the primary-email match: trimmed then lowercased. The
+ * MbrContact mirror carries real rows with leading/trailing whitespace, so
+ * both sides of the match normalize the same way (SQL: lower(trim(contact))).
+ */
+export function emailMatchKey(email: string): string {
+  return email.trim().toLowerCase()
+}
+
 // --- Pure: response shaping ---
 
 /** camelCase mirror of the computed_member columns the card needs. */
@@ -436,8 +445,8 @@ async function resolveCapidFor(email: string): Promise<number | null> {
        FROM mbr_contact c
        JOIN computed_member m ON m.capid = c.capid
        WHERE upper(c.type) = 'EMAIL' AND upper(c.priority) = 'PRIMARY'
-         AND lower(c.contact) = lower($1)`,
-      [email],
+         AND lower(trim(c.contact)) = $1`,
+      [emailMatchKey(email)],
     )
     emailCapids = res.rows.map(r => r.capid)
   }

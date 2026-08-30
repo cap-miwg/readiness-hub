@@ -1,39 +1,53 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { Meta } from '../api/client'
+import { formatExtractDateTime, formatExtractDay } from './dates'
+import { VerdictGlyph } from './ui'
 
 /*
- * The data-age chip (V2-DESIGN-PLAN.md D10): a neutral "As of 28 Aug" chip on
- * every page, provenance not alarm. The popover explains the extract date,
- * the last ingest, when the next one is expected, and how corrections flow.
- * Scarlet appears only past the staleness threshold or on a confirmed ingest
- * failure; the default-scarlet badge of v1 trained users to ignore red.
+ * The data-age chip (V2-DESIGN-PLAN.md D10), a three-step ladder so red is
+ * never the default:
+ *   neutral - muted dot, "As of 28 Aug" in ink2. Provenance, not alarm.
+ *   aging   - the ingest is older than the server's staleness threshold:
+ *             AF Yellow WATCH glyph plus the visible word "aging".
+ *   failed  - the last ingest run failed: scarlet, "Ingest failed".
+ * Age is measured from lastIngestAt (when the pipeline last ran), never from
+ * downloadDate: CAPWATCH generates extracts on its own clock, and an extract
+ * a day older than the ingest that loaded it is normal, not a stall.
+ * Extract dates render in UTC (components/dates.ts) so the calendar day
+ * shown matches the day the extract carries.
  */
 
-// 26h: the scheduled ingest is daily (04:00, docs/ARCHITECTURE.md Ingest);
-// anything older than one cycle plus slack means the pipeline is stalled.
-export const STALE_AFTER_HOURS = 26
+/** Fallback threshold until the server serves staleAfterHours (26h = one daily cycle plus slack). */
+export const DEFAULT_STALE_AFTER_HOURS = 26
 
-export interface DataAge {
-  hours: number
-  stale: boolean
+/**
+ * The meta facts the ladder reads, structurally typed so the chip works
+ * against MetaResponse both with and without the run-status fields.
+ */
+export interface ChipMeta {
+  downloadDate: string | null
+  lastIngestAt: string | null
+  lastRunStatus?: 'succeeded' | 'failed' | null
+  staleAfterHours?: number
 }
 
-export function dataAgeOf(downloadDate: string | null | undefined, nowMs: number): DataAge | null {
-  if (!downloadDate) return null
-  const parsed = new Date(downloadDate)
-  if (Number.isNaN(parsed.getTime())) return null
-  const hours = (nowMs - parsed.getTime()) / 3_600_000
-  return { hours, stale: hours > STALE_AFTER_HOURS }
+export type ChipState = 'neutral' | 'aging' | 'failed'
+
+/** The D10 ladder: failed > aging > neutral. Pure; exported for tests. */
+export function chipStateOf(meta: ChipMeta, nowMs: number): ChipState {
+  if (meta.lastRunStatus === 'failed') return 'failed'
+  if (meta.lastIngestAt !== null) {
+    const ingested = new Date(meta.lastIngestAt).getTime()
+    if (!Number.isNaN(ingested)) {
+      const hours = (nowMs - ingested) / 3_600_000
+      if (hours > (meta.staleAfterHours ?? DEFAULT_STALE_AFTER_HOURS)) return 'aging'
+    }
+  }
+  return 'neutral'
 }
 
-/** "28 Aug" (en-GB puts the day first, matching the approved mockups). */
-function shortDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
+/** Full local timestamp for run facts (last ingest, next expected). */
 function fullStamp(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -59,10 +73,12 @@ export interface AsOfChipProps {
   meta: Meta | undefined
   pending: boolean
   nowMs: number
+  /** Dot-only trigger for the below-lg bar; the popover stays identical. */
+  compact?: boolean
   className?: string
 }
 
-export default function AsOfChip({ meta, pending, nowMs, className }: AsOfChipProps) {
+export default function AsOfChip({ meta, pending, nowMs, compact = false, className }: AsOfChipProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -86,11 +102,80 @@ export default function AsOfChip({ meta, pending, nowMs, className }: AsOfChipPr
 
   if (pending || meta === undefined) return null
 
-  const age = dataAgeOf(meta.downloadDate, nowMs)
-  // MetaResponse carries no run-status field yet; until it does, age past
-  // the threshold is the only confirmed-failure signal available here.
-  const alarmed = age !== null && age.stale
-  const label = meta.downloadDate ? `As of ${shortDate(meta.downloadDate)}` : 'No data yet'
+  const chipMeta: ChipMeta = meta
+  const state = chipStateOf(chipMeta, nowMs)
+  const staleAfterHours = chipMeta.staleAfterHours ?? DEFAULT_STALE_AFTER_HOURS
+
+  const asOf = meta.downloadDate !== null ? `As of ${formatExtractDay(meta.downloadDate)}` : 'No data yet'
+  const label = state === 'failed' ? 'Ingest failed' : state === 'aging' ? `${asOf} · aging` : asOf
+  const sr =
+    state === 'failed'
+      ? 'Alert: the last data ingest failed. '
+      : state === 'aging'
+        ? 'Warning: data may be stale. '
+        : ''
+
+  const glyph =
+    state === 'failed' ? (
+      <VerdictGlyph kind="action" />
+    ) : state === 'aging' ? (
+      <VerdictGlyph kind="watch" />
+    ) : (
+      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted" />
+    )
+
+  const popover = open && (
+    <div
+      role="dialog"
+      aria-label="About the data"
+      className="absolute right-0 top-[calc(100%+8px)] z-50 w-80 rounded-lg border border-hairline bg-paper p-4 shadow-lg"
+    >
+      <p className="kicker text-ink">About the data</p>
+      <div className="mt-2">
+        <FactRow
+          label="Extract date"
+          value={meta.downloadDate ? formatExtractDateTime(meta.downloadDate) : 'No extract ingested yet'}
+        />
+        <FactRow
+          label="Last ingest"
+          value={meta.lastIngestAt ? fullStamp(meta.lastIngestAt) : 'Never'}
+        />
+        <FactRow
+          label="Next expected"
+          value={
+            meta.lastIngestAt
+              ? fullStamp(new Date(new Date(meta.lastIngestAt).getTime() + 24 * 3_600_000).toISOString())
+              : 'After the first ingest'
+          }
+        />
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-ink2">
+        Figures reflect the CAPWATCH extract above (dated in UTC); a new extract arrives with the
+        nightly ingest. An ingest older than {staleAfterHours} hours is marked aging because the
+        pipeline has likely stalled; scarlet appears only when the last ingest run failed. Records
+        are corrected in eServices and appear here with the next extract.
+      </p>
+    </div>
+  )
+
+  if (compact) {
+    return (
+      <div ref={rootRef} className={clsx('relative', className)}>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label={`About the data. ${sr}${label}`}
+          data-testid="as-of-chip-compact"
+          className="flex h-10 w-8 items-center justify-center"
+        >
+          {glyph}
+        </button>
+        {popover}
+      </div>
+    )
+  }
 
   return (
     <div ref={rootRef} className={clsx('relative', className)}>
@@ -99,51 +184,21 @@ export default function AsOfChip({ meta, pending, nowMs, className }: AsOfChipPr
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
+        data-testid="as-of-chip"
         className={clsx(
           'tnum flex items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs',
-          alarmed ? 'border-scarlet text-scarlet' : 'border-hairline text-ink2 hover:border-muted',
+          state === 'failed'
+            ? 'border-scarlet text-scarlet'
+            : state === 'aging'
+              ? 'border-hairline text-ink hover:border-muted'
+              : 'border-hairline text-ink2 hover:border-muted',
         )}
       >
-        <span
-          aria-hidden
-          className={clsx('h-1.5 w-1.5 rounded-full', alarmed ? 'bg-scarlet' : 'bg-muted')}
-        />
-        {alarmed && <span className="sr-only">Alert: data may be stale. </span>}
+        {glyph}
+        {sr !== '' && <span className="sr-only">{sr}</span>}
         {label}
       </button>
-      {open && (
-        <div
-          role="dialog"
-          aria-label="About the data"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-80 rounded-lg border border-hairline bg-paper p-4 shadow-lg"
-        >
-          <p className="kicker text-ink">About the data</p>
-          <div className="mt-2">
-            <FactRow
-              label="Extract date"
-              value={meta.downloadDate ? fullStamp(meta.downloadDate) : 'No extract ingested yet'}
-            />
-            <FactRow
-              label="Last ingest"
-              value={meta.lastIngestAt ? fullStamp(meta.lastIngestAt) : 'Never'}
-            />
-            <FactRow
-              label="Next expected"
-              value={
-                meta.lastIngestAt
-                  ? fullStamp(new Date(new Date(meta.lastIngestAt).getTime() + 24 * 3_600_000).toISOString())
-                  : 'After the first ingest'
-              }
-            />
-          </div>
-          <p className="mt-3 text-xs leading-relaxed text-ink2">
-            Figures reflect the CAPWATCH extract above; a new extract arrives with the nightly
-            ingest. Data older than {STALE_AFTER_HOURS} hours is flagged because the pipeline has
-            likely stalled. Records are corrected in eServices and appear here with the next
-            extract.
-          </p>
-        </div>
-      )}
+      {popover}
     </div>
   )
 }

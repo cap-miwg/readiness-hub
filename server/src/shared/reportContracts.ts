@@ -38,6 +38,15 @@ export interface ReportResult {
   rows: Record<string, unknown>[]
   /** ISO timestamp of generation (request-time now, not ingest time). */
   generatedAt: string
+  /**
+   * ISO timestamp of the CAPWATCH extract the data was built from: the
+   * latest succeeded ingest run carrying a DownLoadDate, the same rule
+   * /api/meta uses. Injected by the report route (api/reports.ts), not by
+   * the generators, so pure-generator tests may see it unset; null when no
+   * CAPWATCH extract has been ingested yet. Exports print this as the
+   * "Data as of" provenance line.
+   */
+  extractDate?: string | null
   scope: ReportScope
   /** Report-level summary payload (v1 result.meta), shape per report id. */
   meta?: Record<string, unknown>

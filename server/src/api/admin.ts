@@ -31,6 +31,7 @@ import type {
   UsageResponse,
   UsageRouteCount,
 } from '../shared/contracts.js'
+import { loadStaleHours, STALE_HOURS_MAX, STALE_HOURS_MIN } from './meta.js'
 import { loadOrgSettings } from './scope.js'
 import { isoTimestamp, parseBoolParam } from './util.js'
 
@@ -416,7 +417,8 @@ async function handleUsage(_req: FastifyRequest, reply: FastifyReply): Promise<v
   reply.send(body)
 }
 
-const settingsSchema = z
+/** Exported for the pure zod round-trip coverage in server/test. */
+export const settingsSchema = z
   .object({
     excludedUnits: z
       .array(z.string().trim().min(1).max(6).regex(/^[0-9A-Za-z]+$/))
@@ -427,10 +429,12 @@ const settingsSchema = z
       .min(1)
       .max(20)
       .optional(),
+    // Feeds MetaResponse.staleAfterHours (the as-of ladder): 6 hours to 7 days.
+    staleHours: z.number().int().min(STALE_HOURS_MIN).max(STALE_HOURS_MAX).optional(),
   })
   .strict()
 
-async function upsertSetting(key: string, value: string[]): Promise<void> {
+async function upsertSetting(key: string, value: string[] | number): Promise<void> {
   await pool.query(
     `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2::jsonb, now())
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
@@ -438,13 +442,17 @@ async function upsertSetting(key: string, value: string[]): Promise<void> {
   )
 }
 
-async function handleGetSettings(_req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const settings = await loadOrgSettings()
-  const body: AdminSettingsResponse = {
+async function settingsResponse(): Promise<AdminSettingsResponse> {
+  const [settings, staleHours] = await Promise.all([loadOrgSettings(), loadStaleHours()])
+  return {
     excludedUnits: settings.excludedUnits,
     memberTypes: settings.memberTypes,
+    staleHours,
   }
-  reply.send(body)
+}
+
+async function handleGetSettings(_req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  reply.send(await settingsResponse())
 }
 
 async function handlePutSettings(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -454,9 +462,9 @@ async function handlePutSettings(req: FastifyRequest, reply: FastifyReply): Prom
     reply.code(400).send({ error: `invalid settings: ${issues}` })
     return
   }
-  const { excludedUnits, memberTypes } = parsed.data
-  if (excludedUnits === undefined && memberTypes === undefined) {
-    reply.code(400).send({ error: 'provide excludedUnits and/or memberTypes' })
+  const { excludedUnits, memberTypes, staleHours } = parsed.data
+  if (excludedUnits === undefined && memberTypes === undefined && staleHours === undefined) {
+    reply.code(400).send({ error: 'provide excludedUnits, memberTypes, and/or staleHours' })
     return
   }
   if (excludedUnits !== undefined) {
@@ -465,16 +473,15 @@ async function handlePutSettings(req: FastifyRequest, reply: FastifyReply): Prom
   if (memberTypes !== undefined) {
     await upsertSetting('org.member_types', memberTypes.map(t => t.trim().toUpperCase()))
   }
+  if (staleHours !== undefined) {
+    await upsertSetting('ingest.stale_hours', staleHours)
+  }
   await audit(actorOf(req), 'admin.settings.update', {
     excludedUnits: excludedUnits ?? null,
     memberTypes: memberTypes ?? null,
+    staleHours: staleHours ?? null,
   })
-  const settings = await loadOrgSettings()
-  const body: AdminSettingsResponse = {
-    excludedUnits: settings.excludedUnits,
-    memberTypes: settings.memberTypes,
-  }
-  reply.send(body)
+  reply.send(await settingsResponse())
 }
 
 export function registerAdminRoutes(app: FastifyInstance): void {

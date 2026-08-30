@@ -8,10 +8,15 @@ const {
   buildMonthly,
   buildParticipation,
   buildQuiet,
+  isQuietRow,
   monthKeysBack,
   participationWindows,
+  quietCountsOf,
+  quietMembersOf,
   rateOf,
 } = await import('../src/api/participation.js')
+
+import type { QuietScanRow } from '../src/api/participation.js'
 const { generateParticipationSummaryReport, generateQuietMembersReport } = await import(
   '../src/reports/generators.js'
 )
@@ -68,6 +73,79 @@ describe('monthly rate math from synthetic aggregate rows', () => {
     const monthly = buildMonthly(keys, agg, guests)
     const jan = monthly.find(m => m.month === '2026-01')
     expect(jan).toEqual({ month: '2026-01', meetings: 0, avgAttendanceRate: null, guests: 0 })
+  })
+})
+
+// d60 for ASOF (2026-08-30) is 2026-07-01 (participationWindows).
+const D60 = participationWindows(ASOF).d60
+
+function scanRow(over: Partial<QuietScanRow> = {}): QuietScanRow {
+  return {
+    capid: 11,
+    fullName: 'C/Amn Quiet, Q',
+    orgid: 200,
+    joined: '2024-01-15',
+    unitLastMeetingOn: '2026-08-20',
+    lastPresentOn: null,
+    present60: 0,
+    excused60: 0,
+    rows90: 0,
+    present90: 0,
+    ...over,
+  }
+}
+
+describe('isQuietRow: the 60-day quiet rule', () => {
+  it('marks quiet only when the unit logged inside the window', () => {
+    expect(isQuietRow(scanRow(), D60)).toBe(true)
+    // The unit logged in the 12-month span but stopped before the window:
+    // its roster must not flood the quiet count.
+    expect(isQuietRow(scanRow({ unitLastMeetingOn: '2026-05-12' }), D60)).toBe(false)
+    expect(isQuietRow(scanRow({ unitLastMeetingOn: null }), D60)).toBe(false)
+    // Boundary: a meeting exactly on the window start counts as in-window.
+    expect(isQuietRow(scanRow({ unitLastMeetingOn: '2026-07-01' }), D60)).toBe(true)
+  })
+
+  it('counts EXCUSED at an in-window meeting as engaged', () => {
+    expect(isQuietRow(scanRow({ excused60: 1 }), D60)).toBe(false)
+    expect(isQuietRow(scanRow({ present60: 1 }), D60)).toBe(false)
+    expect(isQuietRow(scanRow({ present60: 0, excused60: 0 }), D60)).toBe(true)
+  })
+
+  it('excludes members who joined inside the window', () => {
+    expect(isQuietRow(scanRow({ joined: '2026-08-10' }), D60)).toBe(false)
+    // Boundary: joined exactly on the window start is inside it.
+    expect(isQuietRow(scanRow({ joined: '2026-07-01' }), D60)).toBe(false)
+    expect(isQuietRow(scanRow({ joined: '2026-06-30' }), D60)).toBe(true)
+    // No joined date on record: cannot be excluded on that basis.
+    expect(isQuietRow(scanRow({ joined: null }), D60)).toBe(true)
+  })
+})
+
+describe('quietCountsOf and quietMembersOf over scan rows', () => {
+  const rows: QuietScanRow[] = [
+    scanRow({ capid: 1, orgid: 200 }), // quiet
+    scanRow({ capid: 2, orgid: 200, excused60: 2 }), // engaged by excusal
+    scanRow({ capid: 3, orgid: 200, joined: '2026-08-01' }), // recent joiner
+    scanRow({ capid: 4, orgid: 300, unitLastMeetingOn: '2026-04-01' }), // stale unit
+    scanRow({
+      capid: 5,
+      orgid: 200,
+      fullName: 'SM Older, O',
+      lastPresentOn: new Date(2026, 4, 12),
+      rows90: 4,
+      present90: 1,
+    }), // quiet, with history
+  ]
+
+  it('counts per unit with all three rules applied', () => {
+    expect(quietCountsOf(rows, D60)).toEqual([{ orgid: 200, quietCount: 2 }])
+  })
+
+  it('names the quiet members, never-present first', () => {
+    const named = quietMembersOf(rows, D60)
+    expect(named.map(r => r.capid)).toEqual([1, 5])
+    expect(named[1]).toMatchObject({ fullName: 'SM Older, O', rows90: 4, present90: 1 })
   })
 })
 

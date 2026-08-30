@@ -3,8 +3,62 @@ import { describe, expect, it } from 'vitest'
 // config.ts validates env at import time; satisfy it before loading modules.
 process.env.SESSION_SECRET ??= 'vitest-only-session-secret-0123456789'
 
-const { USAGE_DAILY_DAYS, USAGE_TOP_ROUTES, fillDailySeries, normalizeRoute, topRoutesOf } =
-  await import('../src/api/admin.js')
+const {
+  USAGE_DAILY_DAYS,
+  USAGE_TOP_ROUTES,
+  fillDailySeries,
+  normalizeRoute,
+  settingsSchema,
+  topRoutesOf,
+} = await import('../src/api/admin.js')
+const { STALE_HOURS_DEFAULT, lastRunStatusOf, parseStaleHours } = await import(
+  '../src/api/meta.js'
+)
+
+describe('admin settings validation: the staleHours round trip (pure zod)', () => {
+  it('accepts staleHours alone within 6..168 whole hours', () => {
+    const parsed = settingsSchema.safeParse({ staleHours: 26 })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.staleHours).toBe(26)
+    expect(settingsSchema.safeParse({ staleHours: 6 }).success).toBe(true)
+    expect(settingsSchema.safeParse({ staleHours: 168 }).success).toBe(true)
+  })
+
+  it('rejects out-of-range, fractional, and non-numeric staleHours', () => {
+    expect(settingsSchema.safeParse({ staleHours: 5 }).success).toBe(false)
+    expect(settingsSchema.safeParse({ staleHours: 169 }).success).toBe(false)
+    expect(settingsSchema.safeParse({ staleHours: 26.5 }).success).toBe(false)
+    expect(settingsSchema.safeParse({ staleHours: '26' }).success).toBe(false)
+  })
+
+  it('stays strict and composes with the org-scoping keys', () => {
+    expect(settingsSchema.safeParse({ staleHours: 26, other: true }).success).toBe(false)
+    const parsed = settingsSchema.safeParse({
+      excludedUnits: ['000'],
+      memberTypes: ['CADET'],
+      staleHours: 48,
+    })
+    expect(parsed.success).toBe(true)
+  })
+})
+
+describe('meta helpers for the as-of ladder', () => {
+  it('parseStaleHours reads a stored number and falls back to the default', () => {
+    expect(parseStaleHours(48)).toBe(48)
+    expect(parseStaleHours(undefined)).toBe(STALE_HOURS_DEFAULT)
+    expect(parseStaleHours('48')).toBe(STALE_HOURS_DEFAULT)
+    expect(parseStaleHours(0)).toBe(STALE_HOURS_DEFAULT)
+    expect(parseStaleHours(999)).toBe(STALE_HOURS_DEFAULT)
+  })
+
+  it('lastRunStatusOf surfaces a failed or aborted latest run', () => {
+    expect(lastRunStatusOf('succeeded')).toBe('succeeded')
+    expect(lastRunStatusOf('failed')).toBe('failed')
+    expect(lastRunStatusOf('aborted')).toBe('failed')
+    expect(lastRunStatusOf('running')).toBeNull()
+    expect(lastRunStatusOf(undefined)).toBeNull()
+  })
+})
 
 describe('normalizeRoute: access_log routes collapse to stable patterns', () => {
   it('strips query strings', () => {

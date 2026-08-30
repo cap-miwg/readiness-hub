@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { GraduationCap, Star } from 'lucide-react'
+import { GraduationCap, Printer, Star } from 'lucide-react'
 import type { CadetRow, CadetsResponse, OrgTreeNode } from '@shared/contracts'
 import { apiFetch, useOrgs, type ApiError } from '../api/client'
-import { useListParam, useOrgScope } from '../lib/urlState'
+import { useFlagParam, useListParam, useOrgScope } from '../lib/urlState'
 import {
   Banner,
   DataTable,
@@ -22,6 +22,7 @@ import { FigureButton, FigureCell, FigureStrip } from '../features/members/Figur
 import {
   CADET_STATE_META,
   cadetBlockerOf,
+  cadetTileRollup,
   fmtDate,
   optionCounts,
   primaryDutyOf,
@@ -33,11 +34,36 @@ const STATE_OPTIONS = (Object.keys(CADET_STATE_META) as CadetState[]).map(state 
   label: CADET_STATE_META[state].label,
 }))
 
-// The "Close" tile groups the two nearly-there states, matching the v1 tile
-// definition (AppCadetDashboard.html:123-137).
-const CLOSE_STATES: readonly CadetState[] = ['TIME_PENDING', 'NEARLY_READY']
-
 const PHASE_LABELS: Record<string, string> = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' }
+
+/** Test-night rows grouped by the cadets' next achievement, null (no next) last. */
+interface TestNightGroup {
+  achv: number | null
+  rows: CadetRow[]
+}
+
+export function groupForTestNight(rows: readonly CadetRow[]): TestNightGroup[] {
+  const byAchv = new Map<number | null, CadetRow[]>()
+  for (const r of rows) {
+    const arr = byAchv.get(r.nextAchvPublicNumber)
+    if (arr) arr.push(r)
+    else byAchv.set(r.nextAchvPublicNumber, [r])
+  }
+  const groups = [...byAchv.entries()].map(([achv, groupRows]) => ({
+    achv,
+    rows: groupRows
+      .slice()
+      .sort((a, b) =>
+        `${a.nameLast}, ${a.nameFirst}`.localeCompare(`${b.nameLast}, ${b.nameFirst}`),
+      ),
+  }))
+  groups.sort((a, b) => {
+    if (a.achv === null) return b.achv === null ? 0 : 1
+    if (b.achv === null) return -1
+    return a.achv - b.achv
+  })
+  return groups
+}
 
 function useCadetsQuery(orgid: number | null, search: string) {
   return useQuery<CadetsResponse, ApiError>({
@@ -129,6 +155,7 @@ export default function Cadets() {
   const [ranks, setRanks] = useListParam('rank')
   const [duties, setDuties] = useListParam('duty')
   const [phases, setPhases] = useListParam('phase')
+  const [testNight, setTestNight] = useFlagParam('testNight')
 
   const [profileCapid, setProfileCapid] = useState<number | null>(null)
 
@@ -194,6 +221,18 @@ export default function Cadets() {
 
   // Display-time cutoff for the blocker derivation (HFZ lapsed, TIG future).
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
+
+  // Tile rollup over the filtered rows, from the same blocker engine as the
+  // per-row chips (shared.ts cadetTileRollup) so the two can never disagree.
+  const rollup = useMemo(
+    () => cadetTileRollup(filteredQ.data?.rows ?? [], todayIso),
+    [filteredQ.data, todayIso],
+  )
+
+  const testNightGroups = useMemo(
+    () => groupForTestNight(filteredQ.data?.rows ?? []),
+    [filteredQ.data],
+  )
 
   const columns = useMemo((): Column<CadetRow>[] => {
     return [
@@ -333,14 +372,40 @@ export default function Cadets() {
   const tiles = data?.tiles
   const pendingValue = filteredQ.isPending ? '...' : null
   const readyActive = states.length === 1 && states[0] === 'READY'
-  const closeActive =
-    states.length === CLOSE_STATES.length && CLOSE_STATES.every(s => states.includes(s))
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Cadet Dashboard"
         subtitle="Milestones, promotion eligibility, HFZ, leadership billets"
+        actions={
+          <>
+            <button
+              type="button"
+              data-testid="cadet-test-night-toggle"
+              aria-pressed={testNight}
+              onClick={() => setTestNight(!testNight)}
+              className={clsx(
+                'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors print:hidden',
+                testNight
+                  ? 'border-symbol text-symbol'
+                  : 'border-hairline bg-paper text-ink hover:border-muted',
+              )}
+            >
+              Test night
+            </button>
+            {testNight && (
+              <button
+                type="button"
+                data-testid="cadet-test-night-print"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-muted print:hidden"
+              >
+                <Printer className="h-4 w-4" aria-hidden /> Print
+              </button>
+            )}
+          </>
+        }
       />
 
       {orgsQ.error && (
@@ -353,7 +418,7 @@ export default function Cadets() {
       )}
 
       <div
-        className="flex flex-wrap items-center gap-2 border-b border-hairline pb-3"
+        className="flex flex-wrap items-center gap-2 border-b border-hairline pb-3 print:hidden"
         data-testid="cadet-filter-bar"
       >
         <span className="kicker mr-1 text-ink">Filters</span>
@@ -390,7 +455,7 @@ export default function Cadets() {
       </div>
 
       <FigureStrip
-        className="lg:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.6fr)]"
+        className="print:hidden lg:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.6fr)]"
         data-testid="cadet-tiles"
       >
         <FigureCell at="lg" data-testid="cadets-tile-total">
@@ -402,7 +467,7 @@ export default function Cadets() {
           title="Cadets who have completed all requirements and are eligible for promotion"
         >
           <FigureButton
-            value={pendingValue ?? (tiles?.ready ?? 0)}
+            value={pendingValue ?? rollup.ready}
             label="Ready"
             active={readyActive}
             onClick={() => toggleStateSet(['READY'])}
@@ -411,37 +476,35 @@ export default function Cadets() {
         </FigureCell>
         <FigureCell
           at="lg"
-          data-testid="cadets-tile-close"
-          title="Cadets who are nearly ready or waiting on time in grade"
+          data-testid="cadets-tile-hfz"
+          title="Cadets whose next promotion is blocked by a missing or lapsed HFZ credit"
         >
-          <FigureButton
-            value={pendingValue ?? (tiles?.close ?? 0)}
-            label="Close"
-            active={closeActive}
-            onClick={() => toggleStateSet(CLOSE_STATES)}
-            title="Cadets who are nearly ready or waiting on time in grade"
+          <Figure
+            value={pendingValue ?? rollup.blockedHfz}
+            label="Blocked by HFZ"
+            delta="Missing or lapsed"
           />
         </FigureCell>
         <FigureCell
           at="lg"
-          data-testid="cadets-tile-90days"
-          title="Cadets 90+ days at their current grade (display only; not a server filter)"
+          data-testid="cadets-tile-tig"
+          title="Cadets waiting only on time in grade"
         >
           <Figure
-            value={pendingValue ?? (tiles?.ninetyPlusDays ?? 0)}
-            label="90+ Days"
-            delta="Since last promotion"
+            value={pendingValue ?? rollup.blockedTig}
+            label="Blocked by TIG"
+            delta="Time in grade"
           />
         </FigureCell>
         <FigureCell
           at="lg"
-          data-testid="cadets-tile-honor"
-          title="Total honor credits earned across all cadets shown"
+          data-testid="cadets-tile-inprogress"
+          title="Cadets still working requirements for their next achievement"
         >
           <Figure
-            value={pendingValue ?? (tiles?.honorCredits ?? 0)}
-            label="Honor"
-            delta="Credits earned"
+            value={pendingValue ?? rollup.inProgress}
+            label="In progress"
+            delta="Working requirements"
           />
         </FigureCell>
         <FigureCell at="lg" data-testid="cadet-phase-chips">
@@ -484,6 +547,47 @@ export default function Cadets() {
         <div className="flex justify-center py-16">
           <Spinner label="Loading cadet roster..." />
         </div>
+      ) : testNight ? (
+        data !== undefined && (
+          <div data-testid="cadet-test-night" className="space-y-6">
+            {testNightGroups.length === 0 ? (
+              <EmptyState
+                icon={GraduationCap}
+                title="No cadets match"
+                message={
+                  activeFilterCount > 0
+                    ? 'The active filters exclude every cadet in this scope.'
+                    : 'This scope has no cadets.'
+                }
+              />
+            ) : (
+              testNightGroups.map(g => (
+                <section key={g.achv ?? 'none'} data-testid={`test-night-group-${g.achv ?? 'none'}`}>
+                  <h2 className="break-after-avoid border-b border-hairline pb-1 font-display text-[15px] font-semibold text-ink">
+                    {g.achv !== null ? `Achievement ${g.achv}` : 'No next achievement'} ·{' '}
+                    {g.rows.length} cadet{g.rows.length === 1 ? '' : 's'}
+                  </h2>
+                  <div>
+                    {g.rows.map(r => (
+                      <div
+                        key={r.capid}
+                        data-testid={`test-night-row-${r.capid}`}
+                        className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 break-inside-avoid border-b border-hairline py-1.5"
+                      >
+                        <span className="text-sm font-medium text-ink">
+                          {r.nameLast}, {r.nameFirst}
+                        </span>
+                        <span className="tnum text-xs text-ink2">#{r.capid}</span>
+                        <span className="text-xs text-ink2">{r.rank}</span>
+                        <BlockerCell row={r} todayIso={todayIso} />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+          </div>
+        )
       ) : (
         data !== undefined && (
           <DataTable

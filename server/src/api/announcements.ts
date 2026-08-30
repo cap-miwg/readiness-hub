@@ -73,6 +73,24 @@ function issuesOf(error: z.ZodError): string {
   return error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
 }
 
+/**
+ * Active-window test against an injected calendar day (inclusive on both
+ * ends): not archived, startsAt passed (or unset), endsAt not passed. The day
+ * is computed once per request from app-local time (api/util.ts isoDate), so
+ * the boundary matches the TZ the app runs in rather than the database
+ * session's CURRENT_DATE (a UTC container turned announcements over up to
+ * five hours early in America/New_York).
+ */
+export function announcementActiveOn(
+  a: Pick<Announcement, 'archived' | 'startsAt' | 'endsAt'>,
+  day: string,
+): boolean {
+  if (a.archived) return false
+  if (a.startsAt !== null && a.startsAt > day) return false
+  if (a.endsAt !== null && a.endsAt < day) return false
+  return true
+}
+
 // --- Row mapping ---
 
 interface DbAnnouncementRow {
@@ -108,17 +126,24 @@ function actorOf(req: FastifyRequest): string {
 
 // --- Handlers ---
 
-/** Active window: not archived, startsAt passed (or unset), endsAt not passed. */
+/**
+ * Active window (announcementActiveOn) against the app-local day, passed as
+ * a parameter rather than read from the database's CURRENT_DATE.
+ */
 async function handleList(_req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const day = isoDate(new Date()) ?? new Date().toISOString().slice(0, 10)
   const res = await pool.query<DbAnnouncementRow>(
     `SELECT ${ANNOUNCEMENT_COLUMNS} FROM announcements
      WHERE NOT archived
-       AND (starts_at IS NULL OR starts_at <= CURRENT_DATE)
-       AND (ends_at IS NULL OR ends_at >= CURRENT_DATE)
+       AND (starts_at IS NULL OR starts_at <= $1::date)
+       AND (ends_at IS NULL OR ends_at >= $1::date)
      ORDER BY created_at DESC, id DESC
      LIMIT ${ACTIVE_LIMIT}`,
+    [day],
   )
-  const body: AnnouncementsResponse = { announcements: res.rows.map(announcementOf) }
+  const body: AnnouncementsResponse = {
+    announcements: res.rows.map(announcementOf).filter(a => announcementActiveOn(a, day)),
+  }
   reply.send(body)
 }
 

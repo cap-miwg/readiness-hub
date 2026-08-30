@@ -213,6 +213,24 @@ describe('membership expiring soon', () => {
     expect(row['daysUntil']).toBe(22)
     expect(row['urgency']).toBe('critical')
   })
+
+  it('includes already-expired memberships (a year back), urgency expired, first', () => {
+    // The memberships-expired finding deep-links here: a member whose
+    // membership lapsed while still on the ACTIVE roster must appear.
+    const lapsed = member(20, { expiration: new Date(2026, 6, 15) }) // 45 days past
+    const expiring = member(21, { expiration: new Date(2026, 8, 20) })
+    const ancient = member(22, { expiration: new Date(2024, 0, 1) }) // beyond the lookback
+    const data = fixtureData({ members: [expiring, lapsed, ancient] })
+    const result = generateMembershipLapseReport(data)
+    expect(result.rows).toHaveLength(2)
+    const first = result.rows[0] as Record<string, unknown>
+    expect(first['capid']).toBe(20)
+    expect(first['daysUntil']).toBe(-45)
+    expect(first['urgency']).toBe('expired')
+    const second = result.rows[1] as Record<string, unknown>
+    expect(second['capid']).toBe(21)
+    expect(second['urgency']).toBe('critical')
+  })
 })
 
 describe('recent promotions keyed on CadetRank.RankDate (v1 parity)', () => {

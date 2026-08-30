@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Download, FileDown, FileX, RefreshCw, X } from 'lucide-react'
 import type { ReportMeta, ReportResult } from '@shared/reportContracts'
 import { ApiError, apiFetch } from '../../api/client'
+import { formatExtractDay } from '../../components/dates'
 import { Badge, Banner, Card, DataTable, EmptyState, Spinner, type Column } from '../../components/ui'
 import { exportReportCsv } from './exportCsv'
 import { exportReportPdf } from './exportPdf'
@@ -165,7 +166,15 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
             <span aria-hidden className="text-muted">
               |
             </span>
-            <span>As of {new Date(result.generatedAt).toLocaleString()}</span>
+            {/* "As of" is reserved for extract dates; generation time is secondary. */}
+            <span className="text-ink">
+              {result.extractDate != null
+                ? `Data as of ${formatExtractDay(result.extractDate)}`
+                : 'Extract date unknown'}
+            </span>
+            <span className="text-xs">
+              generated {new Date(result.generatedAt).toLocaleString()}
+            </span>
           </div>
 
           {chips.length > 0 && (

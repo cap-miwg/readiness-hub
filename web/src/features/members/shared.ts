@@ -159,6 +159,43 @@ export function cadetBlockerOf(row: CadetRow, todayIso: string): CadetBlocker | 
   return null
 }
 
+/**
+ * Blocker rollup for the Cadet dashboard tiles, derived from the same
+ * per-row blocker engine (cadetBlockerOf) so the tiles and the row chips can
+ * never disagree. Precedence per row: READY, then the HFZ watch blocker,
+ * then a TIG wait (state TIME_PENDING), else in progress; SPAATZ_COMPLETE
+ * counts nowhere (nothing left to block).
+ */
+export interface CadetTileRollup {
+  ready: number
+  blockedHfz: number
+  blockedTig: number
+  inProgress: number
+}
+
+export function cadetTileRollup(rows: readonly CadetRow[], todayIso: string): CadetTileRollup {
+  const out: CadetTileRollup = { ready: 0, blockedHfz: 0, blockedTig: 0, inProgress: 0 }
+  for (const row of rows) {
+    if (row.state === 'READY') {
+      out.ready++
+      continue
+    }
+    if (row.state === 'SPAATZ_COMPLETE') continue
+    const blocker = cadetBlockerOf(row, todayIso)
+    if (blocker !== null && blocker.kind === 'watch') {
+      // The only watch blocker the engine emits is HFZ missing or lapsed.
+      out.blockedHfz++
+      continue
+    }
+    if (row.state === 'TIME_PENDING') {
+      out.blockedTig++
+      continue
+    }
+    out.inProgress++
+  }
+  return out
+}
+
 /** ISO yyyy-mm-dd dates render verbatim; null renders as a neutral dash. */
 export function fmtDate(iso: string | null | undefined): string {
   return iso ?? '-'
@@ -186,54 +223,109 @@ export function optionCounts<T>(
 }
 
 /**
- * Roster-level duty/track mismatch heuristic. The authoritative warnings
- * (hasTrack / warningMsg from v1 ServicesDataService.html:276-308) ride only
- * on the profile payload; list rows carry the duty's functional area, which
- * the compute layer fills from DUTY_TO_TRACK_MAP when CAPWATCH omits it, so
- * the same substring match against enrolled tracks approximates them.
+ * Duty-to-required-track map, mirroring the server's authoritative
+ * DUTY_TO_TRACK_MAP (server/src/domain/constants/v1-constants.json, applied
+ * in domain/senior.ts applyDutyTrackWarnings). Mirrored here because roster
+ * rows carry only the duty name and the CAPWATCH FunctArea code ('LG',
+ * 'PD'), and matching those codes against track names is what made the old
+ * heuristic fire on most rows. Keep in sync with the server copy.
  */
-export function dutyLacksTrack(
-  functArea: string | null,
-  tracks: readonly { track: string }[],
-): boolean {
-  if (functArea === null || functArea.trim() === '') return false
-  const want = functArea.toUpperCase().trim()
-  return !tracks.some(t => {
-    const name = t.track.toUpperCase().trim()
-    return name.includes(want) || want.includes(name)
-  })
+export const DUTY_TO_TRACK_MAP: Readonly<Record<string, string>> = {
+  'AEROSPACE EDUCATION OFFICER': 'AEROSPACE',
+  'CYBER EDUCATION OFFICER': 'AEROSPACE',
+  'DIRECTOR OF AEROSPACE EDUCATION': 'AEROSPACE',
+  'DEPUTY COMMANDER FOR CADETS': 'CADET PROGRAMS',
+  'ACTIVITIES OFFICER': 'CADET PROGRAMS',
+  'DRUG DEMAND REDUCTION OFFICER': 'CADET PROGRAMS',
+  'FITNESS OFFICER': 'CADET PROGRAMS',
+  'SQUADRON LEADERSHIP OFFICER': 'CADET PROGRAMS',
+  'LEADERSHIP OFFICER': 'CADET PROGRAMS',
+  'DIRECTOR OF CADET PROGRAMS': 'CADET PROGRAMS',
+  COMMANDER: 'COMMAND',
+  HISTORIAN: 'HISTORIAN',
+  'HEALTH SERVICES OFFICER': 'HEALTH SERVICES',
+  'DIRECTOR OF HEALTH SERVICES': 'HEALTH SERVICES',
+  'COMMUNICATIONS OFFICER': 'COMMUNICATIONS',
+  'DIRECTOR OF COMMUNICATIONS': 'COMMUNICATIONS',
+  'DISASTER PREPAREDNESS OFFICER': 'EMERGENCY SERVICES',
+  'EMERGENCY SERVICES OFFICER': 'EMERGENCY SERVICES',
+  'EMERGENCY SERVICES TRAINING OFFICER': 'EMERGENCY SERVICES',
+  'SEARCH AND RESCUE OFFICER': 'EMERGENCY SERVICES',
+  'DIRECTOR OF EMERGENCY SERVICES': 'EMERGENCY SERVICES',
+  'FINANCE OFFICER': 'FINANCE',
+  'DIRECTOR OF FINANCE': 'FINANCE',
+  'LEGAL OFFICER': 'LEGAL',
+  'INFORMATION TECHNOLOGIES OFFICER': 'INFORMATION TECHNOLOGY',
+  'WEB SECURITY ADMIN': 'INFORMATION TECHNOLOGY',
+  'DIRECTOR OF INFORMATION TECHNOLOGY': 'INFORMATION TECHNOLOGY',
+  'LOGISTICS OFFICER': 'LOGISTICS',
+  'MAINTENANCE OFFICER': 'LOGISTICS',
+  'SUPPLY OFFICER': 'LOGISTICS',
+  'TRANSPORTATION OFFICER': 'LOGISTICS',
+  'DIRECTOR OF LOGISTICS': 'LOGISTICS',
+  'PUBLIC AFFAIRS OFFICER': 'PUBLIC AFFAIRS',
+  'DIRECTOR OF PUBLIC AFFAIRS': 'PUBLIC AFFAIRS',
+  'RECRUITING OFFICER': 'RECRUITING AND RETENTION',
+  'RETENTION OFFICER': 'RECRUITING AND RETENTION',
+  'RECRUITING AND RETENTION OFFICER': 'RECRUITING AND RETENTION',
+  'DIRECTOR OF RECRUITING AND RETENTION': 'RECRUITING AND RETENTION',
+  'ALERTING OFFICER': 'OPERATIONS',
+  'HOMELAND SECURITY OFFICER': 'OPERATIONS',
+  'OPERATIONS OFFICER': 'OPERATIONS',
+  'SMALL UNMANNED AERIAL SYSTEMS OFFICER': 'OPERATIONS',
+  'DIRECTOR OF OPERATIONS': 'OPERATIONS',
+  'PERSONNEL OFFICER': 'PERSONNEL',
+  'DIRECTOR OF PERSONNEL': 'PERSONNEL',
+  'ADMINISTRATIVE OFFICER': 'ADMINISTRATION',
+  'DIRECTOR OF ADMINISTRATION': 'ADMINISTRATION',
+  'EDUCATION AND TRAINING OFFICER': 'PROFESSIONAL DEVELOPMENT',
+  'TESTING OFFICER': 'PROFESSIONAL DEVELOPMENT',
+  'DIRECTOR OF PROFESSIONAL DEVELOPMENT': 'PROFESSIONAL DEVELOPMENT',
+  'DIRECTOR OF EDUCATION AND TRAINING': 'PROFESSIONAL DEVELOPMENT',
+  'SAFETY OFFICER': 'SAFETY',
+  'DIRECTOR OF SAFETY': 'SAFETY',
+  'STANDARDIZATION AND EVALUATION OFFICER': 'STANDARDS AND EVALUATIONS',
+  'STANDARDIZATION/EVALUATION OFFICER': 'STANDARDS AND EVALUATIONS',
+  'DIRECTOR OF STANDARDIZATION AND EVALUATION': 'STANDARDS AND EVALUATIONS',
+  'INSPECTOR GENERAL': 'INSPECTOR GENERAL',
+  CHAPLAIN: 'CHAPLAIN',
+  'CHARACTER DEVELOPMENT INSTRUCTOR': 'CHARACTER DEVELOPMENT',
 }
 
-export function trackLacksDuty(
-  track: { track: string; trackLevel: string },
-  duties: readonly { functArea: string | null }[],
-): boolean {
-  if (track.trackLevel.toUpperCase().trim() !== 'NONE') return false
-  const name = track.track.toUpperCase().trim()
-  return !duties.some(d => {
-    if (d.functArea === null) return false
-    const fa = d.functArea.toUpperCase().trim()
-    return fa === name || name.includes(fa) || fa.includes(name)
-  })
+export interface SeniorMissingTrack {
+  /** The held duty that requires the track. */
+  duty: string
+  /** The required specialty track (map value, uppercase). */
+  track: string
 }
 
 /**
- * The one discrepancy a senior roster row may carry (V2-DESIGN-PLAN.md
- * section 6: one meaningful discrepancy indicator per row). Track-without-
- * duty outranks duty-without-track; the returned sentence names it.
+ * The one actionable discrepancy a senior roster row may carry: a held duty
+ * position whose required specialty track (DUTY_TO_TRACK_MAP) the member
+ * does not hold at any level (enrollment at NONE counts as held, matching
+ * the server rule in applyDutyTrackWarnings). Unmapped duties never fire,
+ * and track-without-duty renders only in the profile modal, not the roster.
  */
-export function seniorDiscrepancyOf(row: SeniorRow): string | null {
-  for (const t of row.tracks) {
-    if (trackLacksDuty(t, row.duties)) {
-      return `${t.track}: enrolled with no matching duty assignment`
-    }
-  }
+export function seniorMissingTrackOf(row: SeniorRow): SeniorMissingTrack | null {
   for (const d of row.duties) {
-    if (dutyLacksTrack(d.functArea, row.tracks)) {
-      return `${d.duty}: missing specialty track${d.functArea !== null ? ` (${d.functArea})` : ''}`
-    }
+    const required = DUTY_TO_TRACK_MAP[d.duty.toUpperCase().trim()]
+    if (required === undefined) continue
+    const held = row.tracks.some(t => {
+      const name = t.track.toUpperCase().trim()
+      return name.includes(required) || required.includes(name)
+    })
+    if (!held) return { duty: d.duty, track: required }
   }
   return null
+}
+
+/** "CADET PROGRAMS" renders as "Cadet Programs" in the roster mark. */
+export function trackTitleCase(track: string): string {
+  return track
+    .toLowerCase()
+    .split(' ')
+    .map(w => (w === 'and' ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ')
 }
 
 const TRACK_LEVEL_RANK: Record<string, number> = { MASTER: 3, SENIOR: 2, TECHNICIAN: 1, NONE: 0 }

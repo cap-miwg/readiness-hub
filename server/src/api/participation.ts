@@ -19,6 +19,13 @@
  *   not quiet, so the quiet scan joins meetings wing-wide, not scope-wide.
  * - computed_member IS the ACTIVE include-list (computed_member rows exist
  *   only for MbrStatus ACTIVE members of included types).
+ * - Quiet eligibility is judged inside the 60-day window on three rules
+ *   (isQuietRow): the member's unit logged at least one meeting IN the
+ *   window (a unit that stopped logging must not contribute its whole
+ *   roster), an EXCUSED mark counts as engagement, and members who joined
+ *   inside the window are excluded (they never had a fair chance to attend).
+ * - D9 name gate: member names cross into Node only for the single-unit
+ *   named list; the wider-scope scan carries capids and counters alone.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
@@ -103,6 +110,75 @@ export interface QuietMemberRecord {
   lastPresentOn: Date | null
   rows90: number
   present90: number
+}
+
+/** One member of a 12-month logging unit, as loaded by loadQuietScan. */
+export interface QuietScanRow {
+  capid: number
+  /** '' unless the caller asked for names (single-unit scope, D9). */
+  fullName: string
+  orgid: number
+  /** computed_member.joined; members joined inside the window are excluded. */
+  joined: Date | string | null
+  /** The unit's latest logged meeting date in the 12-month window. */
+  unitLastMeetingOn: Date | string | null
+  /** Latest Present=true meeting date in the 12-month window; null if never. */
+  lastPresentOn: Date | null
+  /** Present=true rows inside the 60-day window, anywhere. */
+  present60: number
+  /** Excused=true rows inside the 60-day window (an excused absence engages). */
+  excused60: number
+  rows90: number
+  present90: number
+}
+
+function dateOnOrAfter(value: Date | string | null, cutoff: Date): boolean {
+  if (value === null) return false
+  const iso = isoDate(value)
+  const cutoffIso = isoDate(cutoff)
+  return iso !== null && cutoffIso !== null && iso >= cutoffIso
+}
+
+/**
+ * The quiet rule over one scan row: quiet only when the member's unit logged
+ * a meeting inside the 60-day window, the member did not join inside that
+ * window, and the member has zero Present or Excused marks inside it.
+ */
+export function isQuietRow(row: QuietScanRow, d60: Date): boolean {
+  if (!dateOnOrAfter(row.unitLastMeetingOn, d60)) return false
+  if (dateOnOrAfter(row.joined, d60)) return false
+  return row.present60 + row.excused60 === 0
+}
+
+/** Per-unit quiet counts from scan rows (the wider-scope, no-names path). */
+export function quietCountsOf(rows: readonly QuietScanRow[], d60: Date): QuietCountRow[] {
+  const byOrgid = new Map<number, number>()
+  for (const row of rows) {
+    if (isQuietRow(row, d60)) byOrgid.set(row.orgid, (byOrgid.get(row.orgid) ?? 0) + 1)
+  }
+  return [...byOrgid.entries()].map(([orgid, quietCount]) => ({ orgid, quietCount }))
+}
+
+/** Named quiet records from scan rows, never-present first then by name. */
+export function quietMembersOf(rows: readonly QuietScanRow[], d60: Date): QuietMemberRecord[] {
+  return rows
+    .filter(row => isQuietRow(row, d60))
+    .map(row => ({
+      capid: row.capid,
+      fullName: row.fullName,
+      orgid: row.orgid,
+      lastPresentOn: row.lastPresentOn,
+      rows90: row.rows90,
+      present90: row.present90,
+    }))
+    .sort((a, b) => {
+      const aLast = isoDate(a.lastPresentOn)
+      const bLast = isoDate(b.lastPresentOn)
+      if (aLast === null && bLast !== null) return -1
+      if (aLast !== null && bLast === null) return 1
+      if (aLast !== null && bLast !== null && aLast !== bLast) return aLast < bLast ? -1 : 1
+      return a.fullName.localeCompare(b.fullName)
+    })
 }
 
 // --- Pure assembly (unit-tested against synthetic rows) ---
@@ -284,41 +360,90 @@ async function loadMonthlySeries(
 }
 
 /**
- * Quiet-member counts per logging unit in scope: ACTIVE include-list members
- * (computed_member) of units that log, with zero Present=true rows in the
- * trailing 60 days anywhere.
+ * One row per ACTIVE include-list member of every unit in scope that logged
+ * any meeting in the trailing 12 months, with per-member 60/90-day counters.
+ * Names load only when `withNames` (single-unit scope, D9); the wider-scope
+ * scan carries capids and counters alone. The quiet verdict itself is pure
+ * (isQuietRow), applied by the callers.
+ */
+async function loadQuietScan(
+  scopeOrgids: readonly number[],
+  asOf: Date,
+  withNames: boolean,
+): Promise<QuietScanRow[]> {
+  if (scopeOrgids.length === 0) return []
+  const w = participationWindows(asOf)
+  const res = await pool.query<{
+    capid: number
+    full_name: string | null
+    orgid: number
+    joined: Date | null
+    unit_last_meeting_on: Date | null
+    last_present_on: Date | null
+    present60: number
+    excused60: number
+    rows90: number
+    present90: number
+  }>(
+    `WITH mtg AS (${ALL_MEETINGS}),
+     logging_units AS (
+       SELECT orgid, max(start_date) AS unit_last_meeting_on
+       FROM mtg WHERE orgid = ANY($1::int[])
+       GROUP BY orgid
+     ),
+     member_pool AS (
+       SELECT cm.capid, ${withNames ? 'cm.full_name' : `''::text AS full_name`},
+              cm.orgid, cm.joined, lu.unit_last_meeting_on
+       FROM computed_member cm
+       JOIN logging_units lu ON lu.orgid = cm.orgid
+     ),
+     history AS (
+       SELECT a.capid,
+              max(m.start_date) FILTER (WHERE a.present) AS last_present_on,
+              count(*) FILTER (WHERE a.present AND m.start_date >= $3::date)::int AS present60,
+              count(*) FILTER (WHERE a.excused AND m.start_date >= $3::date)::int AS excused60,
+              count(a.attendance_log_id) FILTER (WHERE m.start_date >= $4::date)::int AS rows90,
+              count(*) FILTER (WHERE a.present AND m.start_date >= $4::date)::int AS present90
+       FROM attendance_attendees a
+       JOIN mtg m ON m.attendance_log_id = a.attendance_log_id
+       WHERE a.capid IN (SELECT capid FROM member_pool)
+       GROUP BY a.capid
+     )
+     SELECT p.capid, p.full_name, p.orgid, p.joined, p.unit_last_meeting_on,
+            h.last_present_on,
+            coalesce(h.present60, 0)::int AS present60,
+            coalesce(h.excused60, 0)::int AS excused60,
+            coalesce(h.rows90, 0)::int AS rows90,
+            coalesce(h.present90, 0)::int AS present90
+     FROM member_pool p
+     LEFT JOIN history h ON h.capid = p.capid`,
+    [scopeOrgids, isoDate(w.monthsStart), isoDate(w.d60), isoDate(w.d90)],
+  )
+  return res.rows.map(r => ({
+    capid: r.capid,
+    fullName: r.full_name ?? '',
+    orgid: r.orgid,
+    joined: r.joined,
+    unitLastMeetingOn: r.unit_last_meeting_on,
+    lastPresentOn: r.last_present_on,
+    present60: r.present60,
+    excused60: r.excused60,
+    rows90: r.rows90,
+    present90: r.present90,
+  }))
+}
+
+/**
+ * Quiet-member counts per unit in scope: members of units that logged inside
+ * the 60-day window, excluding recent joiners, with zero Present or Excused
+ * marks in that window anywhere (isQuietRow).
  */
 export async function loadQuietCounts(
   scopeOrgids: readonly number[],
   asOf: Date,
 ): Promise<QuietCountRow[]> {
-  if (scopeOrgids.length === 0) return []
-  const w = participationWindows(asOf)
-  const res = await pool.query<{ orgid: number; quiet_count: number }>(
-    `WITH mtg AS (${ALL_MEETINGS}),
-     logging_units AS (
-       SELECT DISTINCT orgid FROM mtg WHERE orgid = ANY($1::int[])
-     ),
-     member_pool AS (
-       SELECT cm.capid, cm.orgid
-       FROM computed_member cm
-       JOIN logging_units lu ON lu.orgid = cm.orgid
-     ),
-     recent_present AS (
-       SELECT DISTINCT a.capid
-       FROM attendance_attendees a
-       JOIN mtg m ON m.attendance_log_id = a.attendance_log_id
-       WHERE a.present AND m.start_date >= $3::date
-         AND a.capid IN (SELECT capid FROM member_pool)
-     )
-     SELECT p.orgid, count(*)::int AS quiet_count
-     FROM member_pool p
-     LEFT JOIN recent_present rp ON rp.capid = p.capid
-     WHERE rp.capid IS NULL
-     GROUP BY p.orgid`,
-    [scopeOrgids, isoDate(w.monthsStart), isoDate(w.d60)],
-  )
-  return res.rows.map(r => ({ orgid: r.orgid, quietCount: r.quiet_count }))
+  const rows = await loadQuietScan(scopeOrgids, asOf, false)
+  return quietCountsOf(rows, participationWindows(asOf).d60)
 }
 
 /**
@@ -329,52 +454,8 @@ export async function loadQuietMembers(
   scopeOrgids: readonly number[],
   asOf: Date,
 ): Promise<QuietMemberRecord[]> {
-  if (scopeOrgids.length === 0) return []
-  const w = participationWindows(asOf)
-  const res = await pool.query<{
-    capid: number
-    full_name: string | null
-    orgid: number
-    last_present_on: Date | null
-    rows90: number
-    present90: number
-  }>(
-    `WITH mtg AS (${ALL_MEETINGS}),
-     logging_units AS (
-       SELECT DISTINCT orgid FROM mtg WHERE orgid = ANY($1::int[])
-     ),
-     member_pool AS (
-       SELECT cm.capid, cm.full_name, cm.orgid
-       FROM computed_member cm
-       JOIN logging_units lu ON lu.orgid = cm.orgid
-     ),
-     history AS (
-       SELECT a.capid,
-              max(m.start_date) FILTER (WHERE a.present) AS last_present_on,
-              count(*) FILTER (WHERE a.present AND m.start_date >= $3::date)::int AS present60,
-              count(a.attendance_log_id) FILTER (WHERE m.start_date >= $4::date)::int AS rows90,
-              count(*) FILTER (WHERE a.present AND m.start_date >= $4::date)::int AS present90
-       FROM attendance_attendees a
-       JOIN mtg m ON m.attendance_log_id = a.attendance_log_id
-       WHERE a.capid IN (SELECT capid FROM member_pool)
-       GROUP BY a.capid
-     )
-     SELECT p.capid, p.full_name, p.orgid, h.last_present_on,
-            coalesce(h.rows90, 0)::int AS rows90, coalesce(h.present90, 0)::int AS present90
-     FROM member_pool p
-     LEFT JOIN history h ON h.capid = p.capid
-     WHERE coalesce(h.present60, 0) = 0
-     ORDER BY h.last_present_on NULLS FIRST, p.full_name`,
-    [scopeOrgids, isoDate(w.monthsStart), isoDate(w.d60), isoDate(w.d90)],
-  )
-  return res.rows.map(r => ({
-    capid: r.capid,
-    fullName: r.full_name ?? '',
-    orgid: r.orgid,
-    lastPresentOn: r.last_present_on,
-    rows90: r.rows90,
-    present90: r.present90,
-  }))
+  const rows = await loadQuietScan(scopeOrgids, asOf, true)
+  return quietMembersOf(rows, participationWindows(asOf).d60)
 }
 
 /**

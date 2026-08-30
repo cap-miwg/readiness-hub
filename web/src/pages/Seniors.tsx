@@ -31,7 +31,8 @@ import {
   optionCounts,
   primaryDutyOf,
   primaryTrackOf,
-  seniorDiscrepancyOf,
+  seniorMissingTrackOf,
+  trackTitleCase,
 } from '../features/members/shared'
 
 // Rank category sets shown in the filter (v1 Index.html:1204-1207); the server
@@ -295,19 +296,10 @@ export default function Seniors() {
         header: 'Duty',
         render: r => {
           const primary = primaryDutyOf(r.duties)
-          const discrepancy = seniorDiscrepancyOf(r)
-          if (primary === null) {
-            return (
-              <div className="flex flex-wrap items-center gap-x-2">
-                <span className="text-xs text-ink2">None</span>
-                {discrepancy !== null && (
-                  <span title={discrepancy}>
-                    <VerdictMark kind="watch" label="Gap" className="text-xs" />
-                  </span>
-                )}
-              </div>
-            )
-          }
+          if (primary === null) return <span className="text-xs text-ink2">None</span>
+          // The actionable case only: a held duty whose required track is
+          // missing. The mark names the track itself, no tooltip needed.
+          const missing = seniorMissingTrackOf(r)
           const more = r.duties.length - 1
           const crossUnit = primary.heldAtOrgid !== r.orgid
           return (
@@ -328,10 +320,12 @@ export default function Seniors() {
                 {crossUnit && <span className="ml-1.5 text-xs text-symbol">cross-unit</span>}
                 {more > 0 && <span className="ml-1.5 text-xs text-ink2">+{more}</span>}
               </span>
-              {discrepancy !== null && (
-                <span title={discrepancy}>
-                  <VerdictMark kind="watch" label="Gap" className="text-xs" />
-                </span>
+              {missing !== null && (
+                <VerdictMark
+                  kind="watch"
+                  label={`Missing track: ${trackTitleCase(missing.track)}`}
+                  className="text-xs"
+                />
               )}
             </div>
           )

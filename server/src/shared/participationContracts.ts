@@ -46,9 +46,12 @@ export interface QuietMemberEntry {
 }
 
 /**
- * Active include-list members with zero Present=true rows in the trailing 60
- * days, counted only in units that log attendance (a unit that does not use
- * the eServices attendance module contributes nobody).
+ * Active include-list members with zero Present or Excused marks in the
+ * trailing 60 days, counted only in units that logged at least one meeting
+ * INSIDE that window (a unit that does not use the eServices attendance
+ * module, or that stopped logging, contributes nobody). Members marked
+ * Excused at an in-window meeting count as engaged, and members who joined
+ * inside the window are excluded.
  */
 export interface ParticipationQuiet {
   count: number

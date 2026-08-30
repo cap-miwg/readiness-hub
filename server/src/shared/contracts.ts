@@ -13,7 +13,7 @@ import type {
 } from '../domain/computedTypes.js'
 import type { PromotionState } from '../domain/cadet.js'
 import type { LevelsProgress, PromotionDetails } from '../domain/senior.js'
-import type { UnitEsAnalysis } from '../domain/esUnit.js'
+import type { SinglePointOfFailure, UnitEsAnalysis } from '../domain/esUnit.js'
 import type { UnitOrgStatsMetrics } from '../domain/orgStats.js'
 
 export type Role = 'viewer' | 'admin'
@@ -48,6 +48,20 @@ export interface MetaResponse {
    * (V2-DESIGN-PLAN.md section 5); the client humanizes the cron.
    */
   ingestSchedule: string | null
+  /**
+   * Outcome of the LATEST ingest_runs row of any kind (fetch, upload,
+   * adoption, demo), for the as-of ladder: a failed run must surface even
+   * while lastIngestAt still points at the last success. 'failed' covers
+   * failed and aborted runs; null before the first run or while one is
+   * still running.
+   */
+  lastRunStatus: 'succeeded' | 'failed' | null
+  /**
+   * Hours after which the dataset counts as stale for the as-of ladder.
+   * app_settings 'ingest.stale_hours' (admin-settable, 6..168), default 26
+   * (the daily fetch plus slack).
+   */
+  staleAfterHours: number
 }
 
 /**
@@ -132,6 +146,31 @@ export interface StrengthPoint {
   total: number
 }
 
+/**
+ * A single point of failure as served: `member` (the full name) is present
+ * ONLY when the resolved scope is a single operational unit's own view (no
+ * descendants, org type not a command HQ). That self view IS the drill-down;
+ * every wider scope gets the position facts without the name (D9).
+ */
+export type ServedSinglePointOfFailure = Omit<Jsonified<SinglePointOfFailure>, 'member'> & {
+  member?: string
+}
+
+/**
+ * The ES analysis jsonb as served by /overview and /es. Above a single
+ * operational unit's self scope (descendants=true, or a command HQ org type)
+ * the server strips member names before serialization: SPOF entries lose
+ * `member` entirely, and the other name-carrying lists (evaluators.available,
+ * teams.*.qualifiedMembers, qualifications.expiringWithin90Days and
+ * missingGES, pipeline entries, and the SPOF recommendation sentence) serve
+ * '' in their name field. Counts and positions survive at every scope.
+ */
+export type ServedEsAnalysis = Omit<Jsonified<UnitEsAnalysis>, 'risks'> & {
+  risks: Omit<Jsonified<UnitEsAnalysis>['risks'], 'singlePointsOfFailure'> & {
+    singlePointsOfFailure: ServedSinglePointOfFailure[]
+  }
+}
+
 export interface OverviewResponse {
   orgid: number
   descendants: boolean
@@ -146,7 +185,8 @@ export interface OverviewResponse {
     /** Real orgs in scope after unit exclusions (the "Units in Scope" tile). */
     unitsInScope: number
   }
-  es: Jsonified<UnitEsAnalysis>
+  /** Name fields stripped above self operational scope; see ServedEsAnalysis. */
+  es: ServedEsAnalysis
   orgStats: Jsonified<UnitOrgStatsMetrics> | null
   /**
    * Mode C only (null otherwise): descendants' self rows, HQ unit types and
@@ -174,7 +214,8 @@ export interface EsAnalysisResponse {
   orgid: number
   descendants: boolean
   scope: 'self' | 'subtree'
-  es: Jsonified<UnitEsAnalysis>
+  /** Name fields stripped above self operational scope; see ServedEsAnalysis. */
+  es: ServedEsAnalysis
 }
 
 export interface OrgChartResponse {
@@ -655,18 +696,21 @@ export interface AuditResponse {
 }
 
 /**
- * GET/PUT /api/admin/settings: only these two keys are writable. Changes to
+ * GET/PUT /api/admin/settings: only these three keys are writable. Changes to
  * memberTypes and excludedUnits take full effect at the next ingest compute;
- * the org tree and picker exclusion applies immediately.
+ * the org tree and picker exclusion applies immediately. staleHours feeds
+ * MetaResponse.staleAfterHours (the as-of ladder), validated 6..168.
  */
 export interface AdminSettingsResponse {
   excludedUnits: string[]
   memberTypes: string[]
+  staleHours: number
 }
 
 export interface AdminSettingsUpdate {
   excludedUnits?: string[]
   memberTypes?: string[]
+  staleHours?: number
 }
 
 // --- Admin usage panel (V2-DESIGN-PLAN.md section 10 success metrics) ---

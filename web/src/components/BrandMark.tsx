@@ -29,7 +29,7 @@ export default function BrandMark({ className }: { className?: string }) {
     <img
       src="/brand/logo"
       alt=""
-      className={clsx('h-7 w-7 shrink-0 object-contain', className)}
+      className={clsx('h-7 w-auto max-w-[180px] shrink-0 object-contain', className)}
       onError={() => setFailed(true)}
     />
   )

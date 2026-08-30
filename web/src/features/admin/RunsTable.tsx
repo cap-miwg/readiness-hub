@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { History, RefreshCw } from 'lucide-react'
 import type { IngestRunSummary } from '@shared/contracts'
+import { formatExtractDay } from '../../components/dates'
 import {
   Badge,
   Banner,
@@ -8,7 +9,6 @@ import {
   EmptyState,
   Modal,
   Spinner,
-  VerdictMark,
   type Column,
   type Tone,
 } from '../../components/ui'
@@ -16,13 +16,15 @@ import { IngestResultSummary } from './IngestPanel'
 import { useRuns } from './adminApi'
 
 // Tones ride the restyled Badge verdict grammar: succeeded stays quiet ink
-// (success is silence), failed carries the scarlet mark, running the watch
-// diamond, aborted muted.
+// (success is silence), scarlet marks only runs that did not finish their
+// job (failed or aborted), running gets the watch amber. Reject counts are
+// quiet ink: a handful of rejected rows is routine CAPWATCH noise, not an
+// alarm (the per-file detail lives in the run modal).
 const STATUS_TONE: Record<IngestRunSummary['status'], Tone> = {
   succeeded: 'green',
   failed: 'red',
   running: 'amber',
-  aborted: 'slate',
+  aborted: 'red',
 }
 
 function totalRows(run: IngestRunSummary): number | null {
@@ -69,7 +71,9 @@ const COLUMNS: Column<IngestRunSummary>[] = [
     header: 'Extract date',
     numeric: true,
     align: 'left',
-    render: r => (r.downloadDate ? r.downloadDate.slice(0, 10) : ''),
+    // The shared UTC extract-day formatter, so this column and the header
+    // As-of chip name the same calendar day for the same extract.
+    render: r => (r.downloadDate ? formatExtractDay(r.downloadDate) : ''),
     sortValue: r => r.downloadDate,
   },
   {
@@ -93,7 +97,7 @@ const COLUMNS: Column<IngestRunSummary>[] = [
     render: r => {
       const n = totalRejects(r)
       if (n === null) return ''
-      return n > 0 ? <VerdictMark kind="action" label={n.toLocaleString()} /> : '0'
+      return <span className="text-ink2">{n.toLocaleString()}</span>
     },
     sortValue: r => totalRejects(r),
   },
@@ -127,17 +131,12 @@ function RunCard({ run }: { run: IngestRunSummary }) {
       </div>
       <div className="tnum text-xs text-ink2">
         {new Date(run.startedAt).toLocaleString()}
-        {run.downloadDate ? ` · extract ${run.downloadDate.slice(0, 10)}` : ''}
+        {run.downloadDate ? ` · extract ${formatExtractDay(run.downloadDate)}` : ''}
       </div>
       <div className="tnum flex items-center gap-3 text-xs text-ink2">
         {run.fileStats && <span>{run.fileStats.files.length} files</span>}
         {totalRows(run) !== null && <span>{totalRows(run)?.toLocaleString()} rows</span>}
-        {rejects !== null &&
-          (rejects > 0 ? (
-            <VerdictMark kind="action" label={`${rejects.toLocaleString()} rejects`} />
-          ) : (
-            <span>0 rejects</span>
-          ))}
+        {rejects !== null && <span>{rejects.toLocaleString()} rejects</span>}
       </div>
       {run.error && (
         <div className="truncate text-xs text-scarlet" title={run.error}>
@@ -211,7 +210,7 @@ export default function RunsTable() {
                 <span>Finished {new Date(selected.finishedAt).toLocaleString()}</span>
               )}
               {selected.downloadDate && (
-                <Badge tone="blue">extract {selected.downloadDate.slice(0, 10)}</Badge>
+                <Badge tone="blue">extract {formatExtractDay(selected.downloadDate)}</Badge>
               )}
             </div>
             {selected.status === 'running' ? (

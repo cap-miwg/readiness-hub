@@ -589,6 +589,41 @@ function monthsAgo(asOf: Date, months: number): Date {
   return date
 }
 
+/**
+ * Zero-based month counter (year*12 + month) for calendar-month arithmetic.
+ * ORGStatistics CntDate arrives either as a UTC-midnight Date (parse layer)
+ * or a local-midnight Date (pg date columns); the same UTC-midnight rule
+ * api/util.ts isoDate applies preserves the intended calendar month here.
+ */
+export function monthIndexOf(d: Date): number {
+  if (
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  ) {
+    return d.getUTCFullYear() * 12 + d.getUTCMonth()
+  }
+  return d.getFullYear() * 12 + d.getMonth()
+}
+
+/**
+ * The entry for the calendar month exactly `monthsBack` before the latest
+ * data month, or undefined when that month is absent from the series. Never
+ * select by array position: monthly series can carry gaps, and length-12 is
+ * only 11 calendar months before the latest entry (the off-by-one that made
+ * every 12-month delta compare against the wrong month).
+ */
+export function entryMonthsBefore(
+  monthlyData: readonly MonthlyEntry[],
+  monthsBack: number,
+): MonthlyEntry | undefined {
+  const latest = monthlyData[monthlyData.length - 1]
+  if (latest === undefined) return undefined
+  const target = monthIndexOf(latest.date) - monthsBack
+  return monthlyData.find(m => monthIndexOf(m.date) === target)
+}
+
 export interface MemberBreakdown {
   senior: number
   cadet: number
@@ -650,7 +685,10 @@ export function getMetricsForUnit(
   const latestMonth = displayData.length > 0 ? displayData[displayData.length - 1] : undefined
   const currentTotal = latestMonth !== undefined ? latestMonth[mbrType].total : 0
 
-  const yearAgoEntry = monthlyData.length >= 12 ? monthlyData[monthlyData.length - 12] : undefined
+  // The calendar month exactly 12 before the latest data month (null when
+  // that month is absent), so the delta always compares like month to like
+  // month even with reporting lag or gaps in the series.
+  const yearAgoEntry = entryMonthsBefore(monthlyData, 12)
   const yearAgoTotal = yearAgoEntry !== undefined ? yearAgoEntry[mbrType].total : null
 
   const memberBreakdown: MemberBreakdown | null =

@@ -110,10 +110,10 @@ export function ParticipationSection({ participation }: { participation: Partici
           {quietMembers.count > 0 ? (
             <VerdictMark
               kind="watch"
-              label={`${quietMembers.count} ${plural(quietMembers.count, 'member')} with no recorded attendance in 60 days`}
+              label={`${quietMembers.count} ${plural(quietMembers.count, 'member')} not marked present in 60 days`}
             />
           ) : (
-            'Every active member has recorded attendance in the last 60 days'
+            'Every active member has been marked present in the last 60 days'
           )}
         </FactRow>
         <FactRow label="Guests">

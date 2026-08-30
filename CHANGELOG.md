@@ -6,19 +6,6 @@ plain-language entries members can understand.
 
 ## 2.0.0 (unreleased)
 
-### Design
-- The whole app moved to the official CAP brand: Symbol Blue and Silver Gray,
-  with scarlet and yellow reserved for things that actually need attention.
-  A healthy unit reads as a calm page.
-- CAP brand typography (Rajdhani for headings and figures, Ubuntu for text).
-- The gradient banner is gone; your deployment's official logo shows in the
-  top bar.
-
-### Navigation
-- One-row top bar: the unit selector (with charter numbers back, grouped by
-  command structure) and the data-age chip moved up next to the tabs.
-- On phones, navigation collapses into a menu button.
-
 ### Home
 - Home is now your page: My Progress (your next promotion requirement,
   in plain English) and My Unit (your unit's health at a glance, and when
@@ -35,6 +22,19 @@ plain-language entries members can understand.
 ### Reports
 - Every export prints the extract date it was built from.
 - New reports for attendance and logistics data.
+
+### Design
+- The whole app moved to the official CAP brand: Symbol Blue and Silver Gray,
+  with scarlet and yellow reserved for things that actually need attention.
+  A healthy unit reads as a calm page.
+- CAP brand typography (Rajdhani for headings and figures, Ubuntu for text).
+- The gradient banner is gone; your deployment's official logo shows in the
+  top bar.
+
+### Navigation
+- One-row top bar: the unit selector (with charter numbers back, grouped by
+  command structure) and the data-age chip moved up next to the tabs.
+- On phones, navigation collapses into a menu button.
 
 ## 1.11.0 (2026-02-17)
 - Final Apps Script release. v1 remains available on the `v1.11.0` tag.

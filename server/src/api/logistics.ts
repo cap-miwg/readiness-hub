@@ -24,22 +24,28 @@ import { daysSince, isoDate, UNASSIGNED_ORGID } from './util.js'
 
 /** Usage window feeding VehicleRow.miles90. */
 const USAGE_MILES_WINDOW_DAYS = 90
-/** Idle window feeding VehicleSummary.unusedIn60d. */
-const UNUSED_WINDOW_DAYS = 60
+/**
+ * Idle window feeding VehicleSummary.unusedIn60d, in calendar months:
+ * vehicles_usage rows are monthly summaries dated the 1st, so a row covers
+ * its whole month. "Unused" means no usage row in the current or previous
+ * UNUSED_WINDOW_MONTHS months (the 60-day intent plus reporting lag).
+ */
+const UNUSED_WINDOW_MONTHS = 2
 
 // --- Pure assembly (unit-tested directly) ---
 
 /**
  * Defensive numeric parse for CAPWATCH free-text figures (TotalMiles,
- * odometer): strip everything but digits; null when nothing parseable
- * remains or the digits overflow a safe integer.
+ * odometer): strip thousands separators, then take the first signed decimal
+ * number ("-207", "1,234.5 mi"); null when nothing parseable remains or the
+ * value overflows the safe-integer range.
  */
 export function parseNumericText(value: string | null | undefined): number | null {
   if (typeof value !== 'string') return null
-  const digits = value.replace(/[^0-9]/g, '')
-  if (digits === '') return null
-  const n = Number.parseInt(digits, 10)
-  return Number.isSafeInteger(n) ? n : null
+  const match = value.replace(/,/g, '').match(/-?\d+(\.\d+)?/)
+  if (match === null) return null
+  const n = Number.parseFloat(match[0])
+  return Number.isFinite(n) && Number.isSafeInteger(Math.trunc(n)) ? n : null
 }
 
 export interface VehicleFacts {
@@ -70,6 +76,17 @@ function maxIso(current: string | null, candidate: string | null): string | null
   return current
 }
 
+/** 'yyyy-mm' month key for a usage date; null when undated. */
+export function monthKeyOf(d: Date | string | null | undefined): string | null {
+  return isoDate(d)?.slice(0, 7) ?? null
+}
+
+/** 'yyyy-mm' month key `monthsBack` calendar months before asOf. */
+export function monthKeyBack(asOf: Date, monthsBack: number): string {
+  const d = new Date(asOf.getFullYear(), asOf.getMonth() - monthsBack, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 /**
  * Vehicle rows with usage and maintenance joined by CAP vehicle number,
  * sorted not-roadable first (the down vehicle is the fact a transportation
@@ -84,11 +101,13 @@ export function buildVehicleRows(
   const lastUsed = new Map<string, string | null>()
   const miles90 = new Map<string, number>()
   for (const u of usage) {
-    const used = isoDate(u.usageDate)
+    // Month key, not a day: usage rows are monthly summaries dated the 1st.
+    const used = monthKeyOf(u.usageDate)
     lastUsed.set(u.capId, maxIso(lastUsed.get(u.capId) ?? null, used))
     const age = daysSince(u.usageDate, asOf)
     if (age !== null && age >= 0 && age <= USAGE_MILES_WINDOW_DAYS) {
       const miles = parseNumericText(u.totalMiles)
+      // Signed: ORMS carries negative correction rows that net earlier months.
       if (miles !== null) miles90.set(u.capId, (miles90.get(u.capId) ?? 0) + miles)
     }
   }
@@ -106,7 +125,7 @@ export function buildVehicleRows(
     odometer: parseNumericText(v.odometer),
     lastUsedOn: lastUsed.get(v.capId) ?? null,
     lastMaintOn: lastMaint.get(v.capId) ?? null,
-    miles90: miles90.get(v.capId) ?? 0,
+    miles90: Math.max(0, miles90.get(v.capId) ?? 0),
   }))
   rows.sort((a, b) => {
     const aDown = a.roadable === false ? 0 : 1
@@ -118,23 +137,64 @@ export function buildVehicleRows(
 }
 
 export function buildVehicleSummary(rows: readonly VehicleRow[], asOf: Date): VehicleSummary {
+  // Earliest month key still counted as used (current month minus 2).
+  const usedFloor = monthKeyBack(asOf, UNUSED_WINDOW_MONTHS)
   let roadable = 0
   let downCount = 0
   let unusedIn60d = 0
   for (const row of rows) {
     if (row.roadable === true) roadable++
     if (row.roadable === false) downCount++
-    const idle = daysSince(row.lastUsedOn, asOf)
-    if (idle === null || idle > UNUSED_WINDOW_DAYS) unusedIn60d++
+    // Month keys compare lexicographically; null means never used.
+    if (row.lastUsedOn === null || row.lastUsedOn < usedFloor) unusedIn60d++
   }
   return { total: rows.length, roadable, downCount, unusedIn60d }
 }
 
 /**
- * Equipment section: the summary covers every row in scope; the served list
- * is capped at EQUIPMENT_ROW_CAP (big units carry thousands of assets).
+ * An equipment row plus the server-side issued flag. The flag never ships:
+ * buildEquipmentSection folds it into equipmentSummary.issuedCount and strips
+ * it from the served rows (the issued-to CAPID itself never leaves SQL).
  */
-export function buildEquipmentSection(rows: readonly EquipmentRow[]): {
+export interface EquipmentFact extends EquipmentRow {
+  issued: boolean
+}
+
+interface EquipmentSourceRow {
+  assetcd: string | null
+  noun: string | null
+  make: string | null
+  model: string | null
+  inserv: string | null
+  status: string | null
+  issued_capid: number | null
+  issued_date: Date | null
+}
+
+/**
+ * DB row -> EquipmentFact. ORMS writes issued_capid = 0 as the unissued
+ * sentinel, so only a CAPID > 0 marks the asset issued to a real member; the
+ * CAPID value itself is dropped here and never serialized.
+ */
+export function equipmentFactOf(r: EquipmentSourceRow): EquipmentFact {
+  return {
+    assetCode: r.assetcd,
+    noun: r.noun,
+    make: r.make,
+    model: r.model,
+    inService: r.inserv,
+    status: r.status,
+    issuedOn: isoDate(r.issued_date),
+    issued: (r.issued_capid ?? 0) > 0,
+  }
+}
+
+/**
+ * Equipment section: the summary covers every row in scope; the served list
+ * is capped at EQUIPMENT_ROW_CAP (big units carry thousands of assets) and
+ * carries no member identifiers.
+ */
+export function buildEquipmentSection(rows: readonly EquipmentFact[]): {
   equipment: EquipmentRow[]
   equipmentSummary: EquipmentSummary
 } {
@@ -143,13 +203,13 @@ export function buildEquipmentSection(rows: readonly EquipmentRow[]): {
   for (const row of rows) {
     const status = (row.status ?? '').trim()
     counts.set(status, (counts.get(status) ?? 0) + 1)
-    if (row.issuedCapid !== null) issuedCount++
+    if (row.issued) issuedCount++
   }
   const byStatus: EquipmentStatusCount[] = [...counts.entries()]
     .map(([status, count]) => ({ status, count }))
     .sort((a, b) => (b.count !== a.count ? b.count - a.count : a.status.localeCompare(b.status)))
   return {
-    equipment: rows.slice(0, EQUIPMENT_ROW_CAP),
+    equipment: rows.slice(0, EQUIPMENT_ROW_CAP).map(({ issued: _issued, ...row }) => row),
     equipmentSummary: { total: rows.length, byStatus, issuedCount },
   }
 }
@@ -158,7 +218,7 @@ export interface LogisticsFacts {
   vehicles: VehicleFacts[]
   usage: VehicleUsageFact[]
   maintenance: VehicleMaintFact[]
-  equipment: EquipmentRow[]
+  equipment: EquipmentFact[]
   property: PropertyRow[]
 }
 
@@ -202,17 +262,6 @@ interface DbMaintRow {
   date_of_maint: Date | null
 }
 
-interface DbEquipmentRow {
-  assetcd: string | null
-  noun: string | null
-  make: string | null
-  model: string | null
-  inserv: string | null
-  status: string | null
-  issued_capid: number | null
-  issued_date: Date | null
-}
-
 interface DbPropertyRow {
   prop_code: string | null
   prop_type: string | null
@@ -233,7 +282,7 @@ async function handleLogistics(req: FastifyRequest, reply: FastifyReply): Promis
        FROM vehicles WHERE orgid = ANY($1::int[]) ORDER BY cap_id`,
       [scopeOrgids],
     ),
-    pool.query<DbEquipmentRow>(
+    pool.query<EquipmentSourceRow>(
       `SELECT assetcd, noun, make, model, inserv, status, issued_capid, issued_date
        FROM equipment WHERE orgid = ANY($1::int[]) ORDER BY noun, assetcd`,
       [scopeOrgids],
@@ -275,16 +324,7 @@ async function handleLogistics(req: FastifyRequest, reply: FastifyReply): Promis
     maintenance: maintRes.rows.flatMap(r =>
       r.cap_id !== null ? [{ capId: r.cap_id, maintDate: r.date_of_maint }] : [],
     ),
-    equipment: eqRes.rows.map(r => ({
-      assetCode: r.assetcd,
-      noun: r.noun,
-      make: r.make,
-      model: r.model,
-      inService: r.inserv,
-      status: r.status,
-      issuedCapid: r.issued_capid,
-      issuedOn: isoDate(r.issued_date),
-    })),
+    equipment: eqRes.rows.map(equipmentFactOf),
     property: propRes.rows.map(r => ({
       propCode: r.prop_code,
       propType: r.prop_type,

@@ -18,14 +18,26 @@ export interface ChangelogEntry {
 export const CHANGELOG_URL = 'https://github.com/cap-miwg/readiness-hub/blob/main/CHANGELOG.md'
 
 /** Max entries the Home panel shows; the full file is one click away. */
-export const WHATS_NEW_CAP = 5
+export const WHATS_NEW_CAP = 6
+
+/**
+ * Max entries per `### area` heading, applied before the overall cap so one
+ * verbose area cannot crowd every other area out of the panel.
+ */
+export const WHATS_NEW_AREA_CAP = 2
 
 /**
  * Parse the latest `## version` block into entries. Format contract (stated
  * at the top of CHANGELOG.md): one `## version` heading per release, `### area`
- * subheadings, `- ` bullets with indented continuation lines.
+ * subheadings, `- ` bullets with indented continuation lines. Each area
+ * contributes at most areaCap entries (in file order), then the overall cap
+ * applies, so ordering the file's sections is ordering the panel.
  */
-export function parseChangelog(md: string, cap: number = WHATS_NEW_CAP): ChangelogEntry[] {
+export function parseChangelog(
+  md: string,
+  cap: number = WHATS_NEW_CAP,
+  areaCap: number = WHATS_NEW_AREA_CAP,
+): ChangelogEntry[] {
   const entries: ChangelogEntry[] = []
   let version: string | null = null
   let area = ''
@@ -67,7 +79,16 @@ export function parseChangelog(md: string, cap: number = WHATS_NEW_CAP): Changel
     flush()
   }
   flush()
-  return entries.slice(0, cap)
+
+  const perArea = new Map<string, number>()
+  const capped: ChangelogEntry[] = []
+  for (const entry of entries) {
+    const seen = perArea.get(entry.area) ?? 0
+    if (seen >= areaCap) continue
+    perArea.set(entry.area, seen + 1)
+    capped.push(entry)
+  }
+  return capped.slice(0, cap)
 }
 
 /** The baked panel content: latest release, capped. */

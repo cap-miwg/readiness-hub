@@ -15,8 +15,11 @@ import type {
   OrgChartResponse,
   OrgsResponse,
   OverviewResponse,
+  ServedEsAnalysis,
   UnitComparisonRow,
 } from '../shared/contracts.js'
+import type { Jsonified } from '../domain/computedTypes.js'
+import type { UnitEsAnalysis } from '../domain/esUnit.js'
 import {
   loadClosure,
   loadComputedOrg,
@@ -87,6 +90,83 @@ export async function resolveOrgScope(
     return null
   }
   return { orgid, descendants, closure, anchorOrgid, scopeOrgids }
+}
+
+/**
+ * D9 name gate over the computed es jsonb. Member names appear in the served
+ * analysis ONLY at a single operational unit's self scope (that view IS the
+ * drill-down); when `keepNames` is false (descendants=true, or the org is a
+ * command HQ type) every name field is stripped before serialization: SPOF
+ * entries lose `member`, the SPOF recommendation sentence loses the embedded
+ * name, and the other name-carrying lists (evaluators.available,
+ * teams.*.qualifiedMembers, qualifications.expiringWithin90Days / missingGES,
+ * pipeline entries) serve '' so the counts and positions survive unchanged.
+ */
+export function sanitizeEsForScope(
+  es: Jsonified<UnitEsAnalysis>,
+  keepNames: boolean,
+): ServedEsAnalysis {
+  if (keepNames) return es
+  const blankNames = <T extends { name: string }>(list: readonly T[]): T[] =>
+    list.map(entry => ({ ...entry, name: '' }))
+  const memberNames = es.risks.singlePointsOfFailure
+    .map(spof => spof.member)
+    .filter(name => name !== '')
+  const scrub = (text: string): string =>
+    memberNames.reduce(
+      (out, name) => out.split(`${name} is single point of failure`).join('single point of failure'),
+      text,
+    )
+  return {
+    ...es,
+    teams: {
+      fieldOps: {
+        ...es.teams.fieldOps,
+        qualifiedMembers: blankNames(es.teams.fieldOps.qualifiedMembers),
+      },
+      aircrew: {
+        ...es.teams.aircrew,
+        qualifiedMembers: blankNames(es.teams.aircrew.qualifiedMembers),
+      },
+      suas: { ...es.teams.suas, qualifiedMembers: blankNames(es.teams.suas.qualifiedMembers) },
+      missionBase: {
+        ...es.teams.missionBase,
+        qualifiedMembers: blankNames(es.teams.missionBase.qualifiedMembers),
+      },
+      command: {
+        ...es.teams.command,
+        qualifiedMembers: blankNames(es.teams.command.qualifiedMembers),
+      },
+    },
+    qualifications: {
+      ...es.qualifications,
+      expiringWithin90Days: blankNames(es.qualifications.expiringWithin90Days),
+      missingGES: blankNames(es.qualifications.missingGES),
+    },
+    evaluators: {
+      ...es.evaluators,
+      available: blankNames(es.evaluators.available),
+    },
+    pipeline: {
+      nearQualification: blankNames(es.pipeline.nearQualification),
+      activeTraining: blankNames(es.pipeline.activeTraining),
+    },
+    risks: {
+      ...es.risks,
+      singlePointsOfFailure: es.risks.singlePointsOfFailure.map(
+        ({ member: _member, ...rest }) => rest,
+      ),
+      recommendations: es.risks.recommendations.map(rec => ({
+        ...rec,
+        recommendation: scrub(rec.recommendation),
+      })),
+    },
+  }
+}
+
+/** The name gate: names survive only at self scope on a non-HQ (operational) org. */
+export function keepEsNamesFor(orgType: string, descendants: boolean): boolean {
+  return !descendants && !isCommandHqType(orgType)
 }
 
 async function handleOrgs(_req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -205,7 +285,7 @@ async function handleOverview(req: FastifyRequest, reply: FastifyReply): Promise
       cadets: computed.cadetCount,
       unitsInScope: ctx.descendants ? includedOrgids.length : 1,
     },
-    es: computed.es,
+    es: sanitizeEsForScope(computed.es, keepEsNamesFor(org.type, ctx.descendants)),
     orgStats: computed.orgStats,
     comparison,
     // Redesign figure-strip support (V2-DESIGN-PLAN.md sections 5-6): the
@@ -221,16 +301,22 @@ async function handleEs(req: FastifyRequest, reply: FastifyReply): Promise<void>
   const ctx = await resolveOrgScope(req, reply)
   if (ctx === null) return
   const scope = ctx.descendants ? 'subtree' : 'self'
-  const computed = await loadComputedOrg(ctx.orgid, scope)
+  const [computed, info] = await Promise.all([
+    loadComputedOrg(ctx.orgid, scope),
+    loadOrgInfo([ctx.orgid]),
+  ])
   if (computed === null) {
     reply.code(404).send({ error: `no computed data for org ${ctx.orgid}` })
     return
   }
+  const orgType = info.get(ctx.orgid)?.type ?? ''
   const body: EsAnalysisResponse = {
     orgid: ctx.orgid,
     descendants: ctx.descendants,
     scope,
-    es: computed.es,
+    // Same D9 name gate as the overview: this endpoint serves the identical
+    // jsonb, so it must not leak what the overview strips.
+    es: sanitizeEsForScope(computed.es, keepEsNamesFor(orgType, ctx.descendants)),
   }
   reply.send(body)
 }

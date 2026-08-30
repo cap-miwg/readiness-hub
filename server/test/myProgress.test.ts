@@ -6,6 +6,7 @@ process.env.SESSION_SECRET ??= 'vitest-only-session-secret-0123456789'
 const {
   NOT_MATCHED,
   buildMyProgress,
+  emailMatchKey,
   expandRank,
   expiringQualsOf,
   resolveMemberMatch,
@@ -53,6 +54,16 @@ describe('resolveMemberMatch: D11 identity resolution', () => {
       resolveMemberMatch({ localCapid: null, localCapidOnRoster: false, emailCapids: [1, 2] }),
     ).toBeNull()
     expect(NOT_MATCHED).toEqual({ matched: false, figures: [] })
+  })
+})
+
+describe('emailMatchKey: primary-email comparison key', () => {
+  it('trims and lowercases (MbrContact carries real rows with whitespace)', () => {
+    expect(emailMatchKey('  Member.Name@Example.Org ')).toBe('member.name@example.org')
+    expect(emailMatchKey('member@example.org')).toBe('member@example.org')
+    // Both sides normalize identically: the SQL side is lower(trim(contact)),
+    // so a stored ' member@example.org ' matches a clean session email.
+    expect(emailMatchKey(' member@example.org ')).toBe(emailMatchKey('MEMBER@EXAMPLE.ORG'))
   })
 })
 

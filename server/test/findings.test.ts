@@ -9,16 +9,17 @@ const {
   cadetFindingCountsOf,
   meetingLineOf,
   qualBreakdownOf,
+  qualFindingCountsOf,
   rankFindings,
   scopeSearchOf,
   strengthDeltaOf,
   strengthSeriesOf,
 } = await import('../src/api/findings.js')
-const { announcementCreateSchema, announcementUpdateSchema } = await import(
+const { announcementActiveOn, announcementCreateSchema, announcementUpdateSchema } = await import(
   '../src/api/announcements.js'
 )
 
-import type { FindingSources, CadetFactRow } from '../src/api/findings.js'
+import type { FindingSources, CadetFactRow, QualStatusRow } from '../src/api/findings.js'
 import type { CadetStateFacts, Jsonified } from '../src/domain/computedTypes.js'
 import type { MonthlyEntry, UnitOrgStatsMetrics } from '../src/domain/orgStats.js'
 
@@ -75,7 +76,8 @@ describe('rankFindings: the ranked Needs Attention queue', () => {
     expect(first?.text).toBe(
       '3 Emergency Services qualifications expired in the last 60 days: 2 GTM2, 1 UDF.',
     )
-    expect(first?.href).toBe('/unit?orgid=104&descendants=1')
+    // ES-related findings land on the es section, not the top of the page.
+    expect(first?.href).toBe('/unit?orgid=104&descendants=1&section=es')
     expect(first?.actionLabel).toBe('Review expirations')
   })
 
@@ -88,7 +90,30 @@ describe('rankFindings: the ranked Needs Attention queue', () => {
     expect(findings).toHaveLength(1)
     expect(findings[0]?.text).toBe('Mission Scanner/Observer rests on one qualified member.')
     expect(findings[0]?.id).toBe('spof-mission-scanner-observer')
-    expect(findings[0]?.href).toBe('/unit?orgid=104')
+    expect(findings[0]?.href).toBe('/unit?orgid=104&section=es')
+  })
+
+  it('sends every ES finding to the es section; other pages keep plain hrefs', () => {
+    const byId = new Map(
+      rankFindings(
+        sources({
+          expiredQuals: [{ name: 'GTM2', count: 1 }],
+          spofPositions: ['Ground Team Leader'],
+          qualsExpiring30: 2,
+          expiredMemberships: 1,
+          cadetsReady: 1,
+        }),
+        104,
+        false,
+      ).map(f => [f.id, f]),
+    )
+    expect(byId.get('es-quals-expired')?.href).toBe('/unit?orgid=104&section=es')
+    expect(byId.get('spof-ground-team-leader')?.href).toBe('/unit?orgid=104&section=es')
+    expect(byId.get('es-quals-expiring-30')?.href).toBe('/unit?orgid=104&section=es')
+    expect(byId.get('memberships-expired')?.href).toBe(
+      '/reports?report=membership-lapse&orgid=104',
+    )
+    expect(byId.get('cadets-ready')?.href).toBe('/cadets?orgid=104&state=READY')
   })
 
   it('uses singular grammar for counts of one', () => {
@@ -174,6 +199,91 @@ describe('scopeSearchOf and qualBreakdownOf', () => {
         { name: 'MRO', count: 1 },
       ]),
     ).toBe('4 GTM2, 2 UDF, 1 GTM3, and 2 more')
+  })
+})
+
+describe('qualFindingCountsOf: counts on a deduped (capid, qual) basis', () => {
+  const q = (
+    capid: number,
+    name: string,
+    status: string,
+    expiration: string | null,
+  ): QualStatusRow => ({ capid, name, status, expiration })
+
+  it('suppresses an Expired row when the member also holds a Training row', () => {
+    // The cadet basis in es_summary is not deduped: a cadet re-training a
+    // lapsed qual carries both rows and must not count as an expiration.
+    const counts = qualFindingCountsOf(
+      [
+        q(11, 'GTM3 - Ground Team Member Level 3', 'Expired', '2026-07-15'),
+        q(11, 'GTM3 - Ground Team Member Level 3', 'Training', null),
+      ],
+      AS_OF,
+    )
+    expect(counts.expiredQuals).toEqual([])
+  })
+
+  it('suppresses Expired under Active, and counts duplicate Expired rows once', () => {
+    const counts = qualFindingCountsOf(
+      [
+        q(11, 'MRO', 'Expired', '2026-07-15'),
+        q(11, 'MRO', 'Active', '2027-01-01'),
+        q(12, 'UDF', 'Expired', '2026-07-20'),
+        q(12, 'UDF', 'Expired', '2026-07-20'),
+        q(13, 'UDF', 'Expired', '2026-08-01'),
+      ],
+      AS_OF,
+    )
+    expect(counts.expiredQuals).toEqual([{ name: 'UDF', count: 2 }])
+  })
+
+  it('windows expirations to the trailing 60 days of the injected day', () => {
+    const counts = qualFindingCountsOf(
+      [
+        q(1, 'GTM2', 'Expired', '2026-08-29'), // yesterday: in window
+        q(2, 'GTM2', 'Expired', '2026-07-01'), // 60 days back: in window
+        q(3, 'GTM2', 'Expired', '2026-06-30'), // 61 days back: out
+        q(4, 'GTM2', 'Expired', '2026-08-30'), // today: not yet expired-in-past
+      ],
+      AS_OF,
+    )
+    expect(counts.expiredQuals).toEqual([{ name: 'GTM2', count: 2 }])
+  })
+
+  it('counts expiring-30 from Active best rows only, deduped per member', () => {
+    const counts = qualFindingCountsOf(
+      [
+        q(1, 'GTM1', 'Active', '2026-09-10'), // in 30
+        q(1, 'GTM1', 'Training', null), // suppressed under Active
+        q(2, 'GTM1', 'Active', '2026-10-15'), // beyond 30
+        q(3, 'MS', 'Training', '2026-09-05'), // Training never counts here
+        q(4, 'MS', 'Active', '2026-09-29'), // day 30: in window
+      ],
+      AS_OF,
+    )
+    expect(counts.qualsExpiring30).toBe(2)
+    expect(counts.expiredQuals).toEqual([])
+  })
+})
+
+// The active-window predicate runs against a day string injected once per
+// request from app-local time (api/util.ts isoDate), never the database's
+// CURRENT_DATE, so a UTC database session cannot shift the boundary.
+describe('announcementActiveOn: injected-day boundaries', () => {
+  const window = { archived: false, startsAt: '2026-09-01', endsAt: '2026-09-30' }
+
+  it('is inclusive on both ends of the window', () => {
+    expect(announcementActiveOn(window, '2026-08-31')).toBe(false)
+    expect(announcementActiveOn(window, '2026-09-01')).toBe(true)
+    expect(announcementActiveOn(window, '2026-09-30')).toBe(true)
+    expect(announcementActiveOn(window, '2026-10-01')).toBe(false)
+  })
+
+  it('treats null bounds as unbounded and archived as always inactive', () => {
+    expect(announcementActiveOn({ archived: false, startsAt: null, endsAt: null }, '2026-01-01')).toBe(true)
+    expect(announcementActiveOn({ archived: false, startsAt: null, endsAt: '2026-09-30' }, '2026-09-30')).toBe(true)
+    expect(announcementActiveOn({ archived: false, startsAt: '2026-09-01', endsAt: null }, '2026-08-31')).toBe(false)
+    expect(announcementActiveOn({ ...window, archived: true }, '2026-09-15')).toBe(false)
   })
 })
 

@@ -10,8 +10,9 @@ import { EsDeepDiveModal } from './EsDeepDiveModal'
  * mockup, "Emergency Services" section; Mission Brief's concrete content
  * spec grafted per the plan): the capability sentence always leads and
  * always outranks the score; teams are hairline ledger rows with named
- * deficits as WATCH marks; SPOF names the position at rest (D9), the member
- * name lives in the deep dive.
+ * deficits as WATCH marks; SPOF renders as ACTION (the findings queue's
+ * category) and names the position at rest (D9), the member name lives in
+ * the deep dive.
  */
 
 export interface EsAlert {
@@ -28,8 +29,9 @@ export function esStatus(es: EsAnalysis): { score: number; band: string; alerts:
       label: `${es.qualifications.byStatus.expired} expired ${plural(es.qualifications.byStatus.expired, 'qualification')}`,
     })
   }
+  // ACTION, matching the findings queue's SPOF category (api/findings.ts).
   for (const spof of es.risks.singlePointsOfFailure) {
-    alerts.push({ kind: 'watch', label: `${spof.positionName} single point of failure` })
+    alerts.push({ kind: 'action', label: `${spof.positionName} single point of failure` })
   }
   return { score: es.readinessScore, band: ratingLabel[es.readinessRating], alerts }
 }
@@ -157,9 +159,10 @@ export function EsReadinessSection({ es }: { es: EsAnalysis }) {
         </FactRow>
         {spofs.length > 0 && (
           <FactRow label={plural(spofs.length, 'Single point of failure', 'Single points of failure')} testid="es-alerts">
-            {/* Position at rest (D9); the member name is one click deeper. */}
+            {/* Position at rest (D9); the member name is one click deeper.
+                ACTION mark, matching the findings queue's SPOF category. */}
             {spofs.map(spof => (
-              <VerdictMark key={`${spof.position}-${spof.capid}`} kind="watch" label={spof.positionName} />
+              <VerdictMark key={`${spof.position}-${spof.capid}`} kind="action" label={spof.positionName} />
             ))}
           </FactRow>
         )}

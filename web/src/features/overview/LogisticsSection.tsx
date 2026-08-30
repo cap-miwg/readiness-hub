@@ -5,6 +5,7 @@ import {
   VerdictMark,
   type Column,
 } from '../../components/ui'
+import { formatMonthKey } from '../../components/dates'
 import {
   FactLedger,
   FactRow,
@@ -74,8 +75,10 @@ const vehicleColumns: readonly Column<VehicleRow>[] = [
   {
     key: 'lastUsed',
     header: 'Last used',
-    render: v => <span className="tnum text-ink2">{fmtDate(v.lastUsedOn)}</span>,
-    sortValue: v => (v.lastUsedOn !== null ? new Date(v.lastUsedOn) : null),
+    // lastUsedOn is a 'yyyy-mm' month key (logisticsContracts.ts): usage is
+    // reported to ORMS at month grain, so a day-precise date would overclaim.
+    render: v => <span className="tnum text-ink2">{formatMonthKey(v.lastUsedOn)}</span>,
+    sortValue: v => v.lastUsedOn,
   },
   {
     key: 'lastMaint',
@@ -158,7 +161,7 @@ export function LogisticsSection({ logistics }: { logistics: LogisticsResponse }
                 <RoadableCell roadable={veh.roadable} />
               </div>
               <div className="mt-1 text-xs text-ink2">
-                {vehicleDescription(veh)} · last used {fmtDate(veh.lastUsedOn)}
+                {vehicleDescription(veh)} · last used {formatMonthKey(veh.lastUsedOn)}
               </div>
             </div>
           )}
