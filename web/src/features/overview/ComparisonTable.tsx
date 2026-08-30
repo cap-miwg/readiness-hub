@@ -1,36 +1,20 @@
-import clsx from 'clsx'
-import { LayoutList, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { UnitComparisonRow } from '@shared/contracts'
-import { Badge, Card, DataTable, EmptyState, type Column, type Tone } from '../../components/ui'
+import { DataTable, EmptyState, type Column } from '../../components/ui'
+import { orgScopeSearch } from '../../lib/urlState'
+import { bandWord, FiguresStrip, type BandRating } from './overviewShared'
 
-/** ES bands 80/65/50 and sustainability bands 80/65/50 share the tone map. */
-const bandTone: Record<string, Tone> = {
-  excellent: 'green',
-  good: 'blue',
-  fair: 'amber',
-  'needs-attention': 'red',
-}
+/*
+ * Mode C, the command view (V2-DESIGN-PLAN.md section 6): subordinate units
+ * as a typeset ledger. Band words render as text, never colored badges;
+ * scores are quiet tabular numerals; a row is a drill-down link into that
+ * unit's own overview. The full command deck (deltas, sparklines per row)
+ * is the 2.1 snapshot work.
+ */
 
-function GrowthCell({ status }: { status: string | null }) {
-  if (status === 'growing') {
-    return (
-      <span className="flex items-center gap-1 text-sm font-medium text-emerald-600">
-        <TrendingUp className="h-4 w-4" aria-hidden /> growing
-      </span>
-    )
-  }
-  if (status === 'declining') {
-    return (
-      <span className="flex items-center gap-1 text-sm font-medium text-rose-600">
-        <TrendingDown className="h-4 w-4" aria-hidden /> declining
-      </span>
-    )
-  }
-  return (
-    <span className="flex items-center gap-1 text-sm text-slate-400">
-      <Minus className="h-4 w-4" aria-hidden /> {status ?? '--'}
-    </span>
-  )
+function band(rating: string | null): string {
+  if (rating === null) return '--'
+  return bandWord[rating as BandRating] ?? rating
 }
 
 const columns: readonly Column<UnitComparisonRow>[] = [
@@ -39,9 +23,9 @@ const columns: readonly Column<UnitComparisonRow>[] = [
     header: 'Unit',
     render: r => (
       <div data-testid={`comparison-row-${r.orgid}`}>
-        <div className="text-sm font-medium text-slate-800">{r.name}</div>
-        <div className="text-xs text-slate-500">
-          {r.unitLabel}, {r.seniorCount} Sr / {r.cadetCount} Cdt
+        <div className="text-sm font-medium text-ink">{r.name}</div>
+        <div className="tnum text-xs text-ink2">
+          {r.unitLabel} · {r.seniorCount} Sr / {r.cadetCount} Cdt
         </div>
       </div>
     ),
@@ -50,71 +34,70 @@ const columns: readonly Column<UnitComparisonRow>[] = [
   {
     key: 'members',
     header: 'Members',
-    render: r => <span className="font-semibold text-slate-800">{r.memberCount}</span>,
+    numeric: true,
+    render: r => <span className="font-semibold text-ink">{r.memberCount}</span>,
     sortValue: r => r.memberCount,
   },
   {
     key: 'es',
-    header: 'ES Score',
+    header: 'ES Readiness',
+    numeric: true,
     render: r => (
-      <Badge tone={bandTone[r.readinessRating] ?? 'slate'} title={r.quickSummary}>
-        {r.readinessScore}
-      </Badge>
+      <span className="whitespace-nowrap text-ink" title={r.quickSummary}>
+        {r.readinessScore} <span className="text-ink2">{band(r.readinessRating)}</span>
+      </span>
     ),
     sortValue: r => r.readinessScore,
   },
   {
     key: 'capability',
     header: 'ES Capability',
-    render: r => <span className="text-xs text-slate-600">{r.quickSummary}</span>,
+    render: r => <span className="text-xs text-ink2">{r.quickSummary}</span>,
   },
   {
     key: 'sustainability',
     header: 'Sustainability',
+    numeric: true,
     render: r => (
-      <Badge tone={(r.sustainabilityRating !== null && bandTone[r.sustainabilityRating]) || 'slate'}>
-        {r.sustainabilityScore ?? '--'}
-      </Badge>
+      <span className="whitespace-nowrap text-ink">
+        {r.sustainabilityScore ?? '--'}{' '}
+        <span className="text-ink2">{band(r.sustainabilityRating)}</span>
+      </span>
     ),
     sortValue: r => r.sustainabilityScore,
   },
   {
     key: 'retention',
     header: 'Retention',
+    numeric: true,
     render: r =>
       r.retentionRate !== null ? (
-        <span
-          className={clsx(
-            // Retention color bands 80/60 (v1 AppUnitOverview.html:171).
-            r.retentionRate >= 80
-              ? 'text-emerald-600'
-              : r.retentionRate >= 60
-                ? 'text-amber-600'
-                : 'text-rose-600',
-          )}
-        >
-          {r.retentionRate}%
-        </span>
+        <span className="text-ink">{r.retentionRate}%</span>
       ) : (
-        <span className="text-slate-400">--</span>
+        <span className="text-ink2">--</span>
       ),
     sortValue: r => r.retentionRate,
   },
   {
     key: 'recruiting',
     header: 'Recruiting',
+    numeric: true,
     render: r =>
       r.recruitingMonthlyAverage !== null ? (
-        <span className="text-slate-700">{r.recruitingMonthlyAverage}/mo</span>
+        <span className="text-ink">{r.recruitingMonthlyAverage}/mo</span>
       ) : (
-        <span className="text-slate-400">--</span>
+        <span className="text-ink2">--</span>
       ),
     sortValue: r => r.recruitingMonthlyAverage,
   },
   {
     key: 'growth',
     header: 'Growth',
-    render: r => <GrowthCell status={r.growthStatus} />,
+    render: r => (
+      <span className={r.growthStatus === 'declining' ? 'text-ink' : 'text-ink2'}>
+        {r.growthStatus ?? '--'}
+      </span>
+    ),
     sortValue: r => r.growthStatus,
   },
 ]
@@ -145,57 +128,61 @@ export function AggregateStatsHeader({
   const declining = comparison.filter(r => r.growthStatus === 'declining').length
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="aggregate-stats-header">
-      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-        <div className="text-[10px] font-bold uppercase text-blue-700">Total Members</div>
-        <div className="text-2xl font-bold text-blue-900">{totalMembers}</div>
-      </div>
-      <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3">
-        <div className="text-[10px] font-bold uppercase text-indigo-700">Subordinate Units</div>
-        <div className="text-2xl font-bold text-indigo-900">{comparison.length}</div>
-      </div>
-      <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-        <div className="text-[10px] font-bold uppercase text-emerald-700">Avg Sustainability</div>
-        <div className="text-2xl font-bold text-emerald-900">{avgSustainability ?? '--'}</div>
-      </div>
-      <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
-        <div className="text-[10px] font-bold uppercase text-amber-700">Avg Retention</div>
-        <div className="text-2xl font-bold text-amber-900">
-          {avgRetention !== null ? `${avgRetention}%` : '--'}
-        </div>
-      </div>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="text-[10px] font-bold uppercase text-slate-600">Growth Trend</div>
-        <div className="mt-1 flex items-center gap-3">
-          <span className="flex items-center gap-1 text-sm font-bold text-emerald-600">
-            <TrendingUp className="h-4 w-4" aria-hidden /> {growing}
-          </span>
-          <span className="flex items-center gap-1 text-sm font-bold text-rose-600">
-            <TrendingDown className="h-4 w-4" aria-hidden /> {declining}
-          </span>
-        </div>
-      </div>
+    <div data-testid="aggregate-stats-header">
+      <FiguresStrip
+        size="sm"
+        figures={[
+          { label: 'Members', value: totalMembers.toLocaleString() },
+          { label: 'Subordinate units', value: comparison.length },
+          { label: 'Avg sustainability', value: avgSustainability ?? '--' },
+          {
+            label: 'Avg retention',
+            value: avgRetention !== null ? `${avgRetention}%` : '--',
+          },
+          {
+            label: 'Growth trend',
+            value: `${growing} / ${declining}`,
+            delta: 'growing / declining',
+          },
+        ]}
+      />
     </div>
   )
 }
 
 export function ComparisonTable({ comparison }: { comparison: readonly UnitComparisonRow[] }) {
+  // Row drill-down lands on that unit's own overview scope (descendants off).
+  const navigate = useNavigate()
+
   return (
-    <Card
-      title={
-        <span className="flex items-center gap-2">
-          <LayoutList className="h-4 w-4 text-blue-700" aria-hidden />
-          Subordinate Units Performance
-        </span>
-      }
-      actions={<span className="text-xs text-slate-500">{comparison.length} units</span>}
-      data-testid="comparison-table"
-    >
+    <section data-testid="comparison-table">
+      <div className="flex items-baseline justify-between gap-3 pb-1">
+        <p className="kicker text-ink">Subordinate units</p>
+        <span className="tnum text-xs text-ink2">{comparison.length} units · select a row to drill down</span>
+      </div>
       <DataTable
         columns={columns}
         rows={comparison}
         rowKey={r => r.orgid}
         initialSort={{ key: 'sustainability', dir: 'desc' }}
+        onRowClick={r =>
+          navigate({
+            pathname: '/unit',
+            search: orgScopeSearch({ orgid: r.orgid, descendants: false }),
+          })
+        }
+        mobileCard={r => (
+          <div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-medium text-ink">{r.name}</span>
+              <span className="tnum text-xs text-ink2">{r.unitLabel}</span>
+            </div>
+            <div className="tnum mt-1 text-xs text-ink2">
+              {r.memberCount} members · ES {r.readinessScore} {band(r.readinessRating)} ·
+              sustainability {r.sustainabilityScore ?? '--'}
+            </div>
+          </div>
+        )}
         empty={
           <EmptyState
             title="No subordinate operational units"
@@ -204,6 +191,6 @@ export function ComparisonTable({ comparison }: { comparison: readonly UnitCompa
           />
         }
       />
-    </Card>
+    </section>
   )
 }

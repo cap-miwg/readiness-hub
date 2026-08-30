@@ -1,24 +1,32 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { CheckCircle2, Clock, GraduationCap, Hourglass, Star } from 'lucide-react'
+import { GraduationCap, Star } from 'lucide-react'
 import type { CadetRow, CadetsResponse, OrgTreeNode } from '@shared/contracts'
 import { apiFetch, useOrgs, type ApiError } from '../api/client'
 import { useListParam, useOrgScope } from '../lib/urlState'
 import {
-  Badge,
   Banner,
-  Card,
   DataTable,
   EmptyState,
+  Figure,
   FilterMenu,
   PageHeader,
   Spinner,
-  StatTile,
+  VerdictMark,
   type Column,
 } from '../components/ui'
+import { flattenOrgTree } from '../components/charter'
 import MemberProfileModal from '../features/members/MemberProfileModal'
-import { CADET_STATE_META, fmtDate, optionCounts, type CadetState } from '../features/members/shared'
+import { FigureButton, FigureCell, FigureStrip } from '../features/members/FigureStrip'
+import {
+  CADET_STATE_META,
+  cadetBlockerOf,
+  fmtDate,
+  optionCounts,
+  primaryDutyOf,
+  type CadetState,
+} from '../features/members/shared'
 
 const STATE_OPTIONS = (Object.keys(CADET_STATE_META) as CadetState[]).map(state => ({
   value: state,
@@ -42,22 +50,73 @@ function useCadetsQuery(orgid: number | null, search: string) {
   })
 }
 
-function orgNamesOf(tree: OrgTreeNode | undefined): Map<number, string> {
-  const out = new Map<number, string>()
-  const walk = (node: OrgTreeNode): void => {
-    out.set(node.orgid, node.name)
-    for (const child of node.children) walk(child)
-  }
-  if (tree !== undefined) walk(tree)
-  return out
+interface OrgLabels {
+  names: Map<number, string>
+  charters: Map<number, string>
 }
 
-function stateBadge(row: CadetRow) {
+function orgLabelsOf(tree: OrgTreeNode | undefined): OrgLabels {
+  const names = new Map<number, string>()
+  const charters = new Map<number, string>()
+  if (tree !== undefined) {
+    for (const org of flattenOrgTree(tree)) {
+      names.set(org.orgid, org.name)
+      charters.set(org.orgid, org.charter)
+    }
+  }
+  return { names, charters }
+}
+
+/**
+ * Row promotion state in the verdict grammar: READY is planned board work,
+ * NEARLY_READY is the watch word "Close", time-gated states are neutral text.
+ */
+function StateCell({ row }: { row: CadetRow }) {
   const meta = CADET_STATE_META[row.state]
+  const title = row.stateMessage ?? meta.label
+  if (row.state === 'READY') {
+    return (
+      <span title={title}>
+        <VerdictMark kind="plan" label={<span className="text-sm">Ready</span>} />
+      </span>
+    )
+  }
+  if (row.state === 'NEARLY_READY') {
+    return (
+      <span title={title}>
+        <VerdictMark kind="watch" label={<span className="text-sm">Close</span>} />
+      </span>
+    )
+  }
+  if (row.state === 'TIME_PENDING') {
+    return (
+      <span className="tnum text-sm text-ink" title={title}>
+        TIG until {fmtDate(row.tigCompleteOn)}
+      </span>
+    )
+  }
   return (
-    <Badge tone={meta.tone} title={row.stateMessage ?? meta.label}>
+    <span className="text-sm text-ink2" title={title}>
       {meta.label}
-    </Badge>
+    </span>
+  )
+}
+
+/** The named blocking requirement: one line, watch mark only when actionable. */
+function BlockerCell({ row, todayIso }: { row: CadetRow; todayIso: string }) {
+  const blocker = cadetBlockerOf(row, todayIso)
+  if (blocker === null) return <span className="text-xs text-ink2">-</span>
+  if (blocker.kind === 'watch') {
+    return (
+      <span title={blocker.title}>
+        <VerdictMark kind="watch" label={<span className="text-sm">{blocker.label}</span>} />
+      </span>
+    )
+  }
+  return (
+    <span className="tnum text-sm text-ink2" title={blocker.title}>
+      {blocker.label}
+    </span>
   )
 }
 
@@ -120,39 +179,48 @@ export default function Cadets() {
     [baseRows],
   )
 
-  const orgNames = useMemo(() => orgNamesOf(orgsQ.data?.tree), [orgsQ.data])
+  const orgLabels = useMemo(() => orgLabelsOf(orgsQ.data?.tree), [orgsQ.data])
   const unitNameOf = useCallback(
     (id: number): string => {
       if (id === -1) return 'Unassigned'
-      return orgNames.get(id) ?? `Org ${id}`
+      return orgLabels.names.get(id) ?? `Org ${id}`
     },
-    [orgNames],
+    [orgLabels],
   )
+  const charterOfOrg = useCallback(
+    (id: number): string => orgLabels.charters.get(id) ?? '',
+    [orgLabels],
+  )
+
+  // Display-time cutoff for the blocker derivation (HFZ lapsed, TIG future).
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const columns = useMemo((): Column<CadetRow>[] => {
     return [
       {
         key: 'cadet',
         header: 'Cadet',
-        render: r => (
-          <div className="flex items-stretch gap-2" data-testid={`cadet-row-${r.capid}`}>
-            {/* Row severity strip keyed to the promotion state (the v1 card
-                border carried Cadet Protection tone, which compute does not
-                serve; the promotion state is the served severity signal). */}
-            <span className={clsx('w-1 shrink-0 rounded-full', CADET_STATE_META[r.state].bar)} />
-            <div>
-              <div className="font-bold text-slate-900">
-                {r.nameLast}, {r.nameFirst}
+        render: r => {
+          const charter = charterOfOrg(r.orgid)
+          return (
+            <div data-testid={`cadet-row-${r.capid}`}>
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[15px] font-medium text-ink">
+                  {r.nameLast}, {r.nameFirst}
+                </span>
+                <span
+                  className="tnum font-display text-[11px] font-semibold text-ink2"
+                  title={unitNameOf(r.orgid)}
+                >
+                  {charter !== '' ? charter : unitNameOf(r.orgid)}
+                </span>
               </div>
-              <div className="text-xs text-slate-500">
-                {r.rank} <span className="text-slate-300">|</span> #{r.capid}
-              </div>
-              <div className="max-w-[200px] truncate text-xs text-slate-400" title={unitNameOf(r.orgid)}>
-                {unitNameOf(r.orgid)}
+              <div className="tnum text-xs text-ink2">
+                {r.rank} · #{r.capid}
               </div>
             </div>
-          </div>
-        ),
+          )
+        },
         sortValue: r => `${r.nameLast}, ${r.nameFirst}`,
       },
       {
@@ -161,65 +229,35 @@ export default function Cadets() {
         align: 'center',
         render: r =>
           r.phase !== null ? (
-            <span className="text-sm font-semibold text-slate-700">{PHASE_LABELS[r.phase] ?? r.phase}</span>
+            <span className="text-sm text-ink">{PHASE_LABELS[r.phase] ?? r.phase}</span>
           ) : (
-            <span className="text-xs italic text-slate-400">-</span>
+            <span className="text-xs text-ink2">-</span>
           ),
         sortValue: r => r.phase,
       },
       {
         key: 'status',
         header: 'Status',
-        render: r => (
-          <div>
-            {stateBadge(r)}
-            {r.nextAchvPublicNumber !== null && (
-              <div className="mt-0.5 text-[11px] text-slate-500">
-                Next: Achv {r.nextAchvPublicNumber}
-              </div>
-            )}
-          </div>
-        ),
+        render: r => <StateCell row={r} />,
         sortValue: r => r.state,
+      },
+      {
+        key: 'blocker',
+        header: 'Blocker',
+        render: r => <BlockerCell row={r} todayIso={todayIso} />,
       },
       {
         key: 'eligible',
         header: 'TIG Eligible',
         render: r => (
-          <div className="text-xs text-slate-600">
+          <div className="tnum text-xs text-ink2">
             <div>{fmtDate(r.tigCompleteOn)}</div>
             {r.daysSincePromotion !== null && (
-              <div
-                className={clsx(
-                  'flex items-center gap-1',
-                  r.daysSincePromotion >= 90 ? 'font-semibold text-amber-700' : 'text-slate-400',
-                )}
-                title={
-                  r.daysSincePromotion >= 90
-                    ? '90+ days since last promotion'
-                    : 'Days since last promotion'
-                }
-              >
-                {r.daysSincePromotion >= 90 && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                )}
-                {r.daysSincePromotion}d in grade
-              </div>
+              <div title="Days since last promotion">{r.daysSincePromotion}d in grade</div>
             )}
           </div>
         ),
         sortValue: r => r.tigCompleteOn,
-      },
-      {
-        key: 'hfz',
-        header: 'HFZ',
-        render: r =>
-          r.hfzValidUntil !== null ? (
-            <span className="text-xs text-slate-600">valid to {r.hfzValidUntil}</span>
-          ) : (
-            <span className="text-xs italic text-slate-400">none</span>
-          ),
-        sortValue: r => r.hfzValidUntil,
       },
       {
         key: 'honor',
@@ -228,58 +266,60 @@ export default function Cadets() {
         render: r =>
           r.honorCreditCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1 text-sm font-bold text-amber-600"
+              className="inline-flex items-center gap-1 text-sm text-ink2"
               title={`${r.honorCreditCount} honor credit${r.honorCreditCount === 1 ? '' : 's'} earned`}
             >
-              <Star className="h-3.5 w-3.5" aria-hidden /> {r.honorCreditCount}
+              <Star className="h-3.5 w-3.5 text-ink2" aria-hidden />
+              <span className="tnum">{r.honorCreditCount}</span>
             </span>
           ) : (
-            <span className="text-xs text-slate-300">-</span>
+            <span className="text-xs text-ink2">-</span>
           ),
         sortValue: r => r.honorCreditCount,
       },
       {
         key: 'duties',
-        header: 'Duty Positions',
-        render: r => (
-          <div className="flex max-w-[260px] flex-wrap gap-1">
-            {r.duties.length === 0 && <span className="text-xs italic text-slate-400">None</span>}
-            {r.duties.map((d, i) => (
-              <Badge
-                key={`${d.duty}-${i}`}
-                tone={d.heldAtOrgid !== r.orgid ? 'blue' : 'slate'}
-                title={
-                  d.heldAtOrgid !== r.orgid
-                    ? `Cross-unit at ${unitNameOf(d.heldAtOrgid)}`
-                    : undefined
-                }
-              >
-                {d.duty}
-                {d.asst ? ' (A)' : ''}
-              </Badge>
-            ))}
-          </div>
-        ),
+        header: 'Duty',
+        render: r => {
+          const primary = primaryDutyOf(r.duties)
+          if (primary === null) return <span className="text-xs text-ink2">-</span>
+          const more = r.duties.length - 1
+          const crossUnit = primary.heldAtOrgid !== r.orgid
+          return (
+            <div
+              className="text-sm text-ink"
+              title={r.duties
+                .map(
+                  d =>
+                    `${d.duty}${d.asst ? ' (A)' : ''}${
+                      d.heldAtOrgid !== r.orgid ? ` - cross-unit at ${unitNameOf(d.heldAtOrgid)}` : ''
+                    }`,
+                )
+                .join(', ')}
+            >
+              {primary.duty}
+              {primary.asst ? ' (A)' : ''}
+              {crossUnit && <span className="ml-1.5 text-xs text-symbol">cross-unit</span>}
+              {more > 0 && <span className="ml-1.5 text-xs text-ink2">+{more}</span>}
+            </div>
+          )
+        },
       },
       {
         key: 'es',
         header: 'ES',
         render: r => {
           const c = r.esCounts
-          if (c.active === 0 && c.training === 0) {
-            return <span className="text-xs text-slate-300">-</span>
-          }
-          return (
-            <div className="flex flex-wrap gap-1">
-              {c.active > 0 && <Badge tone="green">{c.active} active</Badge>}
-              {c.training > 0 && <Badge tone="blue">{c.training} training</Badge>}
-            </div>
-          )
+          const parts: string[] = []
+          if (c.active > 0) parts.push(`${c.active} active`)
+          if (c.training > 0) parts.push(`${c.training} training`)
+          if (parts.length === 0) return <span className="text-xs text-ink2">-</span>
+          return <span className="tnum text-xs text-ink2">{parts.join(' · ')}</span>
         },
         sortValue: r => r.esCounts.active,
       },
     ]
-  }, [unitNameOf])
+  }, [unitNameOf, charterOfOrg, todayIso])
 
   if (orgsQ.isPending) {
     return (
@@ -291,12 +331,13 @@ export default function Cadets() {
 
   const data = filteredQ.data
   const tiles = data?.tiles
+  const pendingValue = filteredQ.isPending ? '...' : null
   const readyActive = states.length === 1 && states[0] === 'READY'
   const closeActive =
     states.length === CLOSE_STATES.length && CLOSE_STATES.every(s => states.includes(s))
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Cadet Dashboard"
         subtitle="Milestones, promotion eligibility, HFZ, leadership billets"
@@ -311,130 +352,100 @@ export default function Cadets() {
         </Banner>
       )}
 
-      <Card padded>
-        <div className="flex flex-wrap items-center gap-2" data-testid="cadet-filter-bar">
-          <span className="text-xs font-bold uppercase text-slate-500">Filters:</span>
-          <span data-testid="filter-state">
-            <FilterMenu
-              label="Promotion Status"
-              options={STATE_OPTIONS}
-              selected={states}
-              onChange={setStates}
-            />
-          </span>
-          <span data-testid="filter-cadet-rank">
-            <FilterMenu label="Cadet Rank" options={rankOptions} selected={ranks} onChange={setRanks} />
-          </span>
-          <span data-testid="filter-cadet-duty">
-            <FilterMenu
-              label="Duty Position"
-              options={dutyOptions}
-              selected={duties}
-              onChange={setDuties}
-              searchable
-            />
-          </span>
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              data-testid="cadet-filter-reset"
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-            >
-              Reset all ({activeFilterCount})
-            </button>
-          )}
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6" data-testid="cadet-tiles">
-        <div data-testid="cadets-tile-total">
-          <StatTile
-            label="Total"
-            value={filteredQ.isPending ? '...' : (data?.total ?? 0)}
-            icon={GraduationCap}
-            accent="blue"
-            sublabel="Cadets in scope"
+      <div
+        className="flex flex-wrap items-center gap-2 border-b border-hairline pb-3"
+        data-testid="cadet-filter-bar"
+      >
+        <span className="kicker mr-1 text-ink">Filters</span>
+        <span data-testid="filter-state">
+          <FilterMenu
+            label="Promotion Status"
+            options={STATE_OPTIONS}
+            selected={states}
+            onChange={setStates}
           />
-        </div>
-        <div
+        </span>
+        <span data-testid="filter-cadet-rank">
+          <FilterMenu label="Cadet Rank" options={rankOptions} selected={ranks} onChange={setRanks} />
+        </span>
+        <span data-testid="filter-cadet-duty">
+          <FilterMenu
+            label="Duty Position"
+            options={dutyOptions}
+            selected={duties}
+            onChange={setDuties}
+            searchable
+          />
+        </span>
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            data-testid="cadet-filter-reset"
+            className="tnum text-sm font-medium text-symbol hover:underline"
+          >
+            Reset all ({activeFilterCount})
+          </button>
+        )}
+      </div>
+
+      <FigureStrip
+        className="lg:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.6fr)]"
+        data-testid="cadet-tiles"
+      >
+        <FigureCell at="lg" data-testid="cadets-tile-total">
+          <Figure value={pendingValue ?? (data?.total ?? 0)} label="Total" delta="Cadets in scope" />
+        </FigureCell>
+        <FigureCell
+          at="lg"
           data-testid="cadets-tile-ready"
           title="Cadets who have completed all requirements and are eligible for promotion"
         >
-          <button
-            type="button"
+          <FigureButton
+            value={pendingValue ?? (tiles?.ready ?? 0)}
+            label="Ready"
+            active={readyActive}
             onClick={() => toggleStateSet(['READY'])}
-            className={clsx(
-              'flex w-full items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition-colors',
-              readyActive
-                ? 'border-green-400 bg-green-50'
-                : 'border-slate-200 bg-white hover:border-green-300',
-            )}
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-700">
-              <CheckCircle2 className="h-5 w-5" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ready</div>
-              <div className="text-2xl font-bold leading-tight text-green-700">
-                {filteredQ.isPending ? '...' : (tiles?.ready ?? 0)}
-              </div>
-              <div className="truncate text-xs text-slate-500">Click to filter</div>
-            </div>
-          </button>
-        </div>
-        <div
+            title="Cadets who have completed all requirements and are eligible for promotion"
+          />
+        </FigureCell>
+        <FigureCell
+          at="lg"
           data-testid="cadets-tile-close"
           title="Cadets who are nearly ready or waiting on time in grade"
         >
-          <button
-            type="button"
+          <FigureButton
+            value={pendingValue ?? (tiles?.close ?? 0)}
+            label="Close"
+            active={closeActive}
             onClick={() => toggleStateSet(CLOSE_STATES)}
-            className={clsx(
-              'flex w-full items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition-colors',
-              closeActive
-                ? 'border-amber-400 bg-amber-50'
-                : 'border-slate-200 bg-white hover:border-amber-300',
-            )}
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-              <Hourglass className="h-5 w-5" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Close</div>
-              <div className="text-2xl font-bold leading-tight text-amber-700">
-                {filteredQ.isPending ? '...' : (tiles?.close ?? 0)}
-              </div>
-              <div className="truncate text-xs text-slate-500">Click to filter</div>
-            </div>
-          </button>
-        </div>
-        <div
+            title="Cadets who are nearly ready or waiting on time in grade"
+          />
+        </FigureCell>
+        <FigureCell
+          at="lg"
           data-testid="cadets-tile-90days"
           title="Cadets 90+ days at their current grade (display only; not a server filter)"
         >
-          <StatTile
+          <Figure
+            value={pendingValue ?? (tiles?.ninetyPlusDays ?? 0)}
             label="90+ Days"
-            value={filteredQ.isPending ? '...' : (tiles?.ninetyPlusDays ?? 0)}
-            icon={Clock}
-            accent="amber"
-            sublabel="Since last promotion"
+            delta="Since last promotion"
           />
-        </div>
-        <div data-testid="cadets-tile-honor" title="Total honor credits earned across all cadets shown">
-          <StatTile
+        </FigureCell>
+        <FigureCell
+          at="lg"
+          data-testid="cadets-tile-honor"
+          title="Total honor credits earned across all cadets shown"
+        >
+          <Figure
+            value={pendingValue ?? (tiles?.honorCredits ?? 0)}
             label="Honor"
-            value={filteredQ.isPending ? '...' : (tiles?.honorCredits ?? 0)}
-            icon={Star}
-            accent="indigo"
-            sublabel="Credits earned"
+            delta="Credits earned"
           />
-        </div>
-        <Card padded data-testid="cadet-phase-chips">
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Phases
-          </div>
-          <div className="flex items-center gap-2">
+        </FigureCell>
+        <FigureCell at="lg" data-testid="cadet-phase-chips">
+          <div className="flex items-end gap-3">
             {(['1', '2', '3', '4'] as const).map(phase => {
               const active = phases.includes(phase)
               return (
@@ -444,25 +455,30 @@ export default function Cadets() {
                   data-testid={`cadet-phase-chip-${phase}`}
                   onClick={() => togglePhase(phase)}
                   title={`Phase ${PHASE_LABELS[phase] ?? phase}: click to filter`}
-                  className="group flex flex-col items-center"
+                  aria-pressed={active}
+                  className={clsx(
+                    'flex flex-col items-center border-b-2 px-0.5 pb-1 transition-colors',
+                    active ? 'border-symbol' : 'border-transparent hover:border-hairline',
+                  )}
                 >
                   <span
                     className={clsx(
-                      'flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm transition-all group-hover:opacity-90',
-                      active ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-blue-500',
+                      'tnum font-display text-[22px] font-medium leading-none',
+                      active ? 'text-symbol' : 'text-ink',
                     )}
                   >
                     {tiles?.phases[phase] ?? 0}
                   </span>
-                  <span className="mt-0.5 text-[9px] font-bold text-slate-400 group-hover:text-slate-600">
+                  <span className={clsx('kicker mt-1', active ? 'text-symbol' : 'text-ink2')}>
                     {PHASE_LABELS[phase]}
                   </span>
                 </button>
               )
             })}
           </div>
-        </Card>
-      </div>
+          <div className="kicker mt-1.5 text-ink">Phases</div>
+        </FigureCell>
+      </FigureStrip>
 
       {filteredQ.isPending && orgid !== null ? (
         <div className="flex justify-center py-16">
@@ -477,6 +493,29 @@ export default function Cadets() {
             onRowClick={r => setProfileCapid(r.capid)}
             initialSort={{ key: 'cadet', dir: 'asc' }}
             maxHeight="70vh"
+            mobileCard={r => {
+              const charter = charterOfOrg(r.orgid)
+              return (
+                <div data-testid={`cadet-card-${r.capid}`}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[15px] font-medium text-ink">
+                      {r.nameLast}, {r.nameFirst}
+                    </span>
+                    <span className="tnum font-display text-[11px] font-semibold text-ink2">
+                      {charter !== '' ? charter : unitNameOf(r.orgid)}
+                    </span>
+                  </div>
+                  <div className="tnum text-xs text-ink2">
+                    {r.rank} · #{r.capid}
+                    {r.phase !== null ? ` · Phase ${PHASE_LABELS[r.phase] ?? r.phase}` : ''}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <StateCell row={r} />
+                    <BlockerCell row={r} todayIso={todayIso} />
+                  </div>
+                </div>
+              )
+            }}
             empty={
               <EmptyState
                 icon={GraduationCap}
@@ -492,7 +531,7 @@ export default function Cadets() {
                     <button
                       type="button"
                       onClick={resetFilters}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray20"
                     >
                       Reset filters
                     </button>

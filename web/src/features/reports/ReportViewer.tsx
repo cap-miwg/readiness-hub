@@ -6,7 +6,7 @@ import { ApiError, apiFetch } from '../../api/client'
 import { Badge, Banner, Card, DataTable, EmptyState, Spinner, type Column } from '../../components/ui'
 import { exportReportCsv } from './exportCsv'
 import { exportReportPdf } from './exportPdf'
-import { formatCell, formatTagLabel, reportAccent, reportIcon } from './format'
+import { formatCell, reportIcon } from './format'
 
 interface IndexedRow {
   i: number
@@ -78,17 +78,14 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
   )
 
   const Icon = reportIcon(report.icon)
-  const accent = reportAccent(report.accent)
   const chips = metaChips(result?.meta)
 
   return (
     <Card
       data-testid="report-viewer"
       title={
-        <span className="flex items-center gap-2">
-          <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent.iconBox}`}>
-            <Icon className="h-4 w-4" aria-hidden />
-          </span>
+        <span className="flex items-center gap-2.5">
+          <Icon className="h-5 w-5 shrink-0 text-ink" strokeWidth={1.5} aria-hidden />
           {report.title}
         </span>
       }
@@ -96,14 +93,17 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
         <>
           {result && (
             <>
-              <Badge tone="slate" title={`Generated ${new Date(result.generatedAt).toLocaleString()}`}>
+              <span
+                className="tnum hidden text-xs text-ink2 sm:inline"
+                title={`Generated ${new Date(result.generatedAt).toLocaleString()}`}
+              >
                 {result.rows.length} rows
-              </Badge>
+              </span>
               <button
                 type="button"
                 data-testid="report-export-csv"
                 onClick={() => exportReportCsv(report, result)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-symbol hover:underline"
               >
                 <Download className="h-4 w-4" aria-hidden /> CSV
               </button>
@@ -111,7 +111,7 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
                 type="button"
                 data-testid="report-export-pdf"
                 onClick={() => void exportReportPdf(report, result)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-symbol hover:underline"
               >
                 <FileDown className="h-4 w-4" aria-hidden /> PDF
               </button>
@@ -122,7 +122,7 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
             data-testid="report-viewer-close"
             onClick={onClose}
             aria-label="Close report"
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded p-1.5 text-ink2 hover:bg-gray20 hover:text-ink"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -142,7 +142,7 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
             <button
               type="button"
               onClick={() => void resultQ.refetch()}
-              className="inline-flex items-center gap-1.5 rounded bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700"
+              className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-paper px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-muted"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Retry
             </button>
@@ -155,13 +155,17 @@ export default function ReportViewer({ report, orgid, descendants, onClose }: Re
 
       {result && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-            <span className="font-semibold text-slate-800">{result.scope.orgName}</span>
-            {result.scope.descendants && <Badge tone="indigo">including sub-units</Badge>}
-            <span className="text-slate-400">|</span>
+          <div className="tnum flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink2">
+            <span className="font-medium text-ink">{result.scope.orgName}</span>
+            {result.scope.descendants && <Badge tone="blue">including sub-units</Badge>}
+            <span aria-hidden className="text-muted">
+              |
+            </span>
             <span>{result.scope.memberCount} members in scope</span>
-            <span className="text-slate-400">|</span>
-            <span>Generated {new Date(result.generatedAt).toLocaleString()}</span>
+            <span aria-hidden className="text-muted">
+              |
+            </span>
+            <span>As of {new Date(result.generatedAt).toLocaleString()}</span>
           </div>
 
           {chips.length > 0 && (

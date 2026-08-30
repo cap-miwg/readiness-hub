@@ -1,5 +1,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
-import type { AdoptionResponse, OverviewResponse } from '@shared/contracts'
+import type { AdoptionResponse, FindingsResponse, OverviewResponse } from '@shared/contracts'
+import type { ParticipationResponse } from '@shared/participationContracts'
+import type { LogisticsResponse } from '@shared/logisticsContracts'
 import { ApiError, apiFetch, useOrgs } from '../../api/client'
 import { useOrgScope } from '../../lib/urlState'
 
@@ -46,6 +48,69 @@ export function useOverview(
     queryFn: () => {
       if (orgid === null) throw new ApiError(0, 'no org selected')
       return apiFetch<OverviewResponse>(overviewPath(orgid, descendants))
+    },
+    enabled: orgid !== null,
+    staleTime: 60_000,
+  })
+}
+
+export function findingsPath(orgid: number, descendants: boolean): string {
+  return `/api/orgs/${orgid}/findings${descendants ? '?descendants=1' : ''}`
+}
+
+export function participationPath(orgid: number, descendants: boolean): string {
+  return `/api/orgs/${orgid}/participation${descendants ? '?descendants=1' : ''}`
+}
+
+export function logisticsPath(orgid: number, descendants: boolean): string {
+  return `/api/orgs/${orgid}/logistics${descendants ? '?descendants=1' : ''}`
+}
+
+/** The ranked Needs Attention queue (contracts.ts FindingsResponse). */
+export function useFindings(
+  orgid: number | null,
+  descendants: boolean,
+): UseQueryResult<FindingsResponse, ApiError> {
+  return useQuery<FindingsResponse, ApiError>({
+    queryKey: ['findings', orgid, descendants],
+    queryFn: () => {
+      if (orgid === null) throw new ApiError(0, 'no org selected')
+      return apiFetch<FindingsResponse>(findingsPath(orgid, descendants))
+    },
+    enabled: orgid !== null,
+    staleTime: 60_000,
+  })
+}
+
+/**
+ * Attendance module (participationContracts.ts). recorded=false is a normal
+ * answer (the NOT RECORDED neutral state), never an error.
+ */
+export function useParticipation(
+  orgid: number | null,
+  descendants: boolean,
+): UseQueryResult<ParticipationResponse, ApiError> {
+  return useQuery<ParticipationResponse, ApiError>({
+    queryKey: ['participation', orgid, descendants],
+    queryFn: () => {
+      if (orgid === null) throw new ApiError(0, 'no org selected')
+      return apiFetch<ParticipationResponse>(participationPath(orgid, descendants))
+    },
+    enabled: orgid !== null,
+    staleTime: 60_000,
+  })
+}
+
+/** Logistics read-only view (logisticsContracts.ts); ORMS stays authoritative. */
+export function useLogistics(
+  orgid: number | null,
+  descendants: boolean,
+): UseQueryResult<LogisticsResponse, ApiError> {
+  return useQuery<LogisticsResponse, ApiError>({
+    queryKey: ['logistics', orgid, descendants],
+    queryFn: () => {
+      if (orgid === null) throw new ApiError(0, 'no org selected')
+      return apiFetch<LogisticsResponse>(logisticsPath(orgid, descendants))
     },
     enabled: orgid !== null,
     staleTime: 60_000,

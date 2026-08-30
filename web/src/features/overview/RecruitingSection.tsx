@@ -1,319 +1,196 @@
-import clsx from 'clsx'
-import { Lightbulb, TrendingDown, TrendingUp, UserPlus } from 'lucide-react'
-import { Badge, Card, EmptyState, ProgressBar, type Tone } from '../../components/ui'
+import type { StrengthPoint } from '@shared/contracts'
+import { EmptyState, Sparkline, VerdictMark } from '../../components/ui'
 import type { OrgStats } from './useOverviewData'
+import {
+  bandWord,
+  FactLedger,
+  FactRow,
+  FiguresStrip,
+  ScoreLead,
+  type BandRating,
+} from './overviewShared'
 
-type Sustainability = NonNullable<OrgStats['metrics']['sustainability']>
+/*
+ * Recruiting and Retention as a quiet ledger (unit-overview.html mockup,
+ * "Recruiting and Retention" section): score lead with the band word and the
+ * methodology behind a disclosure, a small component-figures strip, hairline
+ * fact rows, the 12-month strength sparkline, and the member breakdown as
+ * plain tabular text. No meters, no tinted tiles; the number is the display.
+ */
 
-/** Bands 80/65/50 (v1 ServicesOrgStatsDataService.html:525-581, engineering judgment). */
-const sustainabilityTone: Record<Sustainability['rating'], Tone> = {
-  excellent: 'green',
-  good: 'blue',
-  fair: 'amber',
-  'needs-attention': 'red',
-}
-
-const metricWrap: Record<Tone, string> = {
-  blue: 'border-blue-100 bg-blue-50',
-  indigo: 'border-indigo-100 bg-indigo-50',
-  green: 'border-emerald-100 bg-emerald-50',
-  amber: 'border-amber-100 bg-amber-50',
-  red: 'border-rose-100 bg-rose-50',
-  slate: 'border-slate-100 bg-slate-50',
-}
-
-function MetricCard({
-  label,
-  value,
-  sub,
-  tone,
-  trend,
-}: {
+export interface RecruitingAlert {
+  kind: 'watch'
   label: string
-  value: string
-  sub?: string
-  tone: Tone
-  trend?: { text: string; direction: 'up' | 'down' | 'stable' }
-}) {
-  return (
-    <div
-      className={clsx('rounded-lg border px-3 py-2.5', metricWrap[tone])}
-      data-testid={`rr-metric-${label.toLowerCase().replace(/\s+/g, '-')}`}
-    >
-      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-xl font-bold text-slate-800">{value}</span>
-        {trend && (
-          <span
-            className={clsx(
-              'text-xs font-medium',
-              trend.direction === 'up'
-                ? 'text-emerald-600'
-                : trend.direction === 'down'
-                  ? 'text-rose-600'
-                  : 'text-slate-500',
-            )}
-          >
-            {trend.text}
-          </span>
-        )}
-      </div>
-      {sub && <div className="text-xs text-slate-500">{sub}</div>}
-    </div>
-  )
 }
 
-function prettyStability(rating: string): string {
-  return rating
-    .split('-')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
+/** Collapsed-header inputs: one score, one band word, the alert list. */
+export function recruitingStatus(orgStats: OrgStats | null): {
+  score: number | null
+  band: string | null
+  alerts: RecruitingAlert[]
+} {
+  const sustainability = orgStats?.metrics.sustainability ?? null
+  const growth = orgStats?.metrics.growth ?? null
+  const alerts: RecruitingAlert[] = []
+  if (sustainability !== null && sustainability.rating === 'needs-attention') {
+    alerts.push({ kind: 'watch', label: 'Sustainability needs attention' })
+  }
+  if (growth !== null && growth.status === 'declining') {
+    alerts.push({ kind: 'watch', label: 'Membership declining' })
+  }
+  return {
+    score: sustainability?.overallScore ?? null,
+    band: sustainability !== null ? bandWord[sustainability.rating as BandRating] : null,
+    alerts,
+  }
+}
+
+function trendText(trendPercent: number): string {
+  const sign = trendPercent > 0 ? '+' : ''
+  return `${sign}${trendPercent}% vs the prior period`
 }
 
 export function RecruitingSection({
-  title,
   orgStats,
+  strengthSeries,
+  strengthDelta12mo,
   emptyDiagnostic,
 }: {
-  title: string
   orgStats: OrgStats | null
+  strengthSeries: StrengthPoint[] | undefined
+  strengthDelta12mo: number | null | undefined
   emptyDiagnostic: string
 }) {
   if (orgStats === null) {
     return (
-      <Card
-        title={
-          <span className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-blue-700" aria-hidden />
-            {title}
-          </span>
-        }
-        data-testid="recruiting-section"
-      >
+      <div data-testid="recruiting-section">
         <EmptyState
           title="No historical membership data"
           message="ORGStatistics has no monthly counts for this scope, so recruiting and retention cannot be analyzed."
           diagnostic={emptyDiagnostic}
         />
-      </Card>
+      </div>
     )
   }
 
   const { recruiting, retention, growth, volatility, sustainability } = orgStats.metrics
   const breakdown = orgStats.summary.memberBreakdown
-  const yoy =
-    orgStats.summary.yearAgoTotal !== null
-      ? orgStats.summary.currentTotal - orgStats.summary.yearAgoTotal
-      : null
+  const series = strengthSeries ?? []
+  const sparkData = series.map(p => p.total)
+  const first = series[0]
+  const last = series[series.length - 1]
 
   return (
-    <Card
-      title={
-        <span className="flex items-center gap-2">
-          <UserPlus className="h-4 w-4 text-blue-700" aria-hidden />
-          {title}
-        </span>
-      }
-      actions={
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <span className="font-semibold">{orgStats.summary.currentTotal} members</span>
-          {yoy !== null && (
-            <span
-              className={clsx(
-                'text-xs font-semibold',
-                yoy > 0 ? 'text-emerald-600' : yoy < 0 ? 'text-rose-600' : 'text-slate-500',
-              )}
-            >
-              ({yoy > 0 ? '+' : ''}
-              {yoy} YoY)
-            </span>
-          )}
-          {sustainability !== null && (
-            <Badge tone={sustainabilityTone[sustainability.rating]}>
-              {sustainability.overallScore}
-            </Badge>
-          )}
-        </div>
-      }
-      data-testid="recruiting-section"
-    >
-      <div className="space-y-4">
-        {sustainability !== null && (
-          <div className="rounded-lg bg-slate-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h4 className="font-semibold text-slate-800">Sustainability Score</h4>
-              <span className="text-2xl font-bold text-slate-900" data-testid="sustainability-score">
-                {sustainability.overallScore}
-              </span>
-            </div>
-            <ProgressBar
-              value={sustainability.overallScore}
-              accent={sustainabilityTone[sustainability.rating]}
-            />
-            <p className="mt-2 text-sm text-slate-600">{sustainability.summary}</p>
-            <div className="mt-3 grid grid-cols-4 gap-1 text-xs">
-              {(
-                [
-                  ['Recruiting', sustainability.components.recruiting],
-                  ['Retention', sustainability.components.retention],
-                  ['Growth', sustainability.components.growth],
-                  ['Stability', sustainability.components.stability],
-                ] as const
-              ).map(([label, value]) => (
-                <div key={label} className="text-center">
-                  <div className="font-bold text-slate-700">{value}</div>
-                  <div className="text-slate-400">{label}</div>
-                </div>
-              ))}
-            </div>
-            {/* Weights 25/35/25/15 and bands 80/65/50 are v1 engineering judgment,
-                not a CAP publication (server/src/domain/orgStats.ts calculateSustainability). */}
-            <p className="mt-2 text-xs text-slate-400">
-              Weighted composite: 25% recruiting, 35% retention, 25% growth, 15% stability. Bands:
-              80+ excellent, 65+ good, 50+ fair.
-            </p>
-            {sustainability.focusArea.score < 70 && (
-              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <div className="flex items-start gap-2">
-                  <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
-                  <div>
-                    <p className="text-sm font-medium text-amber-800">
-                      Focus Area: {sustainability.focusArea.label}
-                    </p>
-                    <p className="mt-1 text-xs text-amber-700">
-                      The {sustainability.focusArea.label.toLowerCase()} score (
-                      {Math.round(sustainability.focusArea.score)}) is the lowest component.
-                      Improving it has the biggest impact on the overall score.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+    <div className="space-y-6" data-testid="recruiting-section">
+      {sustainability !== null && (
+        <>
+          <ScoreLead
+            score={sustainability.overallScore}
+            band={bandWord[sustainability.rating as BandRating]}
+            method="Weighted composite: recruiting 25%, retention 35%, growth 25%, stability 15%. Bands: 80 and above excellent, 65 good, 50 fair. Weights and bands are engineering judgment carried over from v1, not a CAP publication."
+            testid="sustainability-score"
+          />
+          <FiguresStrip
+            size="sm"
+            figures={[
+              {
+                label: 'Recruiting',
+                value: Math.round(sustainability.components.recruiting),
+                testid: 'rr-metric-recruiting-rate',
+              },
+              {
+                label: 'Retention',
+                value: Math.round(sustainability.components.retention),
+                testid: 'rr-metric-retention-rate',
+              },
+              {
+                label: 'Growth',
+                value: Math.round(sustainability.components.growth),
+                testid: 'rr-metric-net-growth',
+              },
+              {
+                label: 'Stability',
+                value: Math.round(sustainability.components.stability),
+                testid: 'rr-metric-stability',
+              },
+            ]}
+          />
+        </>
+      )}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MetricCard
-            label="Recruiting Rate"
-            value={recruiting !== null ? String(recruiting.monthlyAverage) : '--'}
-            sub="avg new members/month"
-            tone="blue"
-            {...(recruiting !== null && recruiting.trendPercent !== 0
-              ? {
-                  trend: {
-                    text: `${recruiting.trendPercent > 0 ? '+' : ''}${recruiting.trendPercent}%`,
-                    direction:
-                      recruiting.trend === 'increasing'
-                        ? ('up' as const)
-                        : recruiting.trend === 'decreasing'
-                          ? ('down' as const)
-                          : ('stable' as const),
-                  },
-                }
-              : {})}
-          />
-          <MetricCard
-            label="Retention Rate"
-            value={retention !== null && retention.retentionRate !== null ? `${retention.retentionRate}%` : '--'}
-            sub={
-              retention === null || retention.healthIndicator === 'unknown'
-                ? 'insufficient data'
-                : retention.healthIndicator === 'healthy'
-                  ? 'Healthy'
-                  : retention.healthIndicator === 'moderate'
-                    ? 'Moderate'
-                    : 'Needs attention'
-            }
-            tone={
-              retention === null || retention.healthIndicator === 'unknown'
-                ? 'slate'
-                : retention.healthIndicator === 'healthy'
-                  ? 'green'
-                  : retention.healthIndicator === 'moderate'
-                    ? 'amber'
-                    : 'red'
-            }
-          />
-          <MetricCard
-            label="Net Growth"
-            value={
-              growth !== null
-                ? `${growth.netChangeInPeriod > 0 ? '+' : ''}${growth.netChangeInPeriod}`
-                : '--'
-            }
-            sub="change over the period"
-            tone={
-              growth === null
-                ? 'slate'
-                : growth.status === 'growing'
-                  ? 'green'
-                  : growth.status === 'declining'
-                    ? 'red'
-                    : 'slate'
-            }
-          />
-          <MetricCard
-            label="Stability"
-            value={volatility !== null ? prettyStability(volatility.stabilityRating) : '--'}
-            sub={volatility !== null ? `${volatility.coefficientOfVariation}% variation` : 'needs 6+ months of data'}
-            tone={
-              volatility === null
-                ? 'slate'
-                : volatility.stabilityRating === 'very-stable'
-                  ? 'green'
-                  : volatility.stabilityRating === 'stable'
-                    ? 'blue'
-                    : volatility.stabilityRating === 'moderate'
-                      ? 'amber'
-                      : 'red'
-            }
-          />
-        </div>
-
+      <FactLedger>
+        <FactRow label="Recruiting rate">
+          {recruiting !== null
+            ? `${recruiting.monthlyAverage} new ${recruiting.monthlyAverage === 1 ? 'member' : 'members'} per month, 12-month average${recruiting.trendPercent !== 0 ? `, ${trendText(recruiting.trendPercent)}` : ''}`
+            : 'Insufficient data'}
+        </FactRow>
+        <FactRow label="Retention rate">
+          {retention !== null && retention.retentionRate !== null
+            ? `${retention.retentionRate}% of memberships renewed`
+            : 'Insufficient data'}
+        </FactRow>
+        <FactRow label="Net growth">
+          {growth !== null ? (
+            <>
+              {`${growth.netChangeInPeriod > 0 ? '+' : ''}${growth.netChangeInPeriod} members over the period`}
+              {growth.status === 'declining' && <VerdictMark kind="watch" label="Declining" />}
+            </>
+          ) : (
+            'Insufficient data'
+          )}
+        </FactRow>
+        <FactRow label="Roster stability">
+          {volatility !== null
+            ? `${volatility.coefficientOfVariation}% month-to-month variation`
+            : 'Needs 6 or more months of data'}
+        </FactRow>
         {breakdown !== null && (
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <FactRow label="Membership">
             {/* Operational total = senior + cadet; FIFTY YEAR and LIFE count as
                 seniors (server/src/domain/orgStats.ts MEMBER_TYPE_MAP). */}
-            <h4 className="mb-3 text-sm font-semibold text-slate-700">Member Breakdown</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-              <div className="flex items-center justify-between rounded bg-emerald-50 px-2 py-1">
-                <span className="text-slate-600">Senior Program</span>
-                <span className="font-bold text-emerald-700">{breakdown.senior}</span>
-              </div>
-              <div className="flex items-center justify-between rounded bg-amber-50 px-2 py-1">
-                <span className="text-slate-600">Cadets</span>
-                <span className="font-bold text-amber-700">{breakdown.cadet}</span>
-              </div>
-              {breakdown.cadetSponsor > 0 && (
-                <div className="flex items-center justify-between rounded bg-blue-50 px-2 py-1">
-                  <span className="text-slate-600">Cadet Sponsors</span>
-                  <span className="font-bold text-blue-700">{breakdown.cadetSponsor}</span>
-                </div>
-              )}
-              {breakdown.patron > 0 && (
-                <div className="flex items-center justify-between rounded bg-slate-50 px-2 py-1">
-                  <span className="text-slate-600">Patrons</span>
-                  <span className="font-bold text-slate-700">{breakdown.patron}</span>
-                </div>
-              )}
-            </div>
-          </div>
+            {[
+              `${breakdown.senior} seniors`,
+              `${breakdown.cadet} cadets`,
+              breakdown.cadetSponsor > 0 ? `${breakdown.cadetSponsor} cadet sponsors` : null,
+              breakdown.patron > 0 ? `${breakdown.patron} patrons` : null,
+            ]
+              .filter(v => v !== null)
+              .join(' · ')}
+          </FactRow>
         )}
+      </FactLedger>
 
-        <div className="flex items-center justify-between text-xs text-slate-400">
-          <span>{orgStats.summary.dataPointCount} months of data analyzed</span>
-          {growth !== null && (
-            <span className="flex items-center gap-1">
-              {growth.status === 'growing' ? (
-                <TrendingUp className="h-3.5 w-3.5 text-emerald-500" aria-hidden />
-              ) : growth.status === 'declining' ? (
-                <TrendingDown className="h-3.5 w-3.5 text-rose-500" aria-hidden />
-              ) : null}
-              {growth.status}
-            </span>
-          )}
+      {sparkData.length > 1 && first !== undefined && last !== undefined && (
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+          <Sparkline
+            data={sparkData}
+            width={220}
+            height={48}
+            label={`12-month total strength, ${first.total} in ${first.month} to ${last.total} in ${last.month}`}
+          />
+          <div>
+            <div className="tnum text-sm text-ink">
+              {first.total} to {last.total}
+              {typeof strengthDelta12mo === 'number' &&
+                ` (${strengthDelta12mo > 0 ? '+' : ''}${strengthDelta12mo})`}
+            </div>
+            <div className="kicker mt-0.5 text-ink">12-month strength</div>
+          </div>
         </div>
-      </div>
-    </Card>
+      )}
+
+      {sustainability !== null && sustainability.focusArea.score < 70 && (
+        <p className="max-w-[62ch] text-[13px] text-ink2">
+          Focus area: {sustainability.focusArea.label}. At{' '}
+          {Math.round(sustainability.focusArea.score)} it is the lowest component; improving it
+          moves the overall score most.
+        </p>
+      )}
+
+      <p className="text-xs text-ink2">
+        Computed from {orgStats.summary.dataPointCount}{' '}
+        {orgStats.summary.dataPointCount === 1 ? 'month' : 'months'} of extract history.
+      </p>
+    </div>
   )
 }

@@ -4,6 +4,7 @@ import {
   Award,
   BookOpen,
   Calendar,
+  CalendarCheck,
   Clock,
   FileText,
   GraduationCap,
@@ -16,19 +17,25 @@ import {
   Target,
   Tent,
   TrendingUp,
+  UserMinus,
   UserPlus,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 
 // Icon names served by ReportMeta.icon (server reports/catalog.ts, v1 parity
-// with Index.html:4274-4455 reportCatalog). Unknown names fall back to FileText.
+// with Index.html:4274-4455 reportCatalog, plus the module-roadmap additions:
+// CalendarCheck for expiring-quals windows, UserMinus for the transfers
+// ledger). Unknown names fall back to FileText. All report icons render
+// monochrome ink: ReportMeta.accent is served for v1 parity and deliberately
+// ignored, because category is never a color (V2-DESIGN-PLAN.md section 3).
 const REPORT_ICONS: Record<string, LucideIcon> = {
   AlertCircle,
   AlertTriangle,
   Award,
   BookOpen,
   Calendar,
+  CalendarCheck,
   Clock,
   FileText,
   GraduationCap,
@@ -41,36 +48,13 @@ const REPORT_ICONS: Record<string, LucideIcon> = {
   Target,
   Tent,
   TrendingUp,
+  UserMinus,
   UserPlus,
   Users,
 }
 
 export function reportIcon(name: string): LucideIcon {
   return REPORT_ICONS[name] ?? FileText
-}
-
-interface AccentClasses {
-  iconBox: string
-  chip: string
-}
-
-// Full literal class strings per accent: Tailwind's scanner cannot see
-// dynamically assembled class names.
-const ACCENTS: Record<string, AccentClasses> = {
-  blue: { iconBox: 'bg-blue-100 text-blue-700', chip: 'bg-blue-100 text-blue-800' },
-  amber: { iconBox: 'bg-amber-100 text-amber-700', chip: 'bg-amber-100 text-amber-800' },
-  green: { iconBox: 'bg-green-100 text-green-700', chip: 'bg-green-100 text-green-800' },
-  emerald: { iconBox: 'bg-emerald-100 text-emerald-700', chip: 'bg-emerald-100 text-emerald-800' },
-  purple: { iconBox: 'bg-purple-100 text-purple-700', chip: 'bg-purple-100 text-purple-800' },
-}
-
-const DEFAULT_ACCENT: AccentClasses = {
-  iconBox: 'bg-slate-100 text-slate-600',
-  chip: 'bg-slate-100 text-slate-700',
-}
-
-export function reportAccent(accent: string): AccentClasses {
-  return ACCENTS[accent] ?? DEFAULT_ACCENT
 }
 
 export function formatTagLabel(tag: string): string {

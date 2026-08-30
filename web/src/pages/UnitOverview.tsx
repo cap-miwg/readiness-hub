@@ -1,66 +1,229 @@
-import { Building2, Info } from 'lucide-react'
-import type { OverviewResponse } from '@shared/contracts'
-import { Badge, Banner, EmptyState, PageHeader, Spinner } from '../components/ui'
+import { Link } from 'react-router-dom'
+import { Building2 } from 'lucide-react'
+import type { FindingsResponse, OverviewResponse } from '@shared/contracts'
+import type { UseQueryResult } from '@tanstack/react-query'
+import type { ParticipationResponse } from '@shared/participationContracts'
+import type { LogisticsResponse } from '@shared/logisticsContracts'
+import {
+  Banner,
+  EmptyState,
+  FindingRow,
+  FindingsList,
+  Spinner,
+  VerdictMark,
+} from '../components/ui'
+import { ExpandCollapseAll, Section } from '../components/Section'
+import type { ApiError } from '../api/client'
 import { useOrgScope } from '../lib/urlState'
-import { AdoptionSection } from '../features/overview/AdoptionSection'
+import { AdoptionSection, aggregateAdoption } from '../features/overview/AdoptionSection'
 import { AggregateStatsHeader, ComparisonTable } from '../features/overview/ComparisonTable'
-import { EsReadinessSection } from '../features/overview/EsReadinessSection'
-import { RecruitingSection } from '../features/overview/RecruitingSection'
+import { EsReadinessSection, esStatus } from '../features/overview/EsReadinessSection'
+import { LogisticsSection, logisticsStatus } from '../features/overview/LogisticsSection'
+import { ParticipationSection, participationStatus } from '../features/overview/ParticipationSection'
+import { RecruitingSection, recruitingStatus } from '../features/overview/RecruitingSection'
+import { ratingLabel } from '../features/overview/esShared'
+import { bandWord, FiguresStrip, plural, type BandRating } from '../features/overview/overviewShared'
 import {
   adoptionPath,
+  findingsPath,
+  logisticsPath,
   overviewPath,
+  participationPath,
   useAdoption,
   useEffectiveScope,
+  useFindings,
+  useLogistics,
   useOverview,
+  useParticipation,
 } from '../features/overview/useOverviewData'
 
-/**
- * View mode headline, ported from v1 AppUnitOverview.html:2144-2162. Mode B
- * (command-only) prompts for the Sub-Units toggle because an HQ ORGID has
- * almost no members of its own.
+/*
+ * Unit Overview in the Quiet Authority grammar (V2-DESIGN-PLAN.md section 6;
+ * docs/design/mockups/quiet-authority/unit-overview.html): calm masthead,
+ * verdict sentence, figures strip, the ranked Needs Attention queue, then
+ * collapsible sections whose collapsed headers are themselves a complete
+ * brief. A healthy unit reads as a colorless page.
  */
-function headerInfo(overview: OverviewResponse): { label: string; description: string } {
-  const type = overview.org.type.toUpperCase()
-  const hqLabel = type.includes('WING')
-    ? 'Wing'
-    : type.includes('GROUP')
-      ? 'Group'
-      : type.includes('REGION')
-        ? 'Region'
-        : 'Headquarters'
-  if (overview.viewMode === 'aggregate') {
-    return {
-      label: `${hqLabel} Dashboard`,
-      description: `Aggregate view of membership health across ${overview.comparison?.length ?? 0} subordinate units.`,
-    }
+
+const SECTION_PAGE = 'unit'
+
+// --- Masthead ---
+
+function verdictSentence(findings: FindingsResponse): {
+  lead: string
+  linkText: string | null
+  tail: string
+} {
+  const n = findings.findings.length
+  if (n === 0) {
+    return { lead: 'Broadly healthy.', linkText: null, tail: ' Everything reads clean.' }
   }
-  if (overview.viewMode === 'command-only') {
-    return {
-      label: 'Headquarters View',
-      description: 'Command/administrative unit staff overview.',
-    }
-  }
+  const anyAction = findings.findings.some(f => f.category === 'action')
   return {
-    label: 'Unit Overview',
-    description: `Combined view of membership health and readiness for ${
-      overview.descendants ? 'unit and subordinates' : 'the selected unit'
-    }.`,
+    lead: anyAction ? 'Needs attention.' : 'Broadly healthy.',
+    linkText: `${n} ${plural(n, 'finding needs', 'findings need')} attention`,
+    tail: '; everything else reads clean.',
   }
 }
 
-function StatBlock({ label, value, wrap, text }: { label: string; value: string; wrap: string; text: string }) {
+function Masthead({
+  overview,
+  findings,
+}: {
+  overview: OverviewResponse
+  findings: FindingsResponse | undefined
+}) {
+  const kicker = [
+    overview.org.unitLabel,
+    overview.org.type,
+    overview.meetingLine ?? null,
+    overview.descendants ? 'Including sub-units' : null,
+  ]
+    .filter((part): part is string => part !== null && part !== '')
+    .join(' · ')
+
+  const sustainability = overview.orgStats?.metrics.sustainability ?? null
+  const verdict = findings !== undefined ? verdictSentence(findings) : null
+
   return (
-    <div className={`rounded-lg border p-3 ${wrap}`} data-testid={`overview-stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
-      <div className="text-[10px] font-bold uppercase text-slate-500">{label}</div>
-      <div className={`text-2xl font-bold ${text}`}>{value}</div>
-    </div>
+    <section aria-label="Unit masthead" data-testid="overview-masthead">
+      <p className="kicker tnum text-ink2">{kicker}</p>
+      <h1 className="mt-1.5 font-display text-[32px] font-semibold leading-tight tracking-tight text-ink">
+        {overview.org.name}
+      </h1>
+      {verdict !== null && (
+        <p className="mt-2 max-w-[58ch] text-[19px] leading-normal text-ink" data-testid="overview-verdict">
+          {verdict.lead}{' '}
+          {verdict.linkText !== null && (
+            <a href="#queue" className="text-symbol hover:underline">
+              {verdict.linkText}
+            </a>
+          )}
+          {verdict.tail}
+        </p>
+      )}
+
+      <FiguresStrip
+        size="lg"
+        className="mt-8"
+        figures={[
+          {
+            label: 'Members',
+            value: overview.totals.members.toLocaleString(),
+            testid: 'overview-stat-total-members',
+            ...(typeof overview.strengthDelta12mo === 'number'
+              ? {
+                  delta: `${overview.strengthDelta12mo > 0 ? '+' : ''}${overview.strengthDelta12mo} / 12 mo`,
+                }
+              : {}),
+          },
+          {
+            label: 'Sustainability',
+            value: sustainability?.overallScore ?? '--',
+            testid: 'overview-stat-sustainability',
+            ...(sustainability !== null
+              ? { delta: bandWord[sustainability.rating as BandRating] }
+              : {}),
+          },
+          {
+            label: 'ES readiness',
+            value: overview.es.readinessScore,
+            testid: 'overview-stat-es-readiness',
+            delta: ratingLabel[overview.es.readinessRating],
+          },
+          {
+            label: 'Open findings',
+            value: findings !== undefined ? findings.findings.length : '--',
+            testid: 'overview-stat-open-findings',
+          },
+        ]}
+      />
+    </section>
   )
 }
 
-function OverviewBody({ overview }: { overview: OverviewResponse }) {
+// --- Needs Attention queue ---
+
+function NeedsAttention({
+  findingsQ,
+  orgid,
+  descendants,
+}: {
+  findingsQ: UseQueryResult<FindingsResponse, ApiError>
+  orgid: number
+  descendants: boolean
+}) {
+  return (
+    <section className="mt-11 scroll-mt-20" id="queue" aria-labelledby="lbl-queue" data-testid="findings-queue">
+      <div className="flex items-baseline gap-3 pb-1">
+        <p className="kicker text-ink" id="lbl-queue">
+          Needs attention
+        </p>
+        <span className="ml-auto text-xs text-ink2">Ranked by severity</span>
+      </div>
+      {findingsQ.error !== null && (
+        <Banner kind="warn">
+          The findings queue could not be loaded from {findingsPath(orgid, descendants)}:{' '}
+          {findingsQ.error.message}
+        </Banner>
+      )}
+      {findingsQ.isPending && (
+        <div className="border-t border-hairline py-4">
+          <Spinner label="Ranking findings..." />
+        </div>
+      )}
+      {findingsQ.data !== undefined && (
+        <FindingsList empty="Nothing needs your attention. The unit is healthy.">
+          {findingsQ.data.findings.map(f => (
+            <FindingRow
+              key={f.id}
+              category={f.category}
+              index={f.rank}
+              action={
+                <Link to={f.href} className="text-symbol hover:underline">
+                  {f.actionLabel}
+                </Link>
+              }
+            >
+              {f.text}
+            </FindingRow>
+          ))}
+        </FindingsList>
+      )}
+    </section>
+  )
+}
+
+// --- Section status slots (budget: one score, one word, one alert count) ---
+
+function NoAlerts() {
+  return <span className="text-muted">No alerts</span>
+}
+
+// --- Page body ---
+
+function OverviewBody({
+  overview,
+  findingsQ,
+  participationQ,
+  logisticsQ,
+}: {
+  overview: OverviewResponse
+  findingsQ: UseQueryResult<FindingsResponse, ApiError>
+  participationQ: UseQueryResult<ParticipationResponse, ApiError>
+  logisticsQ: UseQueryResult<LogisticsResponse, ApiError>
+}) {
   const { setDescendants } = useOrgScope()
   const adoptionQ = useAdoption(overview.orgid, overview.descendants)
-  const info = headerInfo(overview)
+
+  const recruiting = recruitingStatus(overview.orgStats)
+  const es = esStatus(overview.es)
+  const esWorst = es.alerts.some(a => a.kind === 'action') ? 'action' : 'watch'
+  const pStatus = participationStatus(participationQ.data)
+  const lStatus = logisticsStatus(logisticsQ.data)
+  const adoption = adoptionQ.data ?? null
+  const adoptionRate = adoption !== null ? aggregateAdoption(adoption.units).adoptionRate : null
+
   const recruitingTitle =
     overview.viewMode === 'aggregate'
       ? 'Aggregate Recruiting and Retention'
@@ -68,100 +231,190 @@ function OverviewBody({ overview }: { overview: OverviewResponse }) {
         ? 'HQ Staff: Recruiting and Retention'
         : 'Recruiting and Retention'
 
+  const sectionIds = [
+    'recruiting',
+    'es',
+    'participation',
+    'logistics',
+    ...(adoption !== null ? ['workspace'] : []),
+  ]
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Commander Snapshot
-              </p>
-              {overview.viewMode === 'aggregate' && <Badge tone="indigo">Aggregate View</Badge>}
-              {overview.viewMode === 'command-only' && <Badge tone="slate">Headquarters</Badge>}
-            </div>
-            <h2 className="text-xl font-bold text-slate-900">{info.label}</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {overview.org.name} ({overview.org.unitLabel}), {overview.org.type}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">{info.description}</p>
-          </div>
-          {overview.viewMode !== 'aggregate' && (
-            <div className="grid min-w-[280px] grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatBlock
-                label="Total Members"
-                value={overview.totals.members.toLocaleString()}
-                wrap="border-blue-100 bg-blue-50"
-                text="text-blue-900"
-              />
-              <StatBlock
-                label="Seniors"
-                value={overview.totals.seniors.toLocaleString()}
-                wrap="border-emerald-100 bg-emerald-50"
-                text="text-emerald-900"
-              />
-              <StatBlock
-                label="Cadets"
-                value={overview.totals.cadets.toLocaleString()}
-                wrap="border-amber-100 bg-amber-50"
-                text="text-amber-900"
-              />
-              <StatBlock
-                label="Units in Scope"
-                value={overview.totals.unitsInScope.toLocaleString()}
-                wrap="border-indigo-100 bg-indigo-50"
-                text="text-indigo-900"
-              />
-            </div>
-          )}
-        </div>
-        {overview.viewMode === 'aggregate' && overview.comparison !== null && (
-          <div className="mt-4">
-            <AggregateStatsHeader
-              comparison={overview.comparison}
-              totalMembers={overview.totals.members}
-            />
-          </div>
-        )}
-      </div>
+    <div>
+      <Masthead overview={overview} findings={findingsQ.data} />
 
       {overview.viewMode === 'command-only' && (
         <Banner
           kind="info"
+          className="mt-8"
           action={
             <button
               type="button"
               onClick={() => setDescendants(true)}
               data-testid="enable-subunits-button"
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+              className="rounded-md bg-symbol px-3 py-1.5 text-xs font-semibold text-paper hover:bg-symbol/90"
             >
               Include Sub-Units
             </button>
           }
         >
-          <span className="flex items-center gap-2">
-            <Info className="h-4 w-4 shrink-0" aria-hidden />
-            This is a command/administrative headquarters with few members of its own. Enable
-            Include Sub-Units to see aggregate data for all subordinate units.
-          </span>
+          This is a command headquarters with few members of its own. Include sub-units to see
+          aggregate data for everything under it.
         </Banner>
       )}
 
-      {overview.viewMode === 'aggregate' && overview.comparison !== null && (
-        <ComparisonTable comparison={overview.comparison} />
-      )}
-
-      <RecruitingSection
-        title={recruitingTitle}
-        orgStats={overview.orgStats}
-        emptyDiagnostic={`OverviewResponse.orgStats is null for orgid ${overview.orgid} (scope ${overview.scope})`}
+      <NeedsAttention
+        findingsQ={findingsQ}
+        orgid={overview.orgid}
+        descendants={overview.descendants}
       />
 
-      <EsReadinessSection es={overview.es} />
+      {overview.viewMode === 'aggregate' && overview.comparison !== null && (
+        <section className="mt-11 space-y-5">
+          <AggregateStatsHeader
+            comparison={overview.comparison}
+            totalMembers={overview.totals.members}
+          />
+          <ComparisonTable comparison={overview.comparison} />
+        </section>
+      )}
 
-      {adoptionQ.data != null && <AdoptionSection adoption={adoptionQ.data} />}
-      {adoptionQ.error && (
-        <Banner kind="warn">
+      <div className="mt-10 flex justify-end pb-1">
+        <ExpandCollapseAll page={SECTION_PAGE} ids={sectionIds} />
+      </div>
+
+      <Section
+        page={SECTION_PAGE}
+        id="recruiting"
+        title={recruitingTitle}
+        defaultOpen={recruiting.alerts.length > 0}
+        status={
+          <>
+            {recruiting.score !== null && <span className="font-semibold">{recruiting.score}</span>}
+            {recruiting.band !== null && <span>{recruiting.band}</span>}
+            {recruiting.alerts.length > 0 ? (
+              <VerdictMark
+                kind="watch"
+                label={`${recruiting.alerts.length} ${plural(recruiting.alerts.length, 'alert')}`}
+              />
+            ) : (
+              <NoAlerts />
+            )}
+          </>
+        }
+      >
+        <RecruitingSection
+          orgStats={overview.orgStats}
+          strengthSeries={overview.strengthSeries}
+          strengthDelta12mo={overview.strengthDelta12mo}
+          emptyDiagnostic={`OverviewResponse.orgStats is null for orgid ${overview.orgid} (scope ${overview.scope})`}
+        />
+      </Section>
+
+      <Section
+        page={SECTION_PAGE}
+        id="es"
+        title="Emergency Services"
+        status={
+          <>
+            <span className="font-semibold">{es.score}</span>
+            <span>{es.band}</span>
+            {es.alerts.length > 0 ? (
+              <VerdictMark
+                kind={esWorst}
+                label={`${es.alerts.length} ${plural(es.alerts.length, 'alert')}`}
+              />
+            ) : (
+              <NoAlerts />
+            )}
+          </>
+        }
+      >
+        <EsReadinessSection es={overview.es} />
+      </Section>
+
+      <Section
+        page={SECTION_PAGE}
+        id="participation"
+        title="Participation"
+        status={
+          pStatus === null ? undefined : !pStatus.recorded ? (
+            <VerdictMark kind="notRecorded" label={<span className="text-ink2">Not recorded</span>} />
+          ) : (
+            <>
+              {pStatus.score !== null && <span className="font-semibold">{pStatus.score}</span>}
+              {pStatus.word !== null && <span>{pStatus.word}</span>}
+              {pStatus.quietCount > 0 ? (
+                <VerdictMark kind="watch" label={`${pStatus.quietCount} quiet`} />
+              ) : (
+                <NoAlerts />
+              )}
+            </>
+          )
+        }
+      >
+        {participationQ.isPending && <Spinner label="Loading attendance..." />}
+        {participationQ.error !== null && (
+          <Banner kind="warn">
+            Attendance data could not be loaded from{' '}
+            {participationPath(overview.orgid, overview.descendants)}:{' '}
+            {participationQ.error.message}
+          </Banner>
+        )}
+        {participationQ.data !== undefined && (
+          <ParticipationSection participation={participationQ.data} />
+        )}
+      </Section>
+
+      <Section
+        page={SECTION_PAGE}
+        id="logistics"
+        title="Logistics"
+        status={
+          lStatus === null ? undefined : !lStatus.recorded ? (
+            <VerdictMark kind="notRecorded" label={<span className="text-ink2">Not recorded</span>} />
+          ) : (
+            <>
+              {lStatus.score !== null && <span className="font-semibold">{lStatus.score}</span>}
+              {lStatus.downCount > 0 ? (
+                <VerdictMark
+                  kind="action"
+                  label={`${lStatus.downCount} down`}
+                />
+              ) : (
+                <NoAlerts />
+              )}
+            </>
+          )
+        }
+      >
+        {logisticsQ.isPending && <Spinner label="Loading logistics..." />}
+        {logisticsQ.error !== null && (
+          <Banner kind="warn">
+            Logistics data could not be loaded from{' '}
+            {logisticsPath(overview.orgid, overview.descendants)}: {logisticsQ.error.message}
+          </Banner>
+        )}
+        {logisticsQ.data !== undefined && <LogisticsSection logistics={logisticsQ.data} />}
+      </Section>
+
+      {adoption !== null && (
+        <Section
+          page={SECTION_PAGE}
+          id="workspace"
+          title="Workspace Adoption"
+          status={
+            <>
+              {adoptionRate !== null && <span className="font-semibold">{adoptionRate}%</span>}
+              <span className="text-muted">Informational</span>
+            </>
+          }
+        >
+          <AdoptionSection adoption={adoption} />
+        </Section>
+      )}
+      {adoptionQ.error !== null && (
+        <Banner kind="warn" className="mt-4">
           Google adoption data could not be loaded from{' '}
           {adoptionPath(overview.orgid, overview.descendants)}: {adoptionQ.error.message}
         </Banner>
@@ -172,15 +425,14 @@ function OverviewBody({ overview }: { overview: OverviewResponse }) {
 
 export default function UnitOverview() {
   const { orgid, descendants, resolving, orgsError } = useEffectiveScope()
+  // Parallel queries: the masthead, queue, and sections stream in together.
   const overviewQ = useOverview(orgid, descendants)
+  const findingsQ = useFindings(orgid, descendants)
+  const participationQ = useParticipation(orgid, descendants)
+  const logisticsQ = useLogistics(orgid, descendants)
 
   return (
     <div>
-      <PageHeader
-        title="Unit Overview"
-        subtitle="Readiness, staffing, recruiting and retention for the selected unit"
-      />
-
       {resolving && (
         <div className="flex justify-center py-10">
           <Spinner label="Loading units..." />
@@ -220,14 +472,21 @@ export default function UnitOverview() {
           <button
             type="button"
             onClick={() => void overviewQ.refetch()}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            className="rounded-md border border-hairline bg-paper px-4 py-2 text-sm font-semibold text-ink hover:border-muted"
           >
             Try again
           </button>
         </div>
       )}
 
-      {overviewQ.data && <OverviewBody overview={overviewQ.data} />}
+      {overviewQ.data && (
+        <OverviewBody
+          overview={overviewQ.data}
+          findingsQ={findingsQ}
+          participationQ={participationQ}
+          logisticsQ={logisticsQ}
+        />
+      )}
     </div>
   )
 }

@@ -27,6 +27,9 @@ import type {
   IngestFileStat,
   IngestResponse,
   IngestRunSummary,
+  UsageDailyPoint,
+  UsageResponse,
+  UsageRouteCount,
 } from '../shared/contracts.js'
 import { loadOrgSettings } from './scope.js'
 import { isoTimestamp, parseBoolParam } from './util.js'
@@ -284,6 +287,135 @@ async function handleAudit(_req: FastifyRequest, reply: FastifyReply): Promise<v
   reply.send(body)
 }
 
+// --- Usage panel (V2-DESIGN-PLAN.md section 10) ---
+//
+// The pure pieces below (normalizeRoute, topRoutesOf, fillDailySeries) are
+// exported for server/test/adminUsage.test.ts; the handler only runs SQL and
+// glues them together.
+
+export const USAGE_DAILY_DAYS = 30
+export const USAGE_TOP_ROUTES = 8
+
+/**
+ * Collapse an access_log route to a stable pattern. Fastify writes the route
+ * pattern (/api/orgs/:orgid/seniors) when the route resolved, but raw URLs can
+ * land in the log too (fallback path in auth/guard.ts accessLog), so both
+ * '/api/orgs/1234/seniors?duty=IT' and the pattern form must share a bucket.
+ */
+export function normalizeRoute(route: string): string {
+  const path = route.split('?')[0] ?? route
+  return path
+    .replace(/^\/api\/orgs\/[^/]+/, '/api/orgs/:orgid')
+    .replace(/^\/api\/members\/[^/]+/, '/api/members/:capid')
+    .replace(/^\/api\/reports\/[^/]+/, '/api/reports/:id')
+    .replace(/^\/api\/admin\/announcements\/[^/]+/, '/api/admin/announcements/:id')
+}
+
+/** Aggregate per-route hit counts into normalized buckets, top `limit` by hits. */
+export function topRoutesOf(
+  rows: readonly { route: string; hits: number }[],
+  limit: number,
+): UsageRouteCount[] {
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    const key = normalizeRoute(row.route)
+    totals.set(key, (totals.get(key) ?? 0) + row.hits)
+  }
+  return [...totals.entries()]
+    .map(([route, hits]) => ({ route, hits }))
+    .sort((a, b) => b.hits - a.hits || a.route.localeCompare(b.route))
+    .slice(0, limit)
+}
+
+function addDays(dayIso: string, delta: number): string {
+  const t = Date.parse(`${dayIso}T00:00:00Z`)
+  return new Date(t + delta * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * Zero-fill a per-day distinct-user series to exactly `days` points ending at
+ * `todayIso` inclusive, oldest first, so the sparkline never lies by omission
+ * (a day nobody signed in is a 0, not a missing point).
+ */
+export function fillDailySeries(
+  rows: readonly { day: string; users: number }[],
+  days: number,
+  todayIso: string,
+): UsageDailyPoint[] {
+  const byDay = new Map(rows.map(r => [r.day, r.users]))
+  const out: UsageDailyPoint[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const day = addDays(todayIso, -i)
+    out.push({ day, users: byDay.get(day) ?? 0 })
+  }
+  return out
+}
+
+interface DbUsageTotalsRow {
+  d7: number
+  d30: number
+  d60: number
+  requests30: number
+  today: string
+}
+
+interface DbUsageDailyRow {
+  day: string
+  users: number
+}
+
+interface DbUsageRouteRow {
+  route: string
+  hits: number
+}
+
+async function handleUsage(_req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  // to_char(now(),...) and at::date both bucket on the database session's
+  // timezone, so "today" and the daily series share one calendar.
+  const [totalsRes, unitsRes, dailyRes, routesRes] = await Promise.all([
+    pool.query<DbUsageTotalsRow>(
+      `SELECT
+         COUNT(DISTINCT email) FILTER (WHERE at >= now() - interval '7 days')::int AS d7,
+         COUNT(DISTINCT email) FILTER (WHERE at >= now() - interval '30 days')::int AS d30,
+         COUNT(DISTINCT email)::int AS d60,
+         COUNT(*) FILTER (WHERE at >= now() - interval '30 days')::int AS requests30,
+         to_char(now(), 'YYYY-MM-DD') AS today
+       FROM access_log
+       WHERE at >= now() - interval '60 days'`,
+    ),
+    pool.query<{ n: number }>(
+      `SELECT COUNT(DISTINCT org_param)::int AS n
+       FROM access_log
+       WHERE org_param IS NOT NULL AND at >= now() - interval '7 days'`,
+    ),
+    pool.query<DbUsageDailyRow>(
+      `SELECT to_char(at::date, 'YYYY-MM-DD') AS day, COUNT(DISTINCT email)::int AS users
+       FROM access_log
+       WHERE at >= now() - interval '${USAGE_DAILY_DAYS} days'
+       GROUP BY 1 ORDER BY 1`,
+    ),
+    pool.query<DbUsageRouteRow>(
+      `SELECT route, COUNT(*)::int AS hits
+       FROM access_log
+       WHERE at >= now() - interval '30 days'
+       GROUP BY route`,
+    ),
+  ])
+
+  const totals = totalsRes.rows[0]
+  const today = totals?.today ?? new Date().toISOString().slice(0, 10)
+  const body: UsageResponse = {
+    distinctUsers7d: totals?.d7 ?? 0,
+    distinctUsers30d: totals?.d30 ?? 0,
+    distinctUsers60d: totals?.d60 ?? 0,
+    requests30d: totals?.requests30 ?? 0,
+    unitsViewed7d: unitsRes.rows[0]?.n ?? 0,
+    dailyUsers: fillDailySeries(dailyRes.rows, USAGE_DAILY_DAYS, today),
+    topRoutes30d: topRoutesOf(routesRes.rows, USAGE_TOP_ROUTES),
+  }
+  reply.send(body)
+}
+
 const settingsSchema = z
   .object({
     excludedUnits: z
@@ -358,6 +490,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     handleIngestAdoption,
   )
   app.get('/api/admin/runs', { preHandler: ADMIN_GUARDS }, handleRuns)
+  app.get('/api/admin/usage', { preHandler: ADMIN_GUARDS }, handleUsage)
   app.get('/api/admin/audit', { preHandler: ADMIN_GUARDS }, handleAudit)
   app.get('/api/admin/settings', { preHandler: ADMIN_GUARDS }, handleGetSettings)
   app.put('/api/admin/settings', { preHandler: ADMIN_GUARDS }, handlePutSettings)

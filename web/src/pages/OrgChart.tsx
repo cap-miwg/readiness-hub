@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   FileDown,
   Image,
@@ -21,6 +22,17 @@ import { Badge, Banner, EmptyState, Modal, PageHeader, Spinner } from '../compon
 import { downloadDataUrl } from '../features/reports/download'
 import { loadPdfLibs } from '../features/reports/exportPdf'
 import { slugify } from '../features/reports/format'
+
+/*
+ * Org Chart (V2-DESIGN-PLAN.md section 6): the tree stays for desktop and
+ * export, drawn in ink boxes with hairline connectors; below the large
+ * breakpoint a collapsible position list replaces the canvas. Vacancy is a
+ * neutral bordered chip (a vacancy is a fact, not a verdict); command-chain
+ * emphasis comes from type weight, never color.
+ */
+
+const QUIET_BUTTON =
+  'inline-flex items-center gap-1.5 rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-muted disabled:opacity-50'
 
 // Command chain node ids (v1 ComponentsOrgNode.html:18-22, adapted to the v2
 // compute ids where the root is 'commander' rather than 'root').
@@ -122,12 +134,21 @@ async function exportChartPdf(
     head: [['Position', 'Chain', 'Members', 'Status']],
     body: rows.map(r => [' '.repeat(r.depth * 3) + r.title, r.chain, r.members, r.status]),
     styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
+    // Symbol Blue #001871, the one chromatic voice (design plan section 3).
+    headStyles: { fillColor: [0, 24, 113], textColor: 255, fontStyle: 'bold', fontSize: 8 },
     margin: { left: 15, right: 15 },
     theme: 'grid',
   })
   doc.save(`${slugify(orgName)}-org-chart-${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+/** Vacancy is a fact, not a verdict: a quiet bordered chip, no color. */
+function VacantChip() {
+  return (
+    <span className="inline-flex items-center self-center rounded border border-hairline px-2 py-0.5 font-display text-[11px] font-semibold uppercase tracking-[0.08em] text-ink2">
+      Vacant
+    </span>
+  )
 }
 
 function ChartNode({
@@ -148,27 +169,32 @@ function ChartNode({
   const children = visibleChildrenOf(node, hideVacant, commandChainOnly)
   const hasChildren = children.length > 0
   const isCollapsed = !expanded.has(node.id)
-  const headColor = node.type === 'cadet' ? 'bg-slate-700 text-white' : 'bg-blue-900 text-white'
+  // Command-chain emphasis via weight, never color (approved page grammar).
+  const isChain = COMMAND_CHAIN_IDS.has(node.id)
 
   return (
     <div className="mx-2 my-1 flex flex-col items-center">
       <div
         data-testid={`orgchart-node-${node.id}`}
-        className="relative z-10 mb-3 w-56 rounded-lg border-2 border-slate-200 bg-white shadow-lg transition-shadow hover:shadow-xl"
+        className="relative z-10 mb-3 w-56 rounded-md border border-hairline bg-paper"
       >
         <div
-          className={clsx(
-            'flex items-center justify-center gap-1 rounded-t-md px-3 py-2 text-center text-xs font-bold uppercase',
-            headColor,
-          )}
+          className="flex items-center justify-center gap-1 border-b border-hairline px-3 py-2 text-center"
           title={node.title}
         >
-          <span className="flex-1 whitespace-normal text-center leading-tight">{node.title}</span>
+          <span
+            className={clsx(
+              'kicker flex-1 whitespace-normal text-center leading-tight',
+              isChain ? 'font-bold text-ink' : 'text-ink2',
+            )}
+          >
+            {node.title}
+          </span>
           {hasChildren && (
             <button
               type="button"
               onClick={() => onToggle(node.id)}
-              className="rounded px-1.5 py-0.5 text-white transition-colors hover:bg-black/20"
+              className="rounded px-1.5 py-0.5 text-muted transition-colors hover:bg-gray20 hover:text-ink"
               title={isCollapsed ? 'Expand' : 'Collapse'}
               aria-expanded={!isCollapsed}
             >
@@ -180,7 +206,7 @@ function ChartNode({
             </button>
           )}
         </div>
-        <div className="flex min-h-[40px] flex-col justify-center rounded-b-md bg-white p-2">
+        <div className="flex min-h-[40px] flex-col justify-center p-2">
           {node.members.length > 0 ? (
             node.members.map((m, i) => {
               const capid = m.capid
@@ -190,7 +216,7 @@ function ChartNode({
                   type="button"
                   data-testid={`orgchart-member-${capid}`}
                   onClick={() => onMemberClick(capid)}
-                  className="cursor-pointer rounded border-b border-slate-100 px-1 py-1 text-left text-xs font-medium text-slate-800 transition-colors last:border-0 hover:bg-blue-50"
+                  className="cursor-pointer rounded border-b border-hairline px-1 py-1 text-left text-xs font-medium text-ink transition-colors last:border-0 hover:bg-gray20"
                   title="View profile"
                 >
                   {m.display}
@@ -198,30 +224,30 @@ function ChartNode({
               ) : (
                 <div
                   key={`synthetic-${i}`}
-                  className="border-b border-slate-100 px-1 py-1 text-xs font-medium text-slate-800 last:border-0"
+                  className="border-b border-hairline px-1 py-1 text-xs font-medium text-ink last:border-0"
                 >
                   {m.display}
                 </div>
               )
             })
           ) : (
-            <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-center text-[11px] font-bold uppercase text-amber-700">
-              Vacant
-            </span>
+            <div className="flex justify-center">
+              <VacantChip />
+            </div>
           )}
         </div>
       </div>
 
       {hasChildren && !isCollapsed && (
         <div className="relative flex w-full flex-col items-center">
-          <div className="h-4 w-0.5 bg-slate-400" />
+          <div className="h-4 w-px bg-hairline" />
           <div className="relative flex items-start justify-center gap-2">
             {children.length > 1 && (
-              <div className="absolute left-0 right-0 top-0 h-0.5 w-full bg-slate-400" />
+              <div className="absolute left-0 right-0 top-0 h-px w-full bg-hairline" />
             )}
             {children.map(child => (
               <div key={child.id} className="relative flex flex-col items-center">
-                {children.length > 1 && <div className="h-4 w-0.5 bg-slate-400" />}
+                {children.length > 1 && <div className="h-4 w-px bg-hairline" />}
                 <ChartNode
                   node={child}
                   hideVacant={hideVacant}
@@ -239,11 +265,163 @@ function ChartNode({
   )
 }
 
+// --- Below-lg position list (the collapsed-section pattern from Unit Overview) ---
+
+interface PositionRowData {
+  node: OrgChartNode
+  depth: number
+}
+
+function flattenVisible(
+  node: OrgChartNode,
+  hideVacant: boolean,
+  commandChainOnly: boolean,
+  depth = 0,
+  out: PositionRowData[] = [],
+): PositionRowData[] {
+  out.push({ node, depth })
+  for (const child of visibleChildrenOf(node, hideVacant, commandChainOnly)) {
+    flattenVisible(child, hideVacant, commandChainOnly, depth + 1, out)
+  }
+  return out
+}
+
+function PositionMembers({
+  node,
+  onMemberClick,
+}: {
+  node: OrgChartNode
+  onMemberClick: (capid: number) => void
+}) {
+  if (node.members.length === 0) return <VacantChip />
+  return (
+    <div className="flex flex-col items-start">
+      {node.members.map((m, i) =>
+        m.capid !== null ? (
+          <button
+            key={`${m.capid}-${i}`}
+            type="button"
+            data-testid={`orgchart-list-member-${m.capid}`}
+            onClick={() => onMemberClick(m.capid as number)}
+            className="py-0.5 text-left text-sm text-ink underline-offset-2 hover:underline"
+            title="View profile"
+          >
+            {m.display}
+          </button>
+        ) : (
+          <span key={`synthetic-${i}`} className="py-0.5 text-sm text-ink">
+            {m.display}
+          </span>
+        ),
+      )}
+    </div>
+  )
+}
+
+function PositionGroup({
+  node,
+  hideVacant,
+  commandChainOnly,
+  onMemberClick,
+}: {
+  node: OrgChartNode
+  hideVacant: boolean
+  commandChainOnly: boolean
+  onMemberClick: (capid: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rows = useMemo(
+    () => flattenVisible(node, hideVacant, commandChainOnly),
+    [node, hideVacant, commandChainOnly],
+  )
+  const vacant = rows.filter(r => r.node.members.length === 0).length
+  const bodyId = `orgchart-group-${node.id}`
+
+  return (
+    <section className="border-t border-hairline">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        aria-controls={bodyId}
+        data-testid={`orgchart-group-toggle-${node.id}`}
+        className="flex w-full items-center gap-3 py-3.5 text-left"
+      >
+        <ChevronRight
+          aria-hidden
+          className={clsx('h-3.5 w-3.5 shrink-0 text-muted transition-transform', open && 'rotate-90')}
+        />
+        <span className="min-w-0 flex-1 font-display text-[15px] font-semibold text-ink">
+          {node.title}
+        </span>
+        <span className="tnum shrink-0 text-[13px] text-ink">
+          {rows.length} {rows.length === 1 ? 'position' : 'positions'}
+          {vacant > 0 && <span className="text-ink2"> · {vacant} vacant</span>}
+        </span>
+      </button>
+      <div id={bodyId} hidden={!open} className="pb-4">
+        {rows.map(({ node: n, depth }) => (
+          <div
+            key={n.id}
+            className="border-t border-hairline py-2"
+            style={{ marginLeft: depth * 16 }}
+          >
+            <div className="kicker text-ink">{n.title}</div>
+            <div className="mt-1">
+              <PositionMembers node={n} onMemberClick={onMemberClick} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function MobilePositionList({
+  root,
+  hideVacant,
+  commandChainOnly,
+  onMemberClick,
+}: {
+  root: OrgChartNode
+  hideVacant: boolean
+  commandChainOnly: boolean
+  onMemberClick: (capid: number) => void
+}) {
+  const groups = visibleChildrenOf(root, hideVacant, commandChainOnly)
+  return (
+    <div data-testid="orgchart-mobile-list" className="lg:hidden">
+      <div className="border-t border-hairline py-3.5">
+        <div className="kicker text-ink">{root.title}</div>
+        <div className="mt-1">
+          <PositionMembers node={root} onMemberClick={onMemberClick} />
+        </div>
+      </div>
+      {groups.map(child => (
+        <PositionGroup
+          key={child.id}
+          node={child}
+          hideVacant={hideVacant}
+          commandChainOnly={commandChainOnly}
+          onMemberClick={onMemberClick}
+        />
+      ))}
+      {groups.length === 0 && (
+        <p className="border-t border-hairline py-3 text-sm text-ink2">
+          No subordinate positions in view with the current filters.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// --- Member profile modal ---
+
 function ProfileField({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-sm text-slate-800">{value ?? <span className="text-slate-400">n/a</span>}</div>
+      <div className="kicker text-ink">{label}</div>
+      <div className="text-sm text-ink">{value ?? <span className="text-muted">n/a</span>}</div>
     </div>
   )
 }
@@ -327,7 +505,7 @@ function MemberProfileModal({
               value={
                 p.email ? (
                   <span className="flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5 text-slate-400" aria-hidden />
+                    <Mail className="h-3.5 w-3.5 text-muted" aria-hidden />
                     <span className="break-all">{p.email}</span>
                     {p.doNotContact && <Badge tone="red">do not contact</Badge>}
                   </span>
@@ -337,9 +515,7 @@ function MemberProfileModal({
           </div>
 
           <div>
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Emergency Services
-            </div>
+            <div className="kicker mb-1 text-ink">Emergency Services</div>
             <div className="flex flex-wrap gap-2">
               <Badge tone="green">Active {p.esSummary.counts.active}</Badge>
               <Badge tone="blue">Training {p.esSummary.counts.training}</Badge>
@@ -349,9 +525,10 @@ function MemberProfileModal({
           </div>
 
           {p.restricted && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase text-amber-800">
-                <ShieldAlert className="h-3.5 w-3.5" aria-hidden /> Restricted (admin only)
+            <div className="rounded-md border border-hairline p-3">
+              <div className="kicker mb-2 flex items-center gap-1.5 text-ink">
+                <ShieldAlert className="h-3.5 w-3.5 text-ink2" aria-hidden /> Restricted (admin
+                only)
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <ProfileField label="Date of birth" value={p.restricted.dob} />
@@ -445,6 +622,8 @@ export default function OrgChart() {
     }
   }
 
+  const allInViewVacant = root !== null && hideVacant && root.vacant
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -452,29 +631,29 @@ export default function OrgChart() {
         subtitle={`Duty position chart for ${displayOrgName}${scope.descendants ? ' including sub-units' : ''}`}
       />
 
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-y border-hairline py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
-          <Network className="h-5 w-5 text-blue-600" aria-hidden />
-          <h2 className="whitespace-nowrap font-bold text-slate-900">Organizational Chart</h2>
+          <Network className="h-4 w-4 text-ink2" aria-hidden />
+          <h2 className="kicker whitespace-nowrap text-ink">Organizational Chart</h2>
         </div>
         <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:gap-3 lg:justify-end">
-          <label className="flex cursor-pointer select-none items-center gap-2 text-sm font-medium text-slate-600">
+          <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
               data-testid="orgchart-toggle-hide-vacant"
               checked={hideVacant}
               onChange={e => setShowVacant(!e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500"
+              className="rounded accent-symbol"
             />
             <span>Hide Vacant Positions</span>
           </label>
-          <label className="flex cursor-pointer select-none items-center gap-2 text-sm font-medium text-slate-600">
+          <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
               data-testid="orgchart-toggle-command-chain"
               checked={commandChainOnly}
               onChange={e => setCommandChainOnly(e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500"
+              className="rounded accent-symbol"
             />
             <span>Command Chain Only</span>
           </label>
@@ -483,7 +662,7 @@ export default function OrgChart() {
             data-testid="orgchart-expand-all"
             onClick={toggleExpandAll}
             disabled={root === null}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-green-700 disabled:opacity-50"
+            className={clsx(QUIET_BUTTON, 'hidden lg:inline-flex')}
           >
             {fullyExpanded ? (
               <ChevronUp className="h-3 w-3" aria-hidden />
@@ -492,13 +671,13 @@ export default function OrgChart() {
             )}
             {fullyExpanded ? 'Collapse All' : 'Expand All'}
           </button>
-          <div className="h-6 w-px bg-slate-200" />
+          <div className="hidden h-6 w-px bg-hairline lg:block" aria-hidden />
           <button
             type="button"
             data-testid="orgchart-export-png"
             onClick={() => void onExportPng()}
             disabled={root === null || exportingPng}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700 disabled:opacity-50"
+            className={clsx(QUIET_BUTTON, 'hidden lg:inline-flex')}
           >
             {exportingPng ? <Spinner /> : <Image className="h-4 w-4" aria-hidden />} PNG
           </button>
@@ -517,7 +696,7 @@ export default function OrgChart() {
               }
             }}
             disabled={root === null}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className={QUIET_BUTTON}
           >
             <FileDown className="h-4 w-4" aria-hidden /> PDF
           </button>
@@ -549,11 +728,7 @@ export default function OrgChart() {
         <Banner
           kind="error"
           action={
-            <button
-              type="button"
-              onClick={() => void chartQ.refetch()}
-              className="inline-flex items-center gap-1.5 rounded bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700"
-            >
+            <button type="button" onClick={() => void chartQ.refetch()} className={QUIET_BUTTON}>
               <RefreshCw className="h-3 w-3" aria-hidden /> Retry
             </button>
           }
@@ -571,22 +746,24 @@ export default function OrgChart() {
         />
       )}
 
-      {root && (
-        <div
-          ref={canvasRef}
-          data-testid="orgchart-canvas"
-          className="min-h-[400px] overflow-auto rounded-xl border border-slate-200 bg-white px-3 pb-6 pt-6 shadow-inner sm:min-h-[600px] sm:px-6 sm:pb-10 sm:pt-10 lg:px-10"
-        >
-          <div className="inline-block min-w-full">
-            <div className="flex flex-col items-center">
-              {hideVacant && root.vacant ? (
-                <EmptyState
-                  icon={Check}
-                  title="Every position in view is vacant"
-                  message="Uncheck Hide Vacant Positions to see the position structure."
-                  diagnostic={`root node '${root.id}' is vacant with hideVacant=1`}
-                />
-              ) : (
+      {root && allInViewVacant && (
+        <EmptyState
+          icon={Check}
+          title="Every position in view is vacant"
+          message="Uncheck Hide Vacant Positions to see the position structure."
+          diagnostic={`root node '${root.id}' is vacant with hideVacant=1`}
+        />
+      )}
+
+      {root && !allInViewVacant && (
+        <>
+          <div
+            ref={canvasRef}
+            data-testid="orgchart-canvas"
+            className="hidden min-h-[400px] overflow-auto border-t border-hairline bg-paper px-3 pb-6 pt-6 sm:min-h-[600px] sm:px-6 sm:pb-10 sm:pt-10 lg:block lg:px-10"
+          >
+            <div className="inline-block min-w-full">
+              <div className="flex flex-col items-center">
                 <ChartNode
                   node={root}
                   hideVacant={hideVacant}
@@ -595,10 +772,17 @@ export default function OrgChart() {
                   onToggle={toggleNode}
                   onMemberClick={setProfileCapid}
                 />
-              )}
+              </div>
             </div>
           </div>
-        </div>
+
+          <MobilePositionList
+            root={root}
+            hideVacant={hideVacant}
+            commandChainOnly={commandChainOnly}
+            onMemberClick={setProfileCapid}
+          />
+        </>
       )}
 
       <MemberProfileModal

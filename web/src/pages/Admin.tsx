@@ -1,16 +1,20 @@
 import { ShieldAlert } from 'lucide-react'
 import { useMe } from '../api/client'
 import { Banner, PageHeader, Spinner, Tabs } from '../components/ui'
+import AnnouncementsPanel from '../features/admin/AnnouncementsPanel'
 import AuditTable from '../features/admin/AuditTable'
 import IngestPanel from '../features/admin/IngestPanel'
 import RunsTable from '../features/admin/RunsTable'
 import SecurityPanel from '../features/admin/SecurityPanel'
 import SettingsPanel from '../features/admin/SettingsPanel'
+import UsagePanel from '../features/admin/UsagePanel'
 import { useStringParam } from '../lib/urlState'
 
 const TABS = [
   { id: 'ingest', label: 'Ingest' },
   { id: 'runs', label: 'Runs' },
+  { id: 'announcements', label: 'Announcements' },
+  { id: 'usage', label: 'Usage' },
   { id: 'settings', label: 'Settings' },
   { id: 'audit', label: 'Audit' },
   { id: 'security', label: 'Security' },
@@ -59,7 +63,7 @@ export default function Admin() {
     <div className="space-y-4">
       <PageHeader
         title="Admin"
-        subtitle="Ingest, run history, settings, audit log, and session control"
+        subtitle="Ingest, run history, announcements, usage, settings, audit log, and session control"
         actions={
           <Tabs
             tabs={TABS.map(t => ({
@@ -74,6 +78,8 @@ export default function Admin() {
 
       {tab === 'ingest' && <IngestPanel devAuth={meQ.data.authMode === 'dev'} />}
       {tab === 'runs' && <RunsTable />}
+      {tab === 'announcements' && <AnnouncementsPanel />}
+      {tab === 'usage' && <UsagePanel />}
       {tab === 'settings' && <SettingsPanel />}
       {tab === 'audit' && <AuditTable />}
       {tab === 'security' && <SecurityPanel />}

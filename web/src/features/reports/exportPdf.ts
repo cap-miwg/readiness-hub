@@ -63,8 +63,8 @@ export async function exportReportPdf(meta: ReportMeta, result: ReportResult): P
       head: [result.columns.map(c => c.header)],
       body: result.rows.map(row => result.columns.map(c => formatCell(row[c.key]))),
       styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
+      // Symbol Blue #001871, the one chromatic voice (design plan section 3).
+      headStyles: { fillColor: [0, 24, 113], textColor: 255, fontStyle: 'bold', fontSize: 8 },
       margin: { left: 15, right: 15 },
       theme: 'grid',
     })

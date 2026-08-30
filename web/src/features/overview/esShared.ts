@@ -1,5 +1,4 @@
 import { Camera, Plane, Radio, Shield, Users, type LucideIcon } from 'lucide-react'
-import type { Tone } from '../../components/ui'
 import type { EsAnalysis } from './useOverviewData'
 
 export type Teams = EsAnalysis['teams']
@@ -13,47 +12,16 @@ export type ReadinessRating = EsAnalysis['readinessRating']
 export type ExpiringQual = EsAnalysis['qualifications']['expiringWithin90Days'][number]
 export type QualifiedMember = FieldOps['qualifiedMembers'][number]
 
-/** Team status color to card styling; literal strings for the Tailwind scanner. */
-export const teamStyle: Record<TeamColor, { wrap: string; text: string; icon: string; dot: string }> = {
-  green: {
-    wrap: 'border-emerald-200 bg-emerald-50',
-    text: 'text-emerald-700',
-    icon: 'text-emerald-600',
-    dot: 'bg-emerald-500',
-  },
-  blue: {
-    wrap: 'border-blue-200 bg-blue-50',
-    text: 'text-blue-700',
-    icon: 'text-blue-600',
-    dot: 'bg-blue-500',
-  },
-  amber: {
-    wrap: 'border-amber-200 bg-amber-50',
-    text: 'text-amber-700',
-    icon: 'text-amber-600',
-    dot: 'bg-amber-500',
-  },
-  red: {
-    wrap: 'border-rose-200 bg-rose-50',
-    text: 'text-rose-700',
-    icon: 'text-rose-600',
-    dot: 'bg-rose-400',
-  },
-}
-
-/** Readiness bands 80/65/50 (v1 ServicesESUnitAnalysisService.html:831-893). */
-export const ratingTone: Record<ReadinessRating, Tone> = {
-  excellent: 'green',
-  good: 'blue',
-  fair: 'amber',
-  'needs-attention': 'red',
-}
-
+/**
+ * Readiness bands 80/65/50 (v1 ServicesESUnitAnalysisService.html:831-893).
+ * Quiet Authority renders bands as words, never as colored badges: category
+ * is never a color, and the only chromatic marks are labeled verdicts.
+ */
 export const ratingLabel: Record<ReadinessRating, string> = {
   excellent: 'Excellent',
   good: 'Good',
   fair: 'Fair',
-  'needs-attention': 'Needs Attention',
+  'needs-attention': 'Needs attention',
 }
 
 /** Icon names carried in the ES payload (domain/constants esConstants). */
@@ -67,12 +35,6 @@ export const teamIcon: Record<string, LucideIcon> = {
 
 export function iconFor(name: string): LucideIcon {
   return teamIcon[name] ?? Users
-}
-
-export const urgencyStyle: Record<ExpiringQual['urgency'], string> = {
-  critical: 'bg-rose-100 text-rose-800',
-  warning: 'bg-amber-100 text-amber-800',
-  notice: 'bg-yellow-50 text-yellow-800',
 }
 
 export interface RosterMember {

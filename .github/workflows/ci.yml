@@ -7,6 +7,12 @@ on:
   pull_request:
 
 jobs:
+  brand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-brand.sh
+
   server:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: server } }

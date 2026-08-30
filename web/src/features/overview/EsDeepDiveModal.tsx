@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, Lightbulb, ThumbsUp } from 'lucide-react'
-import { Badge, EmptyState, Modal, Tabs } from '../../components/ui'
+import { CalendarClock, CheckCircle2 } from 'lucide-react'
+import { EmptyState, Modal, Tabs, VerdictMark, type VerdictKind } from '../../components/ui'
 import type { EsAnalysis } from './useOverviewData'
-import {
-  iconFor,
-  mergeRoster,
-  ratingLabel,
-  ratingTone,
-  teamStyle,
-  type ExpiringQual,
-} from './esShared'
+import { iconFor, mergeRoster, ratingLabel, type ExpiringQual } from './esShared'
+import { FactLedger, FactRow, FiguresStrip, ScoreLead } from './overviewShared'
+
+/*
+ * The ES deep dive, swept to the Quiet Authority tokens: same six tabs and
+ * content as before, restyled to hairlines and ink. This is the drill-down
+ * scope, so member names appear here (D9: position at rest outside, names
+ * one click deeper). Color remains a verdict; category is never a color.
+ */
 
 type Recommendation = EsAnalysis['risks']['recommendations'][number]
 
@@ -32,88 +33,60 @@ function OverviewTab({ es }: { es: EsAnalysis }) {
     es.teams.command,
   ]
   return (
-    <div className="space-y-5">
-      <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">Overall ES Readiness</h3>
-            <p className="mt-1 text-sm text-slate-600">{es.quickSummary}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-center">
-            <div className="text-3xl font-bold text-slate-900">{es.readinessScore}</div>
-            <Badge tone={ratingTone[es.readinessRating]}>{ratingLabel[es.readinessRating]}</Badge>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {(
-            [
-              ['Team Capability', es.readinessComponents.teamScore],
-              ['Qual Health', es.readinessComponents.qualScore],
-              ['Evaluator Coverage', es.readinessComponents.evaluatorScore],
-              ['Risk Mitigation', es.readinessComponents.riskScore],
-              ['Pipeline', es.readinessComponents.pipelineScore],
-            ] as const
-          ).map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-slate-200 bg-white p-2 text-center">
-              <div className="text-xl font-bold text-slate-800">{Math.round(value)}</div>
-              <div className="text-xs text-slate-500">{label}</div>
-            </div>
-          ))}
-        </div>
+    <div className="space-y-6">
+      <div>
+        <ScoreLead score={es.readinessScore} band={ratingLabel[es.readinessRating]} />
+        <p className="mt-2 max-w-[62ch] text-sm text-ink2">{es.quickSummary}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <FiguresStrip
+        size="sm"
+        figures={[
+          { label: 'Team capability', value: Math.round(es.readinessComponents.teamScore) },
+          { label: 'Qual health', value: Math.round(es.readinessComponents.qualScore) },
+          { label: 'Evaluator coverage', value: Math.round(es.readinessComponents.evaluatorScore) },
+          { label: 'Risk mitigation', value: Math.round(es.readinessComponents.riskScore) },
+          { label: 'Pipeline', value: Math.round(es.readinessComponents.pipelineScore) },
+        ]}
+      />
+
+      <FactLedger className="max-w-none">
         {teams.map(team => {
-          const s = teamStyle[team.color]
           const Icon = iconFor(team.icon)
-          const mainValue =
+          const mainText =
             'groundTeamsFieldable' in team
-              ? team.groundTeamsFieldable + team.udfTeamsFieldable
+              ? `${team.groundTeamsFieldable} ground, ${team.udfTeamsFieldable} UDF fieldable`
               : 'isStaffing' in team
-                ? team.qualifiedCount
-                : team.teamsFieldable
-          const subText =
-            'groundTeamsFieldable' in team
-              ? `${team.groundTeamsFieldable} ground, ${team.udfTeamsFieldable} UDF`
-              : 'isStaffing' in team
-                ? `${team.positionsCovered}/${team.totalPositionTypes} position types`
-                : 'teams'
+                ? `${team.qualifiedCount} qualified, ${team.positionsCovered} of ${team.totalPositionTypes} position types`
+                : `${team.teamsFieldable} fieldable`
           const ok = 'isStaffing' in team ? team.qualifiedCount > 0 : team.canField
           return (
-            <div key={team.name} className={clsx('rounded-lg border p-3', s.wrap)}>
-              <div className="mb-1 flex items-center justify-between">
-                <Icon className={clsx('h-5 w-5', s.icon)} aria-hidden />
-                {ok && <CheckCircle2 className={clsx('h-5 w-5', s.icon)} aria-hidden />}
-              </div>
-              <div className={clsx('text-sm font-semibold', s.text)}>{team.name}</div>
-              <div className="mt-1 text-2xl font-bold text-slate-800">{mainValue}</div>
-              <div className="text-xs text-slate-500">{subText}</div>
-            </div>
+            <FactRow
+              key={team.name}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-ink2" aria-hidden />
+                  {team.name}
+                </span>
+              }
+            >
+              {mainText}
+              {ok && <CheckCircle2 className="h-4 w-4 self-center text-ink2" aria-hidden />}
+            </FactRow>
           )
         })}
-      </div>
+      </FactLedger>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <div className="text-2xl font-bold text-emerald-700">{es.qualifications.byStatus.active}</div>
-          <div className="text-sm text-emerald-600">Active Operational Quals</div>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="text-2xl font-bold text-amber-700">{es.qualifications.byStatus.training}</div>
-          <div className="text-sm text-amber-600">In Training</div>
-        </div>
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
-          <div className="text-2xl font-bold text-rose-700">
-            {es.qualifications.expiringWithin90Days.length}
-          </div>
-          <div className="text-sm text-rose-600">Expiring in 90 Days</div>
-        </div>
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-          <div className="text-2xl font-bold text-indigo-700">{es.evaluators.evaluatorCount}</div>
-          <div className="text-sm text-indigo-600">Potential Evaluators</div>
-        </div>
-      </div>
-      <p className="text-xs text-slate-500">
+      <FiguresStrip
+        size="sm"
+        figures={[
+          { label: 'Active operational quals', value: es.qualifications.byStatus.active },
+          { label: 'In training', value: es.qualifications.byStatus.training },
+          { label: 'Expiring in 90 days', value: es.qualifications.expiringWithin90Days.length },
+          { label: 'Potential evaluators', value: es.evaluators.evaluatorCount },
+        ]}
+      />
+      <p className="text-xs text-ink2">
         Potential evaluators are estimated from SET plus one year holding a qualification. Verify
         actual evaluator status in eServices.
       </p>
@@ -158,13 +131,13 @@ function RosterTab({ es }: { es: EsAnalysis }) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           data-testid="es-roster-search"
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-sm focus:border-symbol focus:outline-none"
         />
         <select
           value={position}
           onChange={e => setPosition(e.target.value)}
           data-testid="es-roster-position-filter"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-md border border-hairline bg-paper px-3 py-2 text-sm focus:border-symbol focus:outline-none"
         >
           <option value="all">All Positions</option>
           {positions.map(pos => (
@@ -174,52 +147,54 @@ function RosterTab({ es }: { es: EsAnalysis }) {
           ))}
         </select>
       </div>
-      <div className="text-sm text-slate-500">
+      <div className="tnum text-sm text-ink2">
         Showing {filtered.length} of {roster.length} ES-qualified members
         {es.evaluators.available.length > 0 && (
           <span> ({es.evaluators.available.length} potential evaluators)</span>
         )}
       </div>
-      <div className="overflow-hidden rounded-lg border border-slate-200">
+      <div className="overflow-hidden rounded-md border border-hairline">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-paper">
             <tr>
-              <th className="border-b border-slate-200 px-3 py-2 text-left text-xs font-bold uppercase text-slate-600">
+              <th className="kicker border-b border-hairline px-3 py-2 text-left text-ink2">
                 Member
               </th>
-              <th className="border-b border-slate-200 px-3 py-2 text-left text-xs font-bold uppercase text-slate-600">
+              <th className="kicker border-b border-hairline px-3 py-2 text-left text-ink2">
                 CAPID
               </th>
-              <th className="border-b border-slate-200 px-3 py-2 text-left text-xs font-bold uppercase text-slate-600">
+              <th className="kicker border-b border-hairline px-3 py-2 text-left text-ink2">
                 ES Qualifications
               </th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(m => (
-              <tr key={m.capid} className="border-b border-slate-100 last:border-b-0" data-testid={`es-roster-row-${m.capid}`}>
+              <tr key={m.capid} className="border-b border-hairline last:border-b-0" data-testid={`es-roster-row-${m.capid}`}>
                 <td className="px-3 py-2">
-                  <span className="font-medium text-slate-800">
+                  <span className="font-medium text-ink">
                     {m.rank} {m.name}
                   </span>
                   {m.isEvaluator && (
                     <span
-                      className="ml-2 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+                      className="ml-2 rounded bg-symbol-20 px-1.5 py-0.5 font-display text-[10px] font-bold text-symbol"
                       title="Has SET; potential evaluator (verify in eServices)"
                     >
                       SET
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-slate-600">{m.capid}</td>
+                <td className="tnum px-3 py-2 text-ink2">{m.capid}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     {m.positions.map(pos => (
                       <span
                         key={pos}
                         className={clsx(
-                          'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700',
-                          m.canEvaluate.has(pos.toUpperCase()) && 'ring-2 ring-emerald-500 ring-offset-1',
+                          'rounded-full border px-2 py-0.5 text-xs font-medium',
+                          m.canEvaluate.has(pos.toUpperCase())
+                            ? 'border-symbol text-symbol'
+                            : 'border-hairline text-ink',
                         )}
                         title={
                           m.canEvaluate.has(pos.toUpperCase())
@@ -242,74 +217,43 @@ function RosterTab({ es }: { es: EsAnalysis }) {
 }
 
 function QualificationsTab({ es }: { es: EsAnalysis }) {
-  const groups: { name: string; wrap: string; counts: [string, number][] }[] = [
-    {
-      name: 'Field Operations',
-      wrap: 'border-emerald-200 bg-emerald-50',
-      counts: Object.entries(es.teams.fieldOps.positionCounts),
-    },
-    {
-      name: 'Air Operations',
-      wrap: 'border-blue-200 bg-blue-50',
-      counts: Object.entries(es.teams.aircrew.positionCounts),
-    },
-    {
-      name: 'sUAS Operations',
-      wrap: 'border-indigo-200 bg-indigo-50',
-      counts: Object.entries(es.teams.suas.positionCounts),
-    },
-    {
-      name: 'Mission Base',
-      wrap: 'border-amber-200 bg-amber-50',
-      counts: Object.entries(es.teams.missionBase.positionCounts),
-    },
-    {
-      name: 'Command Staff',
-      wrap: 'border-purple-200 bg-purple-50',
-      counts: Object.entries(es.teams.command.positionCounts),
-    },
+  const groups: { name: string; counts: [string, number][] }[] = [
+    { name: 'Field Operations', counts: Object.entries(es.teams.fieldOps.positionCounts) },
+    { name: 'Air Operations', counts: Object.entries(es.teams.aircrew.positionCounts) },
+    { name: 'sUAS Operations', counts: Object.entries(es.teams.suas.positionCounts) },
+    { name: 'Mission Base', counts: Object.entries(es.teams.missionBase.positionCounts) },
+    { name: 'Command Staff', counts: Object.entries(es.teams.command.positionCounts) },
   ]
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <div className="text-2xl font-bold text-emerald-800">{es.qualifications.byStatus.active}</div>
-          <div className="text-sm text-emerald-600">Active</div>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="text-2xl font-bold text-amber-800">{es.qualifications.byStatus.training}</div>
-          <div className="text-sm text-amber-600">Training</div>
-        </div>
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
-          <div className="text-2xl font-bold text-rose-800">{es.qualifications.byStatus.expired}</div>
-          <div className="text-sm text-rose-600">Expired</div>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <FactLedger>
+        <FactRow label="Qualifications">
+          {`${es.qualifications.byStatus.active} active · ${es.qualifications.byStatus.training} in training`}
+          {es.qualifications.byStatus.expired > 0 ? (
+            <VerdictMark kind="action" label={`${es.qualifications.byStatus.expired} expired`} />
+          ) : (
+            '0 expired'
+          )}
+        </FactRow>
+      </FactLedger>
       {/* Counts are members per position; GES and SET are tracked separately
           (server/src/domain/esUnit.ts getDisplayedAchievementIds). */}
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-ink2">
         Counts include operational qualifications only (team positions, not GES or SET). One member
         can hold multiple qualifications.
       </p>
-      <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-slate-700">Members by Position Type</h4>
+      <div className="space-y-4">
+        <p className="kicker text-ink">Members by position type</p>
         {groups.map(group => (
-          <div key={group.name} className={clsx('rounded-lg border p-4', group.wrap)}>
-            <h5 className="mb-3 font-semibold text-slate-700">{group.name}</h5>
-            <div className="grid grid-cols-4 gap-2 md:grid-cols-6 lg:grid-cols-8">
+          <div key={group.name} className="border-t border-hairline pt-3">
+            <h5 className="font-display text-sm font-semibold text-ink">{group.name}</h5>
+            <div className="mt-2 grid grid-cols-4 gap-x-4 gap-y-3 md:grid-cols-6 lg:grid-cols-8">
               {group.counts.map(([code, count]) => (
-                <div
-                  key={code}
-                  className={clsx(
-                    'rounded border border-slate-200 bg-white p-2 text-center',
-                    count === 0 && 'opacity-60',
-                  )}
-                  data-testid={`es-position-${code}`}
-                >
-                  <div className={clsx('text-lg font-bold', count === 0 ? 'text-rose-600' : 'text-slate-800')}>
+                <div key={code} data-testid={`es-position-${code}`}>
+                  <div className={clsx('tnum font-display text-lg font-semibold', count === 0 ? 'text-ink2' : 'text-ink')}>
                     {count}
                   </div>
-                  <div className="text-xs text-slate-500">{code}</div>
+                  <div className="kicker text-ink">{code}</div>
                 </div>
               ))}
             </div>
@@ -317,23 +261,28 @@ function QualificationsTab({ es }: { es: EsAnalysis }) {
         ))}
       </div>
       {es.qualifications.missingGES.length > 0 && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-rose-600" aria-hidden />
-            <h5 className="font-semibold text-rose-700">Members Without GES</h5>
-          </div>
-          <p className="mb-2 text-sm text-rose-600">
+        <div className="border-t border-hairline pt-3">
+          <VerdictMark
+            kind="watch"
+            label={
+              <span className="font-display text-sm font-semibold">
+                {es.qualifications.missingGES.length} member
+                {es.qualifications.missingGES.length === 1 ? '' : 's'} without GES
+              </span>
+            }
+          />
+          <p className="mt-1 max-w-[62ch] text-sm text-ink2">
             These members cannot participate in ES operations without General Emergency Services
             (GES).
           </p>
-          <div className="space-y-1">
+          <div className="mt-2 space-y-1">
             {es.qualifications.missingGES.slice(0, 10).map(m => (
-              <div key={m.capid} className="text-sm text-rose-800">
+              <div key={m.capid} className="text-sm text-ink">
                 {m.rank} {m.name}
               </div>
             ))}
             {es.qualifications.missingGES.length > 10 && (
-              <div className="text-sm text-rose-600">
+              <div className="text-sm text-ink2">
                 +{es.qualifications.missingGES.length - 10} more
               </div>
             )}
@@ -347,38 +296,36 @@ function QualificationsTab({ es }: { es: EsAnalysis }) {
 function ExpirationGroup({
   items,
   label,
-  wrap,
-  text,
+  kind,
 }: {
   items: ExpiringQual[]
   label: string
-  wrap: string
-  text: string
+  kind: VerdictKind
 }) {
   return (
-    <div className={clsx('rounded-lg border p-4', wrap)}>
-      <div className="mb-3 flex items-center justify-between">
-        <h5 className={clsx('font-semibold', text)}>{label}</h5>
-        <span className={clsx('text-sm font-bold', text)}>{items.length}</span>
+    <div className="border-t border-hairline pt-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <VerdictMark kind={kind} label={<span className="font-display text-sm font-semibold">{label}</span>} />
+        <span className="tnum text-sm font-semibold text-ink">{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <p className="text-sm text-slate-500">None</p>
+        <p className="mt-2 text-sm text-ink2">None</p>
       ) : (
-        <div className="space-y-2">
+        <div className="mt-2">
           {items.map(e => (
             <div
               key={`${e.capid}-${e.achvId}`}
-              className="flex items-center justify-between rounded border border-slate-200 bg-white p-2"
+              className="flex items-baseline justify-between gap-4 border-b border-hairline py-2 last:border-b-0"
             >
               <div>
-                <div className="text-sm font-medium text-slate-800">
+                <div className="text-sm font-medium text-ink">
                   {e.rank} {e.name}
                 </div>
-                <div className="text-xs text-slate-500">{e.qualification}</div>
+                <div className="text-xs text-ink2">{e.qualification}</div>
               </div>
               <div className="text-right">
-                <div className={clsx('text-sm font-bold', text)}>{e.daysUntil} days</div>
-                <div className="text-xs text-slate-500">{e.expiration}</div>
+                <div className="tnum text-sm font-semibold text-ink">{e.daysUntil} days</div>
+                <div className="tnum text-xs text-ink2">{e.expiration}</div>
               </div>
             </div>
           ))}
@@ -403,33 +350,25 @@ function ExpirationsTab({ es }: { es: EsAnalysis }) {
   // Urgency bands 30/60/90 days (server/src/domain/esUnit.ts calculateQualificationSummary).
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-4">
-        <CalendarClock className="h-8 w-8 text-slate-400" aria-hidden />
-        <div>
-          <div className="text-lg font-bold text-slate-800">
-            {expiring.length} qualification{expiring.length === 1 ? '' : 's'} expiring
-          </div>
-          <div className="text-sm text-slate-600">Within the next 90 days</div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <p className="text-[15px] text-ink">
+        <span className="tnum font-semibold">{expiring.length}</span> qualification
+        {expiring.length === 1 ? '' : 's'} expiring within the next 90 days.
+      </p>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <ExpirationGroup
           items={expiring.filter(e => e.urgency === 'critical')}
           label="Critical (0-30 days)"
-          wrap="border-rose-200 bg-rose-50"
-          text="text-rose-700"
+          kind="action"
         />
         <ExpirationGroup
           items={expiring.filter(e => e.urgency === 'warning')}
           label="Warning (31-60 days)"
-          wrap="border-amber-200 bg-amber-50"
-          text="text-amber-700"
+          kind="watch"
         />
         <ExpirationGroup
           items={expiring.filter(e => e.urgency === 'notice')}
           label="Notice (61-90 days)"
-          wrap="border-yellow-200 bg-yellow-50"
-          text="text-yellow-700"
+          kind="neutral"
         />
       </div>
     </div>
@@ -444,7 +383,7 @@ function PipelineTab({ es }: { es: EsAnalysis }) {
       if (list === undefined) out.set(t.position, [t])
       else list.push(t)
     }
-    return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    return [...out.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
   }, [es.pipeline.activeTraining])
 
   const gapLines: [string, string[]][] = [
@@ -456,37 +395,32 @@ function PipelineTab({ es }: { es: EsAnalysis }) {
   ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
-        <ThumbsUp className="h-8 w-8 text-indigo-600" aria-hidden />
-        <div>
-          <div className="text-lg font-bold text-indigo-800">
-            {es.pipeline.activeTraining.length} member
-            {es.pipeline.activeTraining.length === 1 ? '' : 's'} in training
-          </div>
-          <div className="text-sm text-indigo-600">Actively working toward ES qualifications</div>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <p className="text-[15px] text-ink">
+        <span className="tnum font-semibold">{es.pipeline.activeTraining.length}</span> member
+        {es.pipeline.activeTraining.length === 1 ? '' : 's'} actively working toward ES
+        qualifications.
+      </p>
 
       {byPosition.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {byPosition.map(([position, members]) => (
-            <div key={position} className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h5 className="font-semibold text-slate-700">{position}</h5>
-                <Badge tone="indigo">{members.length} training</Badge>
+            <div key={position} className="border-t border-hairline pt-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <h5 className="font-display text-sm font-semibold text-ink">{position}</h5>
+                <span className="tnum text-sm text-ink2">{members.length} training</span>
               </div>
-              <div className="space-y-1">
+              <div className="mt-1">
                 {members.map(m => (
                   <div
                     key={`${m.capid}-${m.achvId}`}
-                    className="flex items-center justify-between rounded bg-slate-50 p-2 text-sm"
+                    className="flex items-baseline justify-between gap-4 border-b border-hairline py-1.5 text-sm last:border-b-0"
                   >
-                    <span className="font-medium text-slate-800">
+                    <span className="text-ink">
                       {m.rank} {m.name}
-                      <span className="ml-2 text-xs font-normal text-slate-500">({m.capid})</span>
+                      <span className="tnum ml-2 text-xs text-ink2">({m.capid})</span>
                     </span>
-                    <span className="text-xs text-indigo-600">{m.qualification}</span>
+                    <span className="text-xs text-ink2">{m.qualification}</span>
                   </div>
                 ))}
               </div>
@@ -501,30 +435,21 @@ function PipelineTab({ es }: { es: EsAnalysis }) {
         />
       )}
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Lightbulb className="h-5 w-5 text-slate-600" aria-hidden />
-          <h5 className="font-semibold text-slate-700">Training Priorities</h5>
-        </div>
-        <div className="space-y-1 text-sm text-slate-600">
+      <div className="border-t border-hairline pt-3">
+        <p className="kicker text-ink">Training priorities</p>
+        <div className="mt-2 space-y-1 text-sm text-ink">
           {gapLines
             .filter(([, gaps]) => gaps.length > 0)
             .map(([area, gaps]) => (
-              <div key={area} className="flex items-center gap-2">
-                <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                <span>
-                  {area}: {gaps.join(', ')}
-                </span>
+              <div key={area}>
+                {area}: {gaps.join(', ')}
               </div>
             ))}
           {es.evaluators.gaps.length > 0 && (
-            <div className="flex items-center gap-2">
-              <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-              <span>Need evaluators for: {es.evaluators.gaps.slice(0, 3).join(', ')}</span>
-            </div>
+            <div>Need evaluators for: {es.evaluators.gaps.slice(0, 3).join(', ')}</div>
           )}
           {gapLines.every(([, gaps]) => gaps.length === 0) && es.evaluators.gaps.length === 0 && (
-            <span>No position gaps identified.</span>
+            <span className="text-ink2">No position gaps identified.</span>
           )}
         </div>
       </div>
@@ -532,11 +457,11 @@ function PipelineTab({ es }: { es: EsAnalysis }) {
   )
 }
 
-const priorityStyle: Record<Recommendation['priority'], { wrap: string; text: string; badge: string }> = {
-  critical: { wrap: 'border-rose-200 bg-rose-50', text: 'text-rose-700', badge: 'bg-rose-100 text-rose-800' },
-  high: { wrap: 'border-amber-200 bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800' },
-  medium: { wrap: 'border-blue-200 bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
-  low: { wrap: 'border-slate-200 bg-slate-50', text: 'text-slate-700', badge: 'bg-slate-100 text-slate-800' },
+const priorityKind: Record<Recommendation['priority'], VerdictKind> = {
+  critical: 'action',
+  high: 'watch',
+  medium: 'plan',
+  low: 'neutral',
 }
 
 function InsightsTab({ es }: { es: EsAnalysis }) {
@@ -558,23 +483,21 @@ function InsightsTab({ es }: { es: EsAnalysis }) {
   if (es.qualifications.missingGES.length > 0) improvements.push('Members without GES')
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-          <ThumbsUp className="mb-2 h-6 w-6 text-emerald-600" aria-hidden />
-          <h5 className="mb-2 font-semibold text-emerald-700">Strengths</h5>
-          <ul className="space-y-1 text-sm text-emerald-600">
-            {strengths.length === 0 && <li>None identified</li>}
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="border-t border-hairline pt-3">
+          <p className="kicker text-ink">Strengths</p>
+          <ul className="mt-2 space-y-1 text-sm text-ink">
+            {strengths.length === 0 && <li className="text-ink2">None identified</li>}
             {strengths.map(s => (
               <li key={s}>+ {s}</li>
             ))}
           </ul>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <AlertTriangle className="mb-2 h-6 w-6 text-amber-600" aria-hidden />
-          <h5 className="mb-2 font-semibold text-amber-700">Areas for Improvement</h5>
-          <ul className="space-y-1 text-sm text-amber-600">
-            {improvements.length === 0 && <li>None identified</li>}
+        <div className="border-t border-hairline pt-3">
+          <p className="kicker text-ink">Areas for improvement</p>
+          <ul className="mt-2 space-y-1 text-sm text-ink">
+            {improvements.length === 0 && <li className="text-ink2">None identified</li>}
             {improvements.map(s => (
               <li key={s}>- {s}</li>
             ))}
@@ -583,59 +506,55 @@ function InsightsTab({ es }: { es: EsAnalysis }) {
       </div>
 
       {es.risks.singlePointsOfFailure.length > 0 && (
-        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
-          <h5 className="mb-2 font-semibold text-orange-700">Single Points of Failure</h5>
-          <div className="space-y-2">
+        <div className="border-t border-hairline pt-3">
+          <p className="kicker text-ink">Single points of failure</p>
+          <div className="mt-2">
             {es.risks.singlePointsOfFailure.map(spof => (
               <div
                 key={`${spof.capid}-${spof.position}`}
-                className="rounded border border-orange-200 bg-white p-2 text-sm"
+                className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-hairline py-2 text-sm last:border-b-0"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-800">
-                    {spof.positionName} ({spof.position})
-                  </span>
-                  <Badge tone={spof.severity === 'high' ? 'red' : 'amber'}>{spof.severity}</Badge>
-                </div>
-                <div className="mt-0.5 text-xs text-slate-600">
+                <VerdictMark
+                  kind={spof.severity === 'high' ? 'action' : 'watch'}
+                  label={
+                    <span className="font-medium">
+                      {spof.positionName} ({spof.position})
+                    </span>
+                  }
+                />
+                <span className="text-xs text-ink2">
                   {spof.member}: {spof.impact}
-                </div>
+                </span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <div>
-        <h4 className="mb-2 text-sm font-semibold text-slate-700">Recommendations</h4>
+      <div className="border-t border-hairline pt-3">
+        <p className="kicker text-ink">Recommendations</p>
         {es.risks.recommendations.length === 0 ? (
-          <EmptyState
-            icon={CheckCircle2}
-            title="Looking good"
-            message="No critical recommendations at this time."
-            diagnostic="es.risks.recommendations is empty"
-          />
+          <div className="mt-2">
+            <EmptyState
+              icon={CheckCircle2}
+              title="Looking good"
+              message="No critical recommendations at this time."
+              diagnostic="es.risks.recommendations is empty"
+            />
+          </div>
         ) : (
-          <div className="space-y-2">
-            {es.risks.recommendations.map(rec => {
-              const s = priorityStyle[rec.priority]
-              return (
-                <div key={rec.recommendation} className={clsx('rounded-lg border p-3', s.wrap)}>
-                  <div className="flex items-start gap-3">
-                    <span className={clsx('rounded px-2 py-0.5 text-xs font-bold uppercase', s.badge)}>
-                      {rec.priority}
-                    </span>
-                    <div className="flex-1">
-                      <div className={clsx('text-sm font-medium', s.text)}>{rec.recommendation}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        <span className="font-medium">Impact:</span> {rec.impact}
-                      </div>
-                      <div className="mt-0.5 text-xs text-slate-400">Area: {rec.area}</div>
-                    </div>
-                  </div>
+          <div className="mt-2">
+            {es.risks.recommendations.map(rec => (
+              <div key={rec.recommendation} className="border-b border-hairline py-2.5 last:border-b-0">
+                <VerdictMark
+                  kind={priorityKind[rec.priority]}
+                  label={<span className="text-sm font-medium">{rec.recommendation}</span>}
+                />
+                <div className="mt-1 pl-3.5 text-xs text-ink2">
+                  Impact: {rec.impact} · Area: {rec.area}
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -1,27 +1,34 @@
 import { useState } from 'react'
-import {
-  CheckCircle2,
-  CloudDownload,
-  FileArchive,
-  FileSpreadsheet,
-  Upload,
-  XCircle,
-} from 'lucide-react'
+import { CloudDownload, FileArchive, FileSpreadsheet, Upload } from 'lucide-react'
 import type { IngestResponse } from '@shared/contracts'
 import type { ApiError } from '../../api/client'
-import { Badge, Banner, Card, DataTable, ProgressBar, Spinner, type Column } from '../../components/ui'
+import {
+  Badge,
+  Banner,
+  Card,
+  DataTable,
+  ProgressBar,
+  Spinner,
+  VerdictMark,
+  type Column,
+} from '../../components/ui'
 import { useFetchNow, useUploadAdoption, useUploadZip } from './adminApi'
+
+const PRIMARY_BUTTON =
+  'inline-flex items-center gap-2 rounded-md bg-symbol px-4 py-2 text-sm font-semibold text-paper transition-colors disabled:opacity-50'
+const FILE_INPUT =
+  'block w-full text-sm text-ink2 file:mr-3 file:rounded-md file:border-0 file:bg-gray20 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink hover:file:bg-symbol-20'
 
 const FILE_COLUMNS: Column<IngestResponse['fileStats'][number]>[] = [
   { key: 'file', header: 'File', render: r => <span className="font-mono text-xs">{r.file}</span> },
   { key: 'table', header: 'Table', render: r => <span className="font-mono text-xs">{r.table}</span> },
-  { key: 'rows', header: 'Rows', align: 'right', render: r => r.rows.toLocaleString(), sortValue: r => r.rows },
+  { key: 'rows', header: 'Rows', numeric: true, render: r => r.rows.toLocaleString(), sortValue: r => r.rows },
   {
     key: 'rejects',
     header: 'Rejects',
-    align: 'right',
+    numeric: true,
     render: r =>
-      r.rejects > 0 ? <span className="font-semibold text-red-700">{r.rejects}</span> : '0',
+      r.rejects > 0 ? <VerdictMark kind="action" label={r.rejects.toLocaleString()} /> : '0',
     sortValue: r => r.rejects,
   },
   {
@@ -29,9 +36,12 @@ const FILE_COLUMNS: Column<IngestResponse['fileStats'][number]>[] = [
     header: 'Dropped columns',
     render: r =>
       r.droppedColumns.length > 0 ? (
-        <span className="font-mono text-xs text-amber-700">{r.droppedColumns.join(', ')}</span>
+        <VerdictMark
+          kind="watch"
+          label={<span className="font-mono text-xs">{r.droppedColumns.join(', ')}</span>}
+        />
       ) : (
-        <span className="text-slate-400">none</span>
+        <span className="text-muted">none</span>
       ),
   },
 ]
@@ -42,7 +52,6 @@ export function IngestResultSummary({ result }: { result: IngestResponse }) {
       {result.ok ? (
         <Banner kind="info">
           <span className="flex flex-wrap items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden />
             Ingest run {result.runId ?? '?'} succeeded.
             {result.downloadDate && <Badge tone="blue">extract {result.downloadDate.slice(0, 10)}</Badge>}
             {result.anchorOrgid !== null && <Badge tone="slate">anchor org {result.anchorOrgid}</Badge>}
@@ -50,11 +59,8 @@ export function IngestResultSummary({ result }: { result: IngestResponse }) {
         </Banner>
       ) : (
         <Banner kind="error">
-          <span className="flex flex-wrap items-center gap-2">
-            <XCircle className="h-4 w-4" aria-hidden />
-            Ingest run {result.runId ?? '(no run recorded)'} failed:{' '}
-            {result.error ?? 'no error message returned'}
-          </span>
+          Ingest run {result.runId ?? '(no run recorded)'} failed:{' '}
+          {result.error ?? 'no error message returned'}
         </Banner>
       )}
       {result.fileStats.length > 0 && (
@@ -66,8 +72,8 @@ export function IngestResultSummary({ result }: { result: IngestResponse }) {
         />
       )}
       {result.skippedEntries.length > 0 && (
-        <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-          <span className="font-semibold">Skipped zip entries:</span>{' '}
+        <div className="rounded-md bg-gray20 px-3 py-2 text-xs text-ink2">
+          <span className="font-medium text-ink">Skipped zip entries:</span>{' '}
           {result.skippedEntries.join(', ')}
         </div>
       )}
@@ -119,12 +125,12 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
         <Card
           title={
             <span className="flex items-center gap-2">
-              <FileArchive className="h-4 w-4 text-blue-600" aria-hidden /> CAPWATCH Zip Upload
+              <FileArchive className="h-4 w-4 text-ink2" aria-hidden /> CAPWATCH Zip Upload
             </span>
           }
         >
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-ink2">
               Upload a CAPWATCH extract zip (up to 250 MB). The dataset swaps in atomically after
               compute succeeds; a failed run leaves the current data untouched.
             </p>
@@ -133,15 +139,15 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
               accept=".zip,application/zip"
               data-testid="ingest-zip-input"
               onChange={e => setZipFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+              className={FILE_INPUT}
             />
-            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-slate-600">
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
                 checked={force}
                 onChange={e => setForce(e.target.checked)}
                 data-testid="ingest-force-toggle"
-                className="rounded text-blue-600 focus:ring-blue-500"
+                className="rounded accent-symbol"
               />
               Force re-ingest even if this extract's DownLoadDate is not newer
             </label>
@@ -150,7 +156,7 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
               data-testid="ingest-zip-upload"
               onClick={onUploadZip}
               disabled={!zipFile || anyRunning}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              className={PRIMARY_BUTTON}
             >
               {upload.isPending ? <Spinner /> : <Upload className="h-4 w-4" aria-hidden />}
               {upload.isPending
@@ -169,12 +175,12 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
           <Card
             title={
               <span className="flex items-center gap-2">
-                <CloudDownload className="h-4 w-4 text-blue-600" aria-hidden /> eServices Fetch
+                <CloudDownload className="h-4 w-4 text-ink2" aria-hidden /> eServices Fetch
               </span>
             }
           >
             <div className="space-y-3">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink2">
                 Ask the server to download a fresh CAPWATCH extract from eServices with its
                 configured credentials, then ingest it. The scheduled daily fetch uses the same
                 path.
@@ -184,7 +190,7 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
                 data-testid="ingest-fetch-now"
                 onClick={() => fetchNow.mutate({ force })}
                 disabled={anyRunning}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                className={PRIMARY_BUTTON}
               >
                 {fetchNow.isPending ? <Spinner /> : <CloudDownload className="h-4 w-4" aria-hidden />}
                 {fetchNow.isPending ? 'Fetching and ingesting...' : 'Fetch now'}
@@ -199,32 +205,32 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
           <Card
             title={
               <span className="flex items-center gap-2">
-                <FileSpreadsheet className="h-4 w-4 text-blue-600" aria-hidden /> Google Adoption CSVs
+                <FileSpreadsheet className="h-4 w-4 text-ink2" aria-hidden /> Google Adoption CSVs
               </span>
             }
           >
             <div className="space-y-3">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink2">
                 Optional sideload for the Unit Overview adoption section. Upload one or both CSVs.
               </p>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label className="kicker block text-ink">
                 Stats CSV (GoogleAdoptionStats.csv)
                 <input
                   type="file"
                   accept=".csv,text/csv"
                   data-testid="ingest-adoption-stats-input"
                   onChange={e => setStatsFile(e.target.files?.[0] ?? null)}
-                  className="mt-1 block w-full text-sm font-normal normal-case text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                  className={`mt-1 font-sans font-normal normal-case tracking-normal ${FILE_INPUT}`}
                 />
               </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label className="kicker block text-ink">
                 Users CSV (GoogleAdoptionUsers.csv)
                 <input
                   type="file"
                   accept=".csv,text/csv"
                   data-testid="ingest-adoption-users-input"
                   onChange={e => setUsersFile(e.target.files?.[0] ?? null)}
-                  className="mt-1 block w-full text-sm font-normal normal-case text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                  className={`mt-1 font-sans font-normal normal-case tracking-normal ${FILE_INPUT}`}
                 />
               </label>
               <button
@@ -232,7 +238,7 @@ export default function IngestPanel({ devAuth }: { devAuth: boolean }) {
                 data-testid="ingest-adoption-upload"
                 onClick={onUploadAdoption}
                 disabled={(!statsFile && !usersFile) || anyRunning}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                className={PRIMARY_BUTTON}
               >
                 {adoption.isPending ? <Spinner /> : <Upload className="h-4 w-4" aria-hidden />}
                 {adoption.isPending ? `Uploading ${adoptionProgress}%` : 'Upload adoption data'}

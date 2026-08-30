@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
+  AdminAnnouncementsResponse,
   AdminSettingsResponse,
   AdminSettingsUpdate,
+  Announcement,
+  AnnouncementInput,
+  AnnouncementMutationResponse,
+  AnnouncementUpdateInput,
   AuditResponse,
   IngestResponse,
   IngestRunSummary,
+  UsageResponse,
 } from '@shared/contracts'
 import { ApiError, apiFetch, queryKeys } from '../../api/client'
 
@@ -12,7 +18,12 @@ export const adminKeys = {
   runs: ['admin', 'runs'] as const,
   audit: ['admin', 'audit'] as const,
   settings: ['admin', 'settings'] as const,
+  announcements: ['admin', 'announcements'] as const,
+  usage: ['admin', 'usage'] as const,
 }
+
+/** The member-facing list on Home caches under this key; mutations bust both. */
+export const ANNOUNCEMENTS_PUBLIC_KEY = ['announcements'] as const
 
 export function useRuns(enabled = true) {
   return useQuery<{ runs: IngestRunSummary[] }, ApiError>({
@@ -38,6 +49,72 @@ export function useSettings(enabled = true) {
     queryFn: () => apiFetch<AdminSettingsResponse>('/api/admin/settings'),
     staleTime: 60_000,
     enabled,
+  })
+}
+
+export function useUsage(enabled = true) {
+  return useQuery<UsageResponse, ApiError>({
+    queryKey: adminKeys.usage,
+    queryFn: () => apiFetch<UsageResponse>('/api/admin/usage'),
+    staleTime: 60_000,
+    enabled,
+  })
+}
+
+// --- Announcements (admin CRUD; contracts.ts Announcements section) ---
+
+export function useAdminAnnouncements(enabled = true) {
+  return useQuery<AdminAnnouncementsResponse, ApiError>({
+    queryKey: adminKeys.announcements,
+    queryFn: () => apiFetch<AdminAnnouncementsResponse>('/api/admin/announcements'),
+    staleTime: 30_000,
+    enabled,
+  })
+}
+
+function useInvalidateAnnouncements() {
+  const qc = useQueryClient()
+  return () => {
+    void qc.invalidateQueries({ queryKey: adminKeys.announcements })
+    void qc.invalidateQueries({ queryKey: ANNOUNCEMENTS_PUBLIC_KEY })
+    void qc.invalidateQueries({ queryKey: adminKeys.audit })
+  }
+}
+
+export function useCreateAnnouncement() {
+  const invalidate = useInvalidateAnnouncements()
+  return useMutation<AnnouncementMutationResponse, ApiError, AnnouncementInput>({
+    mutationFn: input =>
+      apiFetch<AnnouncementMutationResponse>('/api/admin/announcements', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: invalidate,
+  })
+}
+
+export interface AnnouncementUpdateVars {
+  id: number
+  input: AnnouncementUpdateInput
+}
+
+export function useUpdateAnnouncement() {
+  const invalidate = useInvalidateAnnouncements()
+  return useMutation<AnnouncementMutationResponse, ApiError, AnnouncementUpdateVars>({
+    mutationFn: ({ id, input }) =>
+      apiFetch<AnnouncementMutationResponse>(`/api/admin/announcements/${id}`, {
+        method: 'PUT',
+        body: input,
+      }),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteAnnouncement() {
+  const invalidate = useInvalidateAnnouncements()
+  return useMutation<{ ok: boolean }, ApiError, Announcement>({
+    mutationFn: a => apiFetch<{ ok: boolean }>(`/api/admin/announcements/${a.id}`, { method: 'DELETE' }),
+    onSuccess: invalidate,
   })
 }
 

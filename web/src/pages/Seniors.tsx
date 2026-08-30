@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { AlertTriangle, Award, CheckCircle2, Users, UsersRound } from 'lucide-react'
+import { Users } from 'lucide-react'
 import type {
   OrgTreeNode,
   SeniorLevelId,
@@ -11,26 +11,27 @@ import type {
 import { apiFetch, useOrgs, type ApiError } from '../api/client'
 import { useFlagParam, useListParam, useOrgScope, useStringParam } from '../lib/urlState'
 import {
-  Badge,
   Banner,
-  Card,
   DataTable,
   EmptyState,
+  Figure,
   FilterMenu,
   PageHeader,
   Spinner,
-  StatTile,
+  VerdictMark,
   type Column,
 } from '../components/ui'
+import { flattenOrgTree } from '../components/charter'
 import MemberProfileModal from '../features/members/MemberProfileModal'
+import { FigureButton, FigureCell, FigureStrip } from '../features/members/FigureStrip'
 import {
   LEVEL_META,
-  LEVEL_STATUS_META,
-  dutyLacksTrack,
+  etLevelLine,
   fmtDate,
-  levelProgressOf,
   optionCounts,
-  trackLacksDuty,
+  primaryDutyOf,
+  primaryTrackOf,
+  seniorDiscrepancyOf,
 } from '../features/members/shared'
 
 // Rank category sets shown in the filter (v1 Index.html:1204-1207); the server
@@ -67,44 +68,28 @@ function useSeniorsQuery(orgid: number | null, search: string) {
   })
 }
 
-function orgNamesOf(tree: OrgTreeNode | undefined): Map<number, string> {
-  const out = new Map<number, string>()
-  const walk = (node: OrgTreeNode): void => {
-    out.set(node.orgid, node.name)
-    for (const child of node.children) walk(child)
-  }
-  if (tree !== undefined) walk(tree)
-  return out
+interface OrgLabels {
+  names: Map<number, string>
+  charters: Map<number, string>
 }
 
-function LevelDots({ row }: { row: SeniorRow }) {
-  return (
-    <div className="flex items-center justify-center gap-1">
-      {LEVEL_META.map(meta => {
-        const p = levelProgressOf(row.levelProgress, meta.id)
-        const status = p?.status ?? 'not-started'
-        const tone = LEVEL_STATUS_META[status]
-        const dot =
-          status === 'completed'
-            ? 'bg-green-500'
-            : status === 'ready' || status === 'pending'
-              ? 'bg-amber-400'
-              : status === 'in-progress'
-                ? 'bg-blue-400'
-                : 'bg-slate-200'
-        return (
-          <span
-            key={meta.id}
-            title={`${meta.name}: ${p?.percent ?? 0}% (${tone.label})`}
-            className="flex flex-col items-center"
-          >
-            <span className={clsx('h-3.5 w-3.5 rounded-full', dot)} />
-            <span className="text-[9px] font-bold text-slate-400">{meta.label}</span>
-          </span>
-        )
-      })}
-    </div>
-  )
+function orgLabelsOf(tree: OrgTreeNode | undefined): OrgLabels {
+  const names = new Map<number, string>()
+  const charters = new Map<number, string>()
+  if (tree !== undefined) {
+    for (const org of flattenOrgTree(tree)) {
+      names.set(org.orgid, org.name)
+      charters.set(org.orgid, org.charter)
+    }
+  }
+  return { names, charters }
+}
+
+/** Word-cased track level for the muted qualifier ("Master"). */
+function trackLevelWord(level: string): string {
+  const t = level.trim()
+  if (t === '') return ''
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
 }
 
 export default function Seniors() {
@@ -225,13 +210,17 @@ export default function Seniors() {
     [baseRows],
   )
 
-  const orgNames = useMemo(() => orgNamesOf(orgsQ.data?.tree), [orgsQ.data])
+  const orgLabels = useMemo(() => orgLabelsOf(orgsQ.data?.tree), [orgsQ.data])
   const unitNameOf = useCallback(
     (id: number): string => {
       if (id === -1) return 'Unassigned'
-      return orgNames.get(id) ?? `Org ${id}`
+      return orgLabels.names.get(id) ?? `Org ${id}`
     },
-    [orgNames],
+    [orgLabels],
+  )
+  const charterOfOrg = useCallback(
+    (id: number): string => orgLabels.charters.get(id) ?? '',
+    [orgLabels],
   )
 
   const chipsByLevel = useMemo(() => {
@@ -247,136 +236,156 @@ export default function Seniors() {
       {
         key: 'member',
         header: 'Member',
-        render: r => (
-          <div data-testid={`senior-row-${r.capid}`}>
-            <div className="font-bold text-slate-900">
-              {r.nameLast}, {r.nameFirst}
+        render: r => {
+          const charter = charterOfOrg(r.orgid)
+          return (
+            <div data-testid={`senior-row-${r.capid}`}>
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[15px] font-medium text-ink">
+                  {r.nameLast}, {r.nameFirst}
+                </span>
+                <span
+                  className="tnum font-display text-[11px] font-semibold text-ink2"
+                  title={unitNameOf(r.orgid)}
+                >
+                  {charter !== '' ? charter : unitNameOf(r.orgid)}
+                </span>
+              </div>
+              <div className="tnum text-xs text-ink2">
+                {r.rank} · #{r.capid}
+              </div>
             </div>
-            <div className="text-xs text-slate-500">
-              {r.rank} <span className="text-slate-300">|</span> #{r.capid}
-            </div>
-            <div className="max-w-[220px] truncate text-xs text-slate-400" title={unitNameOf(r.orgid)}>
-              {unitNameOf(r.orgid)}
-            </div>
-          </div>
-        ),
+          )
+        },
         sortValue: r => `${r.nameLast}, ${r.nameFirst}`,
       },
       {
         key: 'level',
-        header: 'ET Level',
-        align: 'center',
+        header: 'E&T Level',
         render: r => (
-          <div>
-            <LevelDots row={r} />
-            {r.currentLevel !== null && (
-              <div className="mt-1 text-center text-[10px] font-semibold text-slate-500">
-                {r.currentLevel}
-              </div>
-            )}
-          </div>
+          <span className={clsx('text-sm', r.currentLevel !== null ? 'text-ink' : 'text-ink2')}>
+            {etLevelLine(r.currentLevel, r.levelProgress)}
+          </span>
         ),
         sortValue: r => r.currentLevel,
       },
       {
         key: 'tracks',
-        header: 'Specialty Tracks',
-        render: r => (
-          <div className="flex max-w-[260px] flex-wrap gap-1">
-            {r.tracks.length === 0 && <span className="text-xs italic text-slate-400">None</span>}
-            {r.tracks.map((t, i) => {
-              const warn = trackLacksDuty(t, r.duties)
-              return (
-                <Badge
-                  key={`${t.track}-${i}`}
-                  tone={
-                    t.trackLevel === 'MASTER'
-                      ? 'indigo'
-                      : t.trackLevel === 'SENIOR'
-                        ? 'blue'
-                        : t.trackLevel === 'TECHNICIAN'
-                          ? 'green'
-                          : 'slate'
-                  }
-                  title={`${t.track} (${t.trackLevel})${warn ? ' - enrolled with no matching duty' : ''}`}
-                >
-                  {warn && <AlertTriangle className="h-3 w-3 text-amber-600" aria-hidden />}
-                  {t.track}
-                </Badge>
-              )
-            })}
-          </div>
-        ),
+        header: 'Specialty Track',
+        render: r => {
+          const primary = primaryTrackOf(r.tracks)
+          if (primary === null) return <span className="text-xs text-ink2">None</span>
+          const more = r.tracks.length - 1
+          return (
+            <div
+              className="text-sm text-ink"
+              title={r.tracks.map(t => `${t.track} (${t.trackLevel})`).join(', ')}
+            >
+              {primary.track}
+              {primary.trackLevel !== 'NONE' && (
+                <span className="ml-1.5 text-xs text-ink2">{trackLevelWord(primary.trackLevel)}</span>
+              )}
+              {more > 0 && <span className="ml-1.5 text-xs text-ink2">+{more} more</span>}
+            </div>
+          )
+        },
       },
       {
         key: 'duties',
-        header: 'Duty Assignments',
-        render: r => (
-          <div className="flex max-w-[280px] flex-wrap gap-1">
-            {r.duties.length === 0 && <span className="text-xs italic text-slate-400">None</span>}
-            {r.duties.map((d, i) => {
-              const warn = dutyLacksTrack(d.functArea, r.tracks)
-              const crossUnit = d.heldAtOrgid !== r.orgid
-              return (
-                <Badge
-                  key={`${d.duty}-${i}`}
-                  tone={crossUnit ? 'blue' : 'slate'}
-                  title={`${d.duty}${d.asst ? ' (Assistant)' : ''}${
-                    crossUnit ? ` - cross-unit at ${unitNameOf(d.heldAtOrgid)}` : ''
-                  }${warn && d.functArea !== null ? ` - missing track: ${d.functArea}` : ''}`}
-                >
-                  {warn && <AlertTriangle className="h-3 w-3 text-amber-600" aria-hidden />}
-                  {d.duty}
-                  {d.asst ? ' (A)' : ''}
-                </Badge>
-              )
-            })}
-          </div>
-        ),
+        header: 'Duty',
+        render: r => {
+          const primary = primaryDutyOf(r.duties)
+          const discrepancy = seniorDiscrepancyOf(r)
+          if (primary === null) {
+            return (
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className="text-xs text-ink2">None</span>
+                {discrepancy !== null && (
+                  <span title={discrepancy}>
+                    <VerdictMark kind="watch" label="Gap" className="text-xs" />
+                  </span>
+                )}
+              </div>
+            )
+          }
+          const more = r.duties.length - 1
+          const crossUnit = primary.heldAtOrgid !== r.orgid
+          return (
+            <div
+              className="flex flex-wrap items-center gap-x-2 text-sm text-ink"
+              title={r.duties
+                .map(
+                  d =>
+                    `${d.duty}${d.asst ? ' (A)' : ''}${
+                      d.heldAtOrgid !== r.orgid ? ` - cross-unit at ${unitNameOf(d.heldAtOrgid)}` : ''
+                    }`,
+                )
+                .join(', ')}
+            >
+              <span>
+                {primary.duty}
+                {primary.asst ? ' (A)' : ''}
+                {crossUnit && <span className="ml-1.5 text-xs text-symbol">cross-unit</span>}
+                {more > 0 && <span className="ml-1.5 text-xs text-ink2">+{more}</span>}
+              </span>
+              {discrepancy !== null && (
+                <span title={discrepancy}>
+                  <VerdictMark kind="watch" label="Gap" className="text-xs" />
+                </span>
+              )}
+            </div>
+          )
+        },
       },
       {
         key: 'promotion',
         header: 'Promotion',
         render: r =>
           r.promotable ? (
-            <Badge tone="green" title={PROMOTABLE_TOOLTIP}>
-              <CheckCircle2 className="h-3 w-3" aria-hidden /> Promotable
-            </Badge>
+            <span
+              className="font-display text-[12px] font-semibold uppercase tracking-[0.08em] text-symbol"
+              title={PROMOTABLE_TOOLTIP}
+            >
+              Promotable
+            </span>
           ) : r.promotion !== null ? (
-            <div className="text-xs text-slate-600">
-              <div>Next: {r.promotion.nextRank}</div>
-              {r.promotableOn !== null && (
-                <div className="text-slate-400">Eligible {fmtDate(r.promotableOn)}</div>
-              )}
+            <div className="text-xs text-ink2">
+              <div className="text-ink">Next: {r.promotion.nextRank}</div>
+              {r.promotableOn !== null && <div className="tnum">Eligible {fmtDate(r.promotableOn)}</div>}
             </div>
           ) : (
-            <span className="text-xs italic text-slate-400">N/A</span>
+            <span className="text-xs text-ink2">-</span>
           ),
         sortValue: r => (r.promotable ? 1 : 0),
-        align: 'center',
       },
       {
         key: 'es',
         header: 'ES',
         render: r => {
           const c = r.esCounts
-          const total = c.active + c.training + c.expired + c.notApproved
-          if (total === 0 && r.esExpiringCount === 0) {
-            return <span className="text-xs italic text-slate-400">None</span>
+          const parts: string[] = []
+          if (c.active > 0) parts.push(`${c.active} active`)
+          if (c.training > 0) parts.push(`${c.training} training`)
+          if (c.expired > 0) parts.push(`${c.expired} expired`)
+          if (parts.length === 0 && r.esExpiringCount === 0) {
+            return <span className="text-xs text-ink2">-</span>
           }
           return (
-            <div className="flex flex-wrap gap-1">
-              {c.active > 0 && <Badge tone="green">{c.active} active</Badge>}
-              {c.training > 0 && <Badge tone="blue">{c.training} training</Badge>}
-              {c.expired > 0 && <Badge tone="red">{c.expired} expired</Badge>}
-              {r.esExpiringCount > 0 && <Badge tone="amber">{r.esExpiringCount} expiring</Badge>}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {parts.length > 0 && <span className="tnum text-xs text-ink2">{parts.join(' · ')}</span>}
+              {r.esExpiringCount > 0 && (
+                <VerdictMark
+                  kind="watch"
+                  label={<span className="tnum text-xs">{r.esExpiringCount} expiring</span>}
+                />
+              )}
             </div>
           )
         },
         sortValue: r => r.esCounts.active,
       },
     ]
-  }, [unitNameOf])
+  }, [unitNameOf, charterOfOrg])
 
   if (orgsQ.isPending) {
     return (
@@ -387,9 +396,10 @@ export default function Seniors() {
   }
 
   const data = filteredQ.data
+  const pendingValue = filteredQ.isPending ? '...' : null
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Senior Dashboard"
         subtitle="Education and training, promotion readiness, duty coverage"
@@ -404,165 +414,148 @@ export default function Seniors() {
         </Banner>
       )}
 
-      <Card padded>
-        <div className="flex flex-wrap items-center gap-2" data-testid="senior-filter-bar">
-          <span className="text-xs font-bold uppercase text-slate-500">Filters:</span>
-          <span data-testid="filter-rank-category">
-            <FilterMenu
-              label="Rank Category"
-              options={RANK_CATEGORY_OPTIONS}
-              selected={rankCategories}
-              onChange={setRankCategories}
-            />
-          </span>
-          <span data-testid="filter-rank">
-            <FilterMenu label="Specific Rank" options={rankOptions} selected={ranks} onChange={setRanks} />
-          </span>
-          <span data-testid="filter-track-level">
-            <FilterMenu
-              label="Track Level"
-              options={TRACK_LEVEL_OPTIONS}
-              selected={trackLevels}
-              onChange={setTrackLevels}
-            />
-          </span>
-          <span data-testid="filter-track">
-            <FilterMenu
-              label="Specific Track"
-              options={trackOptions}
-              selected={tracks}
-              onChange={setTracks}
-              searchable
-            />
-          </span>
-          <span data-testid="filter-funct-area">
-            <FilterMenu
-              label="Functional Area"
-              options={functAreaOptions}
-              selected={functAreas}
-              onChange={setFunctAreas}
-            />
-          </span>
-          <span data-testid="filter-duty">
-            <FilterMenu
-              label="Duty Position"
-              options={dutyOptions}
-              selected={duties}
-              onChange={setDuties}
-              searchable
-            />
-          </span>
-          <span data-testid="filter-duty-asst">
-            <FilterMenu
-              label="Assignment Type"
-              options={DUTY_ASST_OPTIONS}
-              selected={dutyAsst}
-              onChange={setDutyAsst}
-            />
-          </span>
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              data-testid="senior-filter-reset"
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-            >
-              Reset all ({activeFilterCount})
-            </button>
-          )}
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="senior-tiles">
-        <div data-testid="seniors-tile-total">
-          <StatTile
-            label="Total"
-            value={filteredQ.isPending ? '...' : (data?.total ?? 0)}
-            icon={Users}
-            accent="blue"
-            sublabel="Seniors in scope"
+      <div
+        className="flex flex-wrap items-center gap-2 border-b border-hairline pb-3"
+        data-testid="senior-filter-bar"
+      >
+        <span className="kicker mr-1 text-ink">Filters</span>
+        <span data-testid="filter-rank-category">
+          <FilterMenu
+            label="Rank Category"
+            options={RANK_CATEGORY_OPTIONS}
+            selected={rankCategories}
+            onChange={setRankCategories}
           />
-        </div>
-        <div data-testid="seniors-tile-showing">
-          <StatTile
-            label="Seniors"
-            value={filteredQ.isPending ? '...' : (data?.rows.length ?? 0)}
-            icon={UsersRound}
-            accent="indigo"
-            sublabel={activeFilterCount > 0 ? 'Matching filters' : 'All in scope'}
+        </span>
+        <span data-testid="filter-rank">
+          <FilterMenu label="Specific Rank" options={rankOptions} selected={ranks} onChange={setRanks} />
+        </span>
+        <span data-testid="filter-track-level">
+          <FilterMenu
+            label="Track Level"
+            options={TRACK_LEVEL_OPTIONS}
+            selected={trackLevels}
+            onChange={setTrackLevels}
           />
-        </div>
-        <div title={PROMOTABLE_TOOLTIP} data-testid="seniors-tile-promotable">
+        </span>
+        <span data-testid="filter-track">
+          <FilterMenu
+            label="Specific Track"
+            options={trackOptions}
+            selected={tracks}
+            onChange={setTracks}
+            searchable
+          />
+        </span>
+        <span data-testid="filter-funct-area">
+          <FilterMenu
+            label="Functional Area"
+            options={functAreaOptions}
+            selected={functAreas}
+            onChange={setFunctAreas}
+          />
+        </span>
+        <span data-testid="filter-duty">
+          <FilterMenu
+            label="Duty Position"
+            options={dutyOptions}
+            selected={duties}
+            onChange={setDuties}
+            searchable
+          />
+        </span>
+        <span data-testid="filter-duty-asst">
+          <FilterMenu
+            label="Assignment Type"
+            options={DUTY_ASST_OPTIONS}
+            selected={dutyAsst}
+            onChange={setDutyAsst}
+          />
+        </span>
+        {activeFilterCount > 0 && (
           <button
             type="button"
-            onClick={() => setPromotable(!promotable)}
-            className={clsx(
-              'flex w-full items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition-colors',
-              promotable
-                ? 'border-green-400 bg-green-50'
-                : 'border-slate-200 bg-white hover:border-green-300',
-            )}
+            onClick={resetFilters}
+            data-testid="senior-filter-reset"
+            className="tnum text-sm font-medium text-symbol hover:underline"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-700">
-              <Award className="h-5 w-5" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Promotable {promotable && <CheckCircle2 className="inline h-3 w-3 text-green-600" aria-hidden />}
-              </div>
-              <div className="text-2xl font-bold leading-tight text-green-700">
-                {filteredQ.isPending ? '...' : (data?.promotableCount ?? 0)}
-              </div>
-              <div className="truncate text-xs text-slate-500">Click to filter</div>
-            </div>
+            Reset all ({activeFilterCount})
           </button>
-        </div>
-        <Card padded className="flex items-center" data-testid="senior-level-chips">
-          <div className="w-full">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              E&T Levels
-            </div>
-            <div className="flex items-center gap-2">
-              {LEVEL_META.map(meta => {
-                const chip = chipsByLevel.get(meta.id)
-                const mode =
-                  levelComplete === meta.id
-                    ? 'complete'
-                    : levelIncomplete === meta.id
-                      ? 'incomplete'
-                      : null
-                const count = mode === 'incomplete' ? (chip?.incomplete ?? 0) : (chip?.complete ?? 0)
-                return (
-                  <button
-                    key={meta.id}
-                    type="button"
-                    data-testid={`senior-level-chip-${meta.id}`}
-                    onClick={() => cycleLevelFilter(meta.id)}
-                    title={`${meta.name}: ${chip?.complete ?? 0} complete, ${chip?.incomplete ?? 0} incomplete. Click to filter complete; click again for incomplete.`}
-                    className="group flex flex-col items-center"
-                  >
-                    <span
-                      className={clsx(
-                        'flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm transition-all group-hover:opacity-90',
-                        mode === 'complete'
-                          ? 'bg-green-600 ring-2 ring-green-300'
-                          : mode === 'incomplete'
-                            ? 'bg-amber-500 ring-2 ring-amber-300'
-                            : 'bg-slate-500',
-                      )}
-                    >
-                      {count}
-                    </span>
-                    <span className="mt-0.5 text-[9px] font-bold text-slate-400 group-hover:text-slate-600">
-                      L{meta.label}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </Card>
+        )}
       </div>
+
+      <FigureStrip
+        className="md:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,2fr)]"
+        data-testid="senior-tiles"
+      >
+        <FigureCell data-testid="seniors-tile-total">
+          <Figure
+            value={pendingValue ?? (data?.total ?? 0)}
+            label="Total"
+            delta="Seniors in scope"
+          />
+        </FigureCell>
+        <FigureCell data-testid="seniors-tile-showing">
+          <Figure
+            value={pendingValue ?? (data?.rows.length ?? 0)}
+            label="Showing"
+            delta={activeFilterCount > 0 ? 'Matching filters' : 'All in scope'}
+          />
+        </FigureCell>
+        <FigureCell data-testid="seniors-tile-promotable" title={PROMOTABLE_TOOLTIP}>
+          <FigureButton
+            value={pendingValue ?? (data?.promotableCount ?? 0)}
+            label="Promotable"
+            active={promotable}
+            onClick={() => setPromotable(!promotable)}
+            title={PROMOTABLE_TOOLTIP}
+          />
+        </FigureCell>
+        <FigureCell data-testid="senior-level-chips">
+          <div className="flex items-end gap-3">
+            {LEVEL_META.map(meta => {
+              const chip = chipsByLevel.get(meta.id)
+              const mode =
+                levelComplete === meta.id
+                  ? 'complete'
+                  : levelIncomplete === meta.id
+                    ? 'incomplete'
+                    : null
+              const count = mode === 'incomplete' ? (chip?.incomplete ?? 0) : (chip?.complete ?? 0)
+              return (
+                <button
+                  key={meta.id}
+                  type="button"
+                  data-testid={`senior-level-chip-${meta.id}`}
+                  onClick={() => cycleLevelFilter(meta.id)}
+                  title={`${meta.name}: ${chip?.complete ?? 0} complete, ${chip?.incomplete ?? 0} incomplete. Click to filter complete; click again for incomplete.`}
+                  className={clsx(
+                    'flex flex-col items-center border-b-2 px-0.5 pb-1 transition-colors',
+                    mode === 'complete'
+                      ? 'border-symbol'
+                      : mode === 'incomplete'
+                        ? 'border-dashed border-muted'
+                        : 'border-transparent hover:border-hairline',
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      'tnum font-display text-[22px] font-medium leading-none',
+                      mode === 'complete' ? 'text-symbol' : mode === 'incomplete' ? 'text-ink2' : 'text-ink',
+                    )}
+                  >
+                    {count}
+                  </span>
+                  <span className={clsx('kicker mt-1', mode === 'complete' ? 'text-symbol' : 'text-ink2')}>
+                    L{meta.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="kicker mt-1.5 text-ink">E&T levels</div>
+        </FigureCell>
+      </FigureStrip>
 
       {filteredQ.isPending && orgid !== null ? (
         <div className="flex justify-center py-16">
@@ -577,6 +570,38 @@ export default function Seniors() {
             onRowClick={r => setProfileCapid(r.capid)}
             initialSort={{ key: 'member', dir: 'asc' }}
             maxHeight="70vh"
+            mobileCard={r => {
+              const charter = charterOfOrg(r.orgid)
+              return (
+                <div data-testid={`senior-card-${r.capid}`}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[15px] font-medium text-ink">
+                      {r.nameLast}, {r.nameFirst}
+                    </span>
+                    <span className="tnum font-display text-[11px] font-semibold text-ink2">
+                      {charter !== '' ? charter : unitNameOf(r.orgid)}
+                    </span>
+                  </div>
+                  <div className="tnum text-xs text-ink2">
+                    {r.rank} · #{r.capid}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink">
+                    <span>{etLevelLine(r.currentLevel, r.levelProgress)}</span>
+                    {r.promotable && (
+                      <span className="font-display text-[11px] font-semibold uppercase tracking-[0.08em] text-symbol">
+                        Promotable
+                      </span>
+                    )}
+                    {r.esExpiringCount > 0 && (
+                      <VerdictMark
+                        kind="watch"
+                        label={<span className="tnum text-xs">{r.esExpiringCount} ES expiring</span>}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            }}
             empty={
               <EmptyState
                 icon={Users}
@@ -592,7 +617,7 @@ export default function Seniors() {
                     <button
                       type="button"
                       onClick={resetFilters}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray20"
                     >
                       Reset filters
                     </button>

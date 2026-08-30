@@ -668,3 +668,36 @@ export interface AdminSettingsUpdate {
   excludedUnits?: string[]
   memberTypes?: string[]
 }
+
+// --- Admin usage panel (V2-DESIGN-PLAN.md section 10 success metrics) ---
+
+export interface UsageDailyPoint {
+  /** ISO yyyy-mm-dd, bucketed on the database session's calendar day. */
+  day: string
+  /** Distinct authenticated users seen that day. */
+  users: number
+}
+
+export interface UsageRouteCount {
+  /** Normalized route pattern: query strings stripped, ids collapsed. */
+  route: string
+  hits: number
+}
+
+/**
+ * GET /api/admin/usage: the access_log rollup behind the success-metric
+ * baseline (150+ distinct 60-day actives, 20+ units viewed weekly). The
+ * access_log retention window is 90 days, so every figure here fits inside it.
+ */
+export interface UsageResponse {
+  distinctUsers7d: number
+  distinctUsers30d: number
+  distinctUsers60d: number
+  requests30d: number
+  /** Distinct org_param values requested in the last 7 days. */
+  unitsViewed7d: number
+  /** Exactly 30 points, oldest first, zero-filled days included. */
+  dailyUsers: UsageDailyPoint[]
+  /** Top 8 normalized routes by hits over the last 30 days. */
+  topRoutes30d: UsageRouteCount[]
+}

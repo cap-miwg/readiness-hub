@@ -5,7 +5,7 @@ import {
   Award,
   BookOpen,
   Briefcase,
-  CheckCircle2,
+  Check,
   Circle,
   HeartPulse,
   Mail,
@@ -16,15 +16,17 @@ import {
 } from 'lucide-react'
 import type { MemberProfileResponse } from '@shared/contracts'
 import { apiFetch, type ApiError } from '../../api/client'
-import { Badge, Banner, Modal, ProgressBar, Spinner } from '../../components/ui'
+import { Badge, Banner, Modal, ProgressBar, Spinner, VerdictMark } from '../../components/ui'
 import {
   CADET_STATE_META,
-  ES_STATUS_TONE,
+  ES_STATUS_KIND,
   LEVEL_META,
   LEVEL_STATUS_META,
   fmtDate,
   type CadetDetailJson,
+  type CadetState,
   type EsQualJson,
+  type LevelStatusJson,
   type ReqStatusJson,
   type SeniorDetailJson,
   type SeniorPromotionJson,
@@ -36,11 +38,20 @@ import {
   publicAchievementNumber,
 } from './cadetAchievements'
 
+/*
+ * The member briefing sheet (quiet-authority direction.md section 4): a
+ * one-page typeset brief. Hairlines carry the structure, checklists follow
+ * the Home grammar (symbol check done, muted circle pending), and color
+ * appears only as labeled verdict marks.
+ */
+
+const MICRO_LABEL = 'font-display text-[11px] font-semibold uppercase tracking-[0.08em]'
+
 function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: ReactNode; children: ReactNode }) {
   return (
-    <section className="border-t border-slate-100 pt-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
-        <Icon className="h-4 w-4 text-blue-700" aria-hidden />
+    <section className="border-t border-hairline pt-4">
+      <h3 className="mb-3 flex items-center gap-2 font-display text-[15px] font-semibold text-ink">
+        <Icon className="h-4 w-4 text-ink2" aria-hidden />
         {title}
       </h3>
       {children}
@@ -48,20 +59,59 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: Rea
   )
 }
 
+/** Done-state checkmark or pending circle, the Home checklist grammar. */
+function CheckGlyph({ done }: { done: boolean }) {
+  return done ? (
+    <Check className="mt-0.5 h-4 w-4 shrink-0 text-symbol" aria-hidden />
+  ) : (
+    <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden />
+  )
+}
+
+function LevelStatusMark({ status }: { status: LevelStatusJson }) {
+  const meta = LEVEL_STATUS_META[status]
+  if (status === 'completed') {
+    return (
+      <span className={clsx('inline-flex items-center gap-1 text-ink', MICRO_LABEL)}>
+        <Check className="h-3.5 w-3.5 text-symbol" aria-hidden /> {meta.label}
+      </span>
+    )
+  }
+  if (meta.kind === 'neutral') {
+    return <span className={clsx('text-ink2', MICRO_LABEL)}>{meta.label}</span>
+  }
+  return <VerdictMark kind={meta.kind} label={<span className={MICRO_LABEL}>{meta.label}</span>} />
+}
+
+function EsStatusMark({ status }: { status: string }) {
+  const kind = ES_STATUS_KIND[status] ?? 'neutral'
+  if (kind === 'neutral') {
+    return <span className={clsx('text-ink', MICRO_LABEL)}>{status}</span>
+  }
+  return <VerdictMark kind={kind} label={<span className={MICRO_LABEL}>{status}</span>} />
+}
+
+function CadetStateMark({ state }: { state: CadetState }) {
+  const meta = CADET_STATE_META[state]
+  if (meta.kind === 'neutral') {
+    return <span className={clsx('text-ink2', MICRO_LABEL)}>{meta.label}</span>
+  }
+  return <VerdictMark kind={meta.kind} label={<span className={MICRO_LABEL}>{meta.label}</span>} />
+}
+
 function HeaderBlock({ m }: { m: MemberProfileResponse }) {
   const unitName = m.detail.senior?.memberUnitName ?? m.detail.cadet?.unitName ?? `Org ${m.orgid}`
   return (
-    <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+    <div className="border-b border-hairline pb-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xl font-bold text-slate-900">
+          <div className="font-display text-xl font-semibold text-ink">
             {m.rank} {m.nameLast}, {m.nameFirst}
           </div>
-          <div className="mt-1 text-sm text-slate-600">
-            CAPID {m.capid} <span className="mx-1 text-slate-300">|</span> {unitName}
-            <span className="mx-1 text-slate-300">|</span> {m.memberType}
+          <div className="tnum mt-1 text-sm text-ink2">
+            CAPID {m.capid} · {unitName} · {m.memberType}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+          <div className="tnum mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink2">
             <span>Joined: {fmtDate(m.joined)}</span>
             <span>Expires: {fmtDate(m.expiration)}</span>
             {m.rankDate !== null && <span>Date of rank: {m.rankDate}</span>}
@@ -69,31 +119,31 @@ function HeaderBlock({ m }: { m: MemberProfileResponse }) {
         </div>
         {m.age !== null && (
           <div className="text-right">
-            <div className="text-xs font-bold uppercase text-slate-500">Age</div>
-            <div className="text-2xl font-bold text-slate-800">{m.age}</div>
+            <div className="kicker text-ink">Age</div>
+            <div className="tnum font-display text-[28px] font-medium leading-tight text-ink">{m.age}</div>
             {/* Exact DOB is admin-gated server side; render only when served. */}
             {m.restricted?.dob != null && (
-              <div className="text-xs text-slate-500">DOB: {m.restricted.dob}</div>
+              <div className="tnum text-xs text-ink2">DOB: {m.restricted.dob}</div>
             )}
           </div>
         )}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-blue-100 pt-3 text-sm">
-        <span className="inline-flex items-center gap-1.5 text-slate-700">
-          <Mail className="h-3.5 w-3.5 text-blue-600" aria-hidden />
+      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-hairline pt-3 text-sm">
+        <span className="inline-flex items-center gap-1.5 text-ink">
+          <Mail className="h-3.5 w-3.5 text-ink2" aria-hidden />
           {m.email !== null ? (
-            <a className="text-blue-700 hover:underline" href={`mailto:${m.email}`}>
+            <a className="text-symbol hover:underline" href={`mailto:${m.email}`}>
               {m.email}
             </a>
           ) : (
-            <span className="italic text-slate-400">No email on file</span>
+            <span className="text-ink2">No email on file</span>
           )}
           {m.doNotContact && <Badge tone="red">Do not contact</Badge>}
         </span>
         {m.restricted?.parentEmail != null && (
-          <span className="inline-flex items-center gap-1.5 text-slate-700">
-            <span className="text-xs font-bold uppercase text-slate-500">Parent/Guardian:</span>
-            <a className="text-blue-700 hover:underline" href={`mailto:${m.restricted.parentEmail}`}>
+          <span className="inline-flex items-center gap-1.5 text-ink">
+            <span className="kicker text-ink">Parent/Guardian</span>
+            <a className="text-symbol hover:underline" href={`mailto:${m.restricted.parentEmail}`}>
               {m.restricted.parentEmail}
             </a>
           </span>
@@ -106,31 +156,31 @@ function HeaderBlock({ m }: { m: MemberProfileResponse }) {
 function SeniorEtSection({ senior }: { senior: SeniorDetailJson }) {
   return (
     <Section icon={BookOpen} title="Education and Training">
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Badge tone="slate">
-          Current level: {senior.currentLevel > 0 ? `Level ${senior.currentLevel}` : 'Not started'}
-        </Badge>
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+        <span className="text-ink">
+          Current level:{' '}
+          <span className="font-medium">
+            {senior.currentLevel > 0 ? `Level ${senior.currentLevel}` : 'Not started'}
+          </span>
+        </span>
         {senior.currentLevel < 3 && (
-          <Badge tone="blue">Level 2 track: {senior.level2Track ?? 'Not selected'}</Badge>
+          <span className="text-ink2">Level 2 track: {senior.level2Track ?? 'Not selected'}</span>
         )}
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {LEVEL_META.map(meta => {
           const p = senior.levelsProgress[meta.id]
-          const status = LEVEL_STATUS_META[p.status]
           return (
-            <div key={meta.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div key={meta.id} className="rounded-md border border-hairline p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Level {meta.label}
-                  </div>
-                  <div className="text-sm font-semibold text-slate-800">{meta.name}</div>
+                  <div className="kicker text-ink2">Level {meta.label}</div>
+                  <div className="font-display text-sm font-semibold text-ink">{meta.name}</div>
                 </div>
-                <Badge tone={status.tone}>{status.label}</Badge>
+                <LevelStatusMark status={p.status} />
               </div>
-              <ProgressBar className="mt-2" value={p.percent} accent={status.tone} />
-              <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+              <ProgressBar className="mt-2" value={p.percent} />
+              <div className="tnum mt-1 flex items-center justify-between text-[11px] text-ink2">
                 <span>
                   {p.totalReq > 0
                     ? `${p.totalComp} of ${p.totalReq} required tasks`
@@ -158,21 +208,15 @@ function PromotionCheck({
   children: ReactNode
 }) {
   return (
-    <div
-      className={clsx(
-        'rounded-lg border p-2.5 text-xs',
-        met ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50',
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-700">{label}</span>
-        {met ? (
-          <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden />
-        ) : (
-          <Circle className="h-4 w-4 text-amber-500" aria-hidden />
-        )}
+    <div className="flex items-start gap-2.5 border-b border-hairline py-2.5">
+      <CheckGlyph done={met} />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-ink">
+          {label}
+          <span className="sr-only">{met ? ': met' : ': not met'}</span>
+        </div>
+        <div className="tnum text-xs text-ink2">{children}</div>
       </div>
-      <div className={clsx('mt-1', met ? 'text-green-800' : 'text-amber-800')}>{children}</div>
     </div>
   )
 }
@@ -187,36 +231,38 @@ function SeniorPromotionSection({
   return (
     <Section icon={TrendingUp} title="Promotion Eligibility">
       {promotion === null ? (
-        <p className="text-sm italic text-slate-400">
+        <p className="text-sm text-ink2">
           No duty-performance promotion pathway for the current grade (CAPR 35-5).
         </p>
       ) : (
         <div className="space-y-2" data-testid="promotion-detail">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs font-semibold text-slate-500">Next grade</div>
-            <div className="text-lg font-bold text-slate-900">{promotion.nextRank}</div>
-            {promotableNow ? (
-              <Badge tone="green" className="mt-1">
-                <CheckCircle2 className="h-3 w-3" aria-hidden /> Eligible now
-              </Badge>
-            ) : (
-              <div className="mt-1 text-xs font-semibold text-amber-700">
-                TIG met on: {fmtDate(promotion.eligibleDate)}
-              </div>
-            )}
+          <div className="border-b border-hairline pb-3">
+            <div className="kicker text-ink">Next grade</div>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-3">
+              <span className="font-display text-[26px] font-medium leading-none text-ink">
+                {promotion.nextRank}
+              </span>
+              {promotableNow ? (
+                <span className={clsx('text-symbol', MICRO_LABEL)}>Eligible now</span>
+              ) : (
+                <span className="tnum text-xs text-ink2">
+                  TIG met on: {fmtDate(promotion.eligibleDate)}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
             <PromotionCheck label="Time in Grade" met={promotion.isTigMet}>
               {promotion.tigMonthsCurrent} / {promotion.tigMonthsRequired} months
             </PromotionCheck>
             <PromotionCheck label="Education and Training" met={promotion.isLevelMet}>
               Required: {promotion.levelRequired !== '' ? promotion.levelRequired : 'None'}
-              <div className="text-[11px] text-slate-600">Current: {promotion.levelCurrent}</div>
+              <div>Current: {promotion.levelCurrent}</div>
             </PromotionCheck>
             {promotion.dutyReq !== null && (
               <PromotionCheck label="Duty Requirement" met={promotion.isDutyMet}>
                 Required: {promotion.dutyReq}
-                <div className="text-[11px] text-slate-600">{promotion.dutyStatusString}</div>
+                <div>{promotion.dutyStatusString}</div>
               </PromotionCheck>
             )}
             {promotion.membershipMonthsRequired !== null && (
@@ -226,7 +272,7 @@ function SeniorPromotionSection({
               </PromotionCheck>
             )}
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-ink2">
             Requirements per CAPR 35-5 (senior member promotions).
           </p>
         </div>
@@ -240,33 +286,27 @@ function SeniorAssignmentsSection({ senior }: { senior: SeniorDetailJson }) {
     <Section icon={Briefcase} title="Duties, Tracks, and Awards">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
-          <div className="mb-1.5 text-xs font-bold uppercase text-slate-500">Duty assignments</div>
-          {senior.duties.length === 0 && (
-            <p className="text-sm italic text-slate-400">No duty assignments</p>
-          )}
-          <div className="space-y-1.5">
+          <div className="kicker mb-1.5 text-ink">Duty assignments</div>
+          {senior.duties.length === 0 && <p className="text-sm text-ink2">No duty assignments</p>}
+          <div>
             {senior.duties.map((d, i) => {
               const crossUnit = d.orgString !== senior.memberUnitName
               return (
-                <div
-                  key={`${d.name}-${i}`}
-                  className={clsx(
-                    'rounded border p-2 text-sm',
-                    crossUnit ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-slate-50',
-                  )}
-                >
-                  <div className="flex flex-wrap items-center gap-1.5 font-semibold text-slate-800">
+                <div key={`${d.name}-${i}`} className="border-b border-hairline py-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-ink">
                     {d.displayName}
                     {crossUnit && <Badge tone="blue">Cross-unit</Badge>}
                     {!d.hasTrack && d.warningMsg !== '' && (
-                      <Badge tone="amber" title={d.warningMsg}>
-                        {d.warningMsg}
-                      </Badge>
+                      <span title={d.warningMsg}>
+                        <VerdictMark
+                          kind="watch"
+                          label={<span className="text-xs">No matching track</span>}
+                        />
+                      </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500">
-                    Unit: {d.orgString} <span className="mx-1 text-slate-300">|</span> Assigned:{' '}
-                    {fmtDate(d.date)}
+                  <div className="tnum text-xs text-ink2">
+                    Unit: {d.orgString} · Assigned: {fmtDate(d.date)}
                   </div>
                 </div>
               )
@@ -274,42 +314,30 @@ function SeniorAssignmentsSection({ senior }: { senior: SeniorDetailJson }) {
           </div>
         </div>
         <div>
-          <div className="mb-1.5 text-xs font-bold uppercase text-slate-500">Specialty tracks</div>
-          {senior.tracks.length === 0 && (
-            <p className="text-sm italic text-slate-400">No specialty tracks</p>
-          )}
-          <div className="space-y-1.5">
+          <div className="kicker mb-1.5 text-ink">Specialty tracks</div>
+          {senior.tracks.length === 0 && <p className="text-sm text-ink2">No specialty tracks</p>}
+          <div>
             {senior.tracks.map((t, i) => (
-              <div key={`${t.name}-${i}`} className="rounded border border-slate-200 bg-slate-50 p-2 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-1.5">
-                  <span className="font-semibold text-slate-800">{t.name}</span>
-                  <Badge
-                    tone={
-                      t.level === 'MASTER'
-                        ? 'indigo'
-                        : t.level === 'SENIOR'
-                          ? 'blue'
-                          : t.level === 'TECHNICIAN'
-                            ? 'green'
-                            : 'slate'
-                    }
-                  >
-                    {t.level}
-                  </Badge>
+              <div key={`${t.name}-${i}`} className="border-b border-hairline py-2 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+                  <span className="font-medium text-ink">{t.name}</span>
+                  <span className={clsx('text-ink2', MICRO_LABEL)}>{t.level}</span>
                 </div>
-                <div className="text-xs text-slate-500">Awarded: {fmtDate(t.date)}</div>
+                <div className="tnum text-xs text-ink2">Awarded: {fmtDate(t.date)}</div>
                 {!t.hasDuty && t.warningMsg !== '' && (
-                  <div className="mt-1 text-xs font-semibold text-amber-700">{t.warningMsg}</div>
+                  <div className="mt-1">
+                    <VerdictMark kind="watch" label={<span className="text-xs">{t.warningMsg}</span>} />
+                  </div>
                 )}
               </div>
             ))}
           </div>
           {senior.seniorAwards.length > 0 && (
             <div className="mt-3">
-              <div className="mb-1.5 text-xs font-bold uppercase text-slate-500">Awards</div>
+              <div className="kicker mb-1.5 text-ink">Awards</div>
               <div className="flex flex-wrap gap-1.5">
                 {senior.seniorAwards.map((a, i) => (
-                  <Badge key={`${a.award}-${i}`} tone="indigo" title={`Completed: ${fmtDate(a.completed)}`}>
+                  <Badge key={`${a.award}-${i}`} title={`Completed: ${fmtDate(a.completed)}`}>
                     <Award className="h-3 w-3" aria-hidden /> {a.award}
                   </Badge>
                 ))}
@@ -361,17 +389,13 @@ const REQ_KEY_GROUP: Record<string, ReqGroupId> = {
 
 function RequirementItem({ req }: { req: ReqStatusJson }) {
   return (
-    <div className="flex items-start gap-2 rounded border border-slate-200 p-2">
-      {req.completed ? (
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" aria-hidden />
-      ) : (
-        <Circle className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" aria-hidden />
-      )}
+    <div className="flex items-start gap-2 border-b border-hairline py-2">
+      <CheckGlyph done={req.completed} />
       <div className="min-w-0">
-        <div className={clsx('text-sm font-medium', req.completed ? 'text-slate-900' : 'text-slate-600')}>
+        <div className={clsx('text-sm', req.completed ? 'font-medium text-ink' : 'text-ink2')}>
           {req.label}
         </div>
-        {req.value !== null && <div className="text-xs text-slate-500">{req.value}</div>}
+        {req.value !== null && <div className="tnum text-xs text-ink2">{req.value}</div>}
       </div>
     </div>
   )
@@ -380,9 +404,8 @@ function RequirementItem({ req }: { req: ReqStatusJson }) {
 function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: string | null }) {
   const nextRank =
     cadet.nextAchievement !== null ? CADET_ACHIEVEMENT_TO_RANK.get(cadet.nextAchievement) ?? null : null
-  const stateMeta = stateNow !== null && stateNow in CADET_STATE_META
-    ? CADET_STATE_META[stateNow as keyof typeof CADET_STATE_META]
-    : null
+  const stateKey =
+    stateNow !== null && stateNow in CADET_STATE_META ? (stateNow as CadetState) : null
   const honorEarned = new Set(cadet.honorCreditAchievements.map(h => h.achievementId))
   const approved = new Set(cadet.approvedAchievements)
 
@@ -400,106 +423,89 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
   const showOpportunity =
     opportunity !== null && !opportunity.earned && !(opportunity.reason ?? '').startsWith('N/A')
 
+  const hfzStatus = cadet.hfz?.status ?? null
+
   return (
     <Section icon={Star} title="Cadet Program">
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <div className="text-xs font-semibold uppercase text-slate-500">Current</div>
-          <div className="text-lg font-bold text-slate-900">{cadet.rank ?? 'No rank'}</div>
-          <div className="text-xs text-slate-600">
+        <div className="rounded-md border border-hairline p-3">
+          <div className="kicker text-ink">Current</div>
+          <div className="mt-1 font-display text-lg font-semibold leading-tight text-ink">
+            {cadet.rank ?? 'No rank'}
+          </div>
+          <div className="text-xs text-ink2">
             {cadet.currentAchievementName ?? 'No achievement approved'}
             {cadet.publicAchievementNumber !== null && cadet.currentAchievement !== 0 && (
-              <span className="ml-1 text-slate-400">(Achv {cadet.publicAchievementNumber})</span>
+              <span className="tnum ml-1">(Achv {cadet.publicAchievementNumber})</span>
             )}
           </div>
-          <div className="mt-1 text-xs text-slate-500">Phase {cadet.phase || '0'}</div>
+          <div className="tnum mt-1 text-xs text-ink2">Phase {cadet.phase || '0'}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <div className="text-xs font-semibold uppercase text-slate-500">Next</div>
-          <div className="text-lg font-bold text-slate-900">
+        <div className="rounded-md border border-hairline p-3">
+          <div className="kicker text-ink">Next</div>
+          <div className="mt-1 font-display text-lg font-semibold leading-tight text-ink">
             {cadet.nextAchievement !== null
               ? `${nextRank ?? ''} ${cadet.nextAchievementName ?? ''}`.trim()
               : 'Spaatz Award achieved'}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {stateMeta !== null && <Badge tone={stateMeta.tone}>{stateMeta.label}</Badge>}
-            <span className="text-xs text-slate-600">{cadet.promotion.message}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {stateKey !== null && <CadetStateMark state={stateKey} />}
+            <span className="text-xs text-ink2">{cadet.promotion.message}</span>
           </div>
           {cadet.nextRequirements !== null && (
-            <ProgressBar className="mt-2" value={cadet.nextRequirements.completionPercent} accent="blue" />
+            <ProgressBar className="mt-2" value={cadet.nextRequirements.completionPercent} />
           )}
         </div>
       </div>
 
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div
-          className={clsx(
-            'rounded-lg border p-3',
-            cadet.timeInGrade.isEligible ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white',
-          )}
-          data-testid="cadet-tig"
-        >
+        <div className="rounded-md border border-hairline p-3" data-testid="cadet-tig">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase text-slate-500">Time in Grade</span>
+            <span className="kicker text-ink">Time in Grade</span>
             {cadet.timeInGrade.isEligible && (
-              <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden />
+              <span className={clsx('inline-flex items-center gap-1 text-ink', MICRO_LABEL)}>
+                <Check className="h-3.5 w-3.5 text-symbol" aria-hidden /> Met
+              </span>
             )}
           </div>
-          <div className="mt-1 text-sm text-slate-700">
+          <div className="tnum mt-1 text-sm text-ink">
             {cadet.timeInGrade.weeks}w {cadet.timeInGrade.days % 7}d ({cadet.timeInGrade.days} days)
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="tnum text-xs text-ink2">
             Eligible on: {fmtDate(cadet.timeInGrade.eligibleOn)}
           </div>
         </div>
-        <div
-          className={clsx(
-            'rounded-lg border p-3',
-            cadet.hfz?.status === 'PASSED'
-              ? 'border-green-200 bg-green-50'
-              : cadet.hfz?.status === 'EXPIRED'
-                ? 'border-red-200 bg-red-50'
-                : 'border-slate-200 bg-white',
-          )}
-          data-testid="cadet-hfz"
-        >
+        <div className="rounded-md border border-hairline p-3" data-testid="cadet-hfz">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-              <HeartPulse className="h-3.5 w-3.5" aria-hidden /> HFZ
+            <span className="kicker inline-flex items-center gap-1 text-ink">
+              <HeartPulse className="h-3.5 w-3.5 text-ink2" aria-hidden /> HFZ
             </span>
-            {cadet.hfz !== null && (
-              <Badge
-                tone={
-                  cadet.hfz.status === 'PASSED'
-                    ? 'green'
-                    : cadet.hfz.status === 'ATTEMPTED'
-                      ? 'blue'
-                      : cadet.hfz.status === 'EXPIRED'
-                        ? 'red'
-                        : 'slate'
-                }
-              >
-                {cadet.hfz.status.replace('_', ' ')}
-              </Badge>
-            )}
+            {hfzStatus !== null &&
+              (hfzStatus === 'EXPIRED' ? (
+                <VerdictMark kind="watch" label={<span className={MICRO_LABEL}>Expired</span>} />
+              ) : hfzStatus === 'ATTEMPTED' ? (
+                <VerdictMark kind="plan" label={<span className={MICRO_LABEL}>Attempted</span>} />
+              ) : (
+                <span className={clsx('text-ink', MICRO_LABEL)}>{hfzStatus.replace('_', ' ')}</span>
+              ))}
           </div>
           {cadet.hfz !== null ? (
             <>
-              <div className="mt-1 text-sm text-slate-700">{cadet.hfz.message}</div>
-              <div className="text-xs text-slate-500">Valid until: {fmtDate(cadet.hfz.validUntil)}</div>
+              <div className="mt-1 text-sm text-ink">{cadet.hfz.message}</div>
+              <div className="tnum text-xs text-ink2">Valid until: {fmtDate(cadet.hfz.validUntil)}</div>
             </>
           ) : (
-            <div className="mt-1 text-sm italic text-slate-400">Not applicable</div>
+            <div className="mt-1 text-sm text-ink2">Not applicable</div>
           )}
         </div>
       </div>
 
       {cadet.cadetDuties.length > 0 && (
         <div className="mb-3">
-          <div className="mb-1.5 text-xs font-bold uppercase text-slate-500">Duty positions</div>
+          <div className="kicker mb-1.5 text-ink">Duty positions</div>
           <div className="flex flex-wrap gap-1.5">
             {cadet.cadetDuties.map((d, i) => (
-              <Badge key={`${d.duty}-${i}`} tone="slate" title={`${d.orgName} - Assigned: ${fmtDate(d.date)}`}>
+              <Badge key={`${d.duty}-${i}`} title={`${d.orgName} - Assigned: ${fmtDate(d.date)}`}>
                 {d.duty}
               </Badge>
             ))}
@@ -509,7 +515,7 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
 
       {cadet.nextRequirements !== null && (
         <div className="mb-3" data-testid="cadet-requirements">
-          <div className="mb-1.5 text-xs font-bold uppercase text-slate-500">
+          <div className="kicker mb-1.5 text-ink">
             Next achievement requirements ({cadet.nextRequirements.completed.length} of{' '}
             {cadet.nextRequirements.requirements.length} complete)
           </div>
@@ -519,10 +525,8 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
               if (reqs === undefined || reqs.length === 0) return null
               return (
                 <div key={groupId}>
-                  <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-blue-800">
-                    {REQ_GROUP_LABELS[groupId]}
-                  </div>
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  <div className="kicker mb-1 text-ink2">{REQ_GROUP_LABELS[groupId]}</div>
+                  <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
                     {reqs.map(req => (
                       <RequirementItem key={req.key} req={req} />
                     ))}
@@ -535,16 +539,16 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
       )}
 
       {showOpportunity && opportunity !== null && (
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="flex items-center gap-1.5 text-sm font-bold text-amber-900">
-            <Star className="h-4 w-4 text-amber-600" aria-hidden /> Honor Credit Opportunity
+        <div className="mb-3 rounded-md border border-hairline p-3">
+          <div className="flex items-center gap-1.5 font-display text-sm font-semibold text-ink">
+            <Star className="h-4 w-4 text-ink2" aria-hidden /> Honor Credit Opportunity
           </div>
-          <p className="mt-1 text-xs text-amber-800">
+          <p className="mt-1 text-xs text-ink2">
             Complete both interactive modules and both written tests (80%+) for the next
             achievement to earn honor credit.
           </p>
           {opportunity.legacyDetails !== null && (
-            <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
+            <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
               {(
                 [
                   ['Leadership module', opportunity.legacyDetails.leadershipModule],
@@ -555,12 +559,15 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
               ).map(([label, done]) => (
                 <span
                   key={label}
-                  className={clsx('flex items-center gap-1', done ? 'font-semibold text-green-700' : 'text-slate-600')}
+                  className={clsx(
+                    'flex items-center gap-1.5',
+                    done ? 'font-medium text-ink' : 'text-ink2',
+                  )}
                 >
                   {done ? (
-                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                    <Check className="h-3.5 w-3.5 shrink-0 text-symbol" aria-hidden />
                   ) : (
-                    <Circle className="h-3.5 w-3.5" aria-hidden />
+                    <Circle className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
                   )}
                   {label}
                 </span>
@@ -571,13 +578,13 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
       )}
 
       <div className="mb-3" data-testid="cadet-timeline">
-        <div className="mb-1.5 text-xs font-bold uppercase text-slate-500">Promotion history</div>
+        <div className="kicker mb-1.5 text-ink">Promotion history</div>
         <div className="space-y-2">
           {CADET_PHASE_DEFS.map(phase => {
             const ids = [...phase.achievements, phase.milestoneAchv]
             return (
               <div key={phase.phase} className="flex flex-wrap items-center gap-1.5">
-                <span className="w-40 shrink-0 text-xs font-semibold text-slate-600">{phase.name}</span>
+                <span className="w-40 shrink-0 text-xs font-medium text-ink2">{phase.name}</span>
                 {ids.map(id => {
                   const isApproved = approved.has(id)
                   const isCurrent = cadet.currentAchievement === id
@@ -593,14 +600,14 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
                       key={id}
                       title={title}
                       className={clsx(
-                        'inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1.5 text-[11px] font-bold',
-                        isMilestone && 'ring-1 ring-inset ring-slate-300',
+                        'tnum inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1.5 font-display text-[11px] font-semibold',
+                        isMilestone && 'ring-1 ring-inset ring-muted',
                         isApproved
-                          ? 'bg-green-600 text-white'
+                          ? 'bg-symbol-20 text-symbol'
                           : isNext
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-500',
-                        isCurrent && 'ring-2 ring-green-400',
+                            ? 'border border-symbol bg-paper text-symbol'
+                            : 'bg-gray20 text-ink2',
+                        isCurrent && 'ring-2 ring-symbol',
                       )}
                     >
                       {isMilestone ? phase.milestoneName.split(' ').pop() : publicNo ?? id}
@@ -615,14 +622,14 @@ function CadetSection({ cadet, stateNow }: { cadet: CadetDetailJson; stateNow: s
         {cadet.milestoneAwards.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {cadet.milestoneAwards.map((a, i) => (
-              <Badge key={`${a.award}-${i}`} tone="indigo" title={`Completed: ${fmtDate(a.completed)}`}>
+              <Badge key={`${a.award}-${i}`} title={`Completed: ${fmtDate(a.completed)}`}>
                 <Award className="h-3 w-3" aria-hidden /> {a.award} ({fmtDate(a.completed)})
               </Badge>
             ))}
           </div>
         )}
         {cadet.honorCreditAchievements.length > 0 && (
-          <div className="mt-2 text-xs text-slate-600">
+          <div className="mt-2 text-xs text-ink2">
             Honor credit earned on:{' '}
             {cadet.honorCreditAchievements
               .map(h => `${achievementDisplayName(h.achievementId)}${h.earnedDate !== null ? ` (${h.earnedDate})` : ''}`)
@@ -638,29 +645,34 @@ function EsSection({ quals }: { quals: readonly EsQualJson[] }) {
   return (
     <Section icon={ShieldCheck} title="Emergency Services Qualifications">
       {quals.length === 0 ? (
-        <p className="text-sm italic text-slate-400">No ES qualifications on file</p>
+        <p className="text-sm text-ink2">No ES qualifications on file</p>
       ) : (
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" data-testid="es-quals">
+        <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2" data-testid="es-quals">
           {quals.map((q, i) => (
             <div
               key={`${q.achvId}-${i}`}
-              className="flex items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5"
+              className="flex items-center justify-between gap-2 border-b border-hairline py-2"
             >
               <div className="min-w-0">
-                <div className="flex items-center gap-1 truncate text-sm font-semibold text-slate-800">
+                <div className="flex items-center gap-1 truncate text-sm font-medium text-ink">
                   {q.name}
                   {q.isSkillsEvaluator && (
-                    <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                    <Star
+                      className="h-3.5 w-3.5 shrink-0 text-ink2"
+                      aria-label="Skills evaluator"
+                    />
                   )}
                 </div>
-                <div className="text-[11px] text-slate-500">
+                <div className="tnum text-[11px] text-ink2">
                   {q.functionalArea ?? 'General'}
                   {q.expiration !== null && <span> · Expires {fmtDate(q.expiration)}</span>}
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-0.5">
-                <Badge tone={ES_STATUS_TONE[q.status] ?? 'slate'}>{q.status}</Badge>
-                {q.isExpiringSoon && <Badge tone="amber">Expiring soon</Badge>}
+                <EsStatusMark status={q.status} />
+                {q.isExpiringSoon && (
+                  <VerdictMark kind="watch" label={<span className={MICRO_LABEL}>Expiring soon</span>} />
+                )}
               </div>
             </div>
           ))}

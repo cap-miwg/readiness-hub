@@ -38,7 +38,7 @@ const COLUMNS: Column<AuditEntry>[] = [
     render: r => {
       const text = detailText(r.detail)
       return text ? (
-        <span className="block max-w-[420px] truncate font-mono text-xs text-slate-500" title={text}>
+        <span className="block max-w-[420px] truncate font-mono text-xs text-ink2" title={text}>
           {text}
         </span>
       ) : (
@@ -53,15 +53,15 @@ export default function AuditTable() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-600">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-ink2">
           Latest 200 admin actions. Every mutation writes an entry; details carry no member data.
         </p>
         <button
           type="button"
           data-testid="audit-refresh"
           onClick={() => void auditQ.refetch()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-muted"
         >
           <RefreshCw className="h-4 w-4" aria-hidden /> Refresh
         </button>

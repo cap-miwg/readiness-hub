@@ -70,22 +70,22 @@ function ChipListEditor({
   return (
     <div className="space-y-2">
       <div>
-        <div className="text-sm font-bold text-slate-900">{label}</div>
-        <p className="text-xs text-slate-500">{description}</p>
+        <div className="font-display text-sm font-semibold text-ink">{label}</div>
+        <p className="text-xs text-ink2">{description}</p>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {values.length === 0 && <span className="text-xs text-slate-400">none</span>}
+        {values.length === 0 && <span className="text-xs text-muted">none</span>}
         {values.map(v => (
           <span
             key={v}
-            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"
+            className="tnum inline-flex items-center gap-1 rounded-full border border-hairline px-2.5 py-1 text-xs font-medium text-ink"
           >
             {v}
             <button
               type="button"
               onClick={() => remove(v)}
               aria-label={`Remove ${v}`}
-              className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+              className="rounded-full p-0.5 text-muted hover:bg-gray20 hover:text-ink"
             >
               <X className="h-3 w-3" aria-hidden />
             </button>
@@ -108,18 +108,18 @@ function ChipListEditor({
             }
           }}
           placeholder={placeholder}
-          className="w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+          className="w-48 rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:border-symbol focus:outline-none"
         />
         <button
           type="button"
           data-testid={`${testId}-add`}
           onClick={add}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-1 rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-muted"
         >
           <Plus className="h-4 w-4" aria-hidden /> Add
         </button>
       </div>
-      {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+      {error && <p className="text-xs font-medium text-scarlet">{error}</p>}
     </div>
   )
 }
@@ -211,22 +211,22 @@ export default function SettingsPanel() {
           testId="settings-member-types-input"
         />
 
-        <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-3 border-t border-hairline pt-4">
           <button
             type="button"
             data-testid="settings-save"
             onClick={onSave}
             disabled={!dirty || save.isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md bg-symbol px-4 py-2 text-sm font-semibold text-paper transition-colors disabled:opacity-50"
           >
             {save.isPending ? <Spinner /> : <Save className="h-4 w-4" aria-hidden />}
             {save.isPending ? 'Saving...' : 'Save settings'}
           </button>
           {!dirty && !save.isPending && settingsQ.data && (
-            <span className="text-xs text-slate-500">No unsaved changes</span>
+            <span className="text-xs text-ink2">No unsaved changes</span>
           )}
           {save.isSuccess && !dirty && (
-            <span className="text-xs font-semibold text-green-700">Saved</span>
+            <span className="text-xs font-medium text-ink2">Saved</span>
           )}
         </div>
         {save.error && (

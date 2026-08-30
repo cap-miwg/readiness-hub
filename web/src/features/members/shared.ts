@@ -2,7 +2,9 @@
  * Shared derived types and display metadata for the member surfaces (Senior
  * dashboard, Cadet dashboard, member profile modal). All payload types derive
  * from @shared/contracts via indexed access so the server stays the single
- * source of truth.
+ * source of truth. Display metadata speaks the Quiet Authority verdict
+ * grammar (docs/design/V2-DESIGN-PLAN.md section 3): color is a verdict,
+ * category is never a color, and success is silence.
  */
 
 import type {
@@ -11,7 +13,7 @@ import type {
   SeniorLevelId,
   SeniorRow,
 } from '@shared/contracts'
-import type { FilterOption, Tone } from '../../components/ui'
+import type { FilterOption, VerdictKind } from '../../components/ui'
 
 export type LevelsProgressJson = NonNullable<SeniorRow['levelProgress']>
 export type LevelProgressJson = LevelsProgressJson[SeniorLevelId]
@@ -43,12 +45,16 @@ export const LEVEL_META: readonly LevelMeta[] = [
 
 export type LevelStatusJson = LevelProgressJson['status']
 
-export const LEVEL_STATUS_META: Record<LevelStatusJson, { label: string; tone: Tone }> = {
-  completed: { label: 'Completed', tone: 'green' },
-  pending: { label: 'Submitted', tone: 'amber' },
-  ready: { label: 'Ready to submit', tone: 'amber' },
-  'in-progress': { label: 'In progress', tone: 'blue' },
-  'not-started': { label: 'Not started', tone: 'slate' },
+/**
+ * E&T level status in verdict terms: submitted/ready work is planned work
+ * (symbol), completion is quiet, never started is a not-recorded state.
+ */
+export const LEVEL_STATUS_META: Record<LevelStatusJson, { label: string; kind: VerdictKind }> = {
+  completed: { label: 'Completed', kind: 'neutral' },
+  pending: { label: 'Submitted', kind: 'plan' },
+  ready: { label: 'Ready to submit', kind: 'plan' },
+  'in-progress': { label: 'In progress', kind: 'neutral' },
+  'not-started': { label: 'Not started', kind: 'notRecorded' },
 }
 
 export function levelProgressOf(
@@ -59,21 +65,98 @@ export function levelProgressOf(
   return progress[id] ?? null
 }
 
-export const ES_STATUS_TONE: Record<string, Tone> = {
-  Active: 'green',
-  Training: 'blue',
-  Expired: 'red',
-  'Not Approved': 'amber',
-  Missing: 'slate',
+/**
+ * Plain-text E&T line for roster rows ("Level 3 · 2 tasks to L4"), replacing
+ * the v1 six-dot strip. The suffix names the first level not yet completed
+ * and the required-task shortfall from LevelsProgress (server
+ * domain/senior.ts: totalReq/totalComp are required-task counts).
+ */
+export function etLevelLine(
+  currentLevel: string | null,
+  progress: SeniorRow['levelProgress'],
+): string {
+  const base = currentLevel ?? 'Not started'
+  if (progress === null) return base
+  for (const meta of LEVEL_META) {
+    const p = progress[meta.id]
+    if (p === undefined || p.status === 'completed') continue
+    if (p.status === 'pending') return `${base} · L${meta.label} submitted`
+    if (p.status === 'ready') return `${base} · L${meta.label} ready to submit`
+    if (p.totalReq > 0) {
+      const remaining = Math.max(0, p.totalReq - p.totalComp)
+      if (remaining > 0) {
+        return `${base} · ${remaining} task${remaining === 1 ? '' : 's'} to L${meta.label}`
+      }
+    }
+    return base
+  }
+  return base
 }
 
-export const CADET_STATE_META: Record<CadetState, { label: string; tone: Tone; bar: string }> = {
-  READY: { label: 'Ready', tone: 'green', bar: 'bg-green-500' },
-  TIME_PENDING: { label: 'Time pending', tone: 'amber', bar: 'bg-amber-400' },
-  NEARLY_READY: { label: 'Nearly ready', tone: 'blue', bar: 'bg-blue-400' },
-  IN_PROGRESS: { label: 'In progress', tone: 'indigo', bar: 'bg-indigo-300' },
-  NOT_STARTED: { label: 'Not started', tone: 'slate', bar: 'bg-slate-300' },
-  SPAATZ_COMPLETE: { label: 'Spaatz complete', tone: 'green', bar: 'bg-emerald-500' },
+/**
+ * ES qualification status in verdict terms: Active is quiet, Training is
+ * planned work, Expired is the actionable finding the dashboards count,
+ * Not Approved is a watch state, Missing was never recorded.
+ */
+export const ES_STATUS_KIND: Record<string, VerdictKind> = {
+  Active: 'neutral',
+  Training: 'plan',
+  Expired: 'action',
+  'Not Approved': 'watch',
+  Missing: 'notRecorded',
+}
+
+/**
+ * Promotion-state verdict grammar for cadet rows: READY is planned work for
+ * the board, NEARLY_READY is the watch state, waiting on time or effort is
+ * neutral text (nothing to act on), Spaatz completion is quiet.
+ */
+export const CADET_STATE_META: Record<CadetState, { label: string; kind: VerdictKind }> = {
+  READY: { label: 'Ready', kind: 'plan' },
+  TIME_PENDING: { label: 'Time pending', kind: 'neutral' },
+  NEARLY_READY: { label: 'Nearly ready', kind: 'watch' },
+  IN_PROGRESS: { label: 'In progress', kind: 'neutral' },
+  NOT_STARTED: { label: 'Not started', kind: 'neutral' },
+  SPAATZ_COMPLETE: { label: 'Spaatz complete', kind: 'neutral' },
+}
+
+export interface CadetBlocker {
+  kind: 'watch' | 'neutral'
+  label: string
+  title?: string
+}
+
+/**
+ * The one named blocking requirement per cadet row (V2-DESIGN-PLAN.md
+ * section 6, the blocker engine): HFZ credit missing or lapsed where the
+ * next promotion requires it (Achievement 4 on, CAPR 60-1 fitness
+ * requirement), else a future TIG date, else the next achievement.
+ */
+export function cadetBlockerOf(row: CadetRow, todayIso: string): CadetBlocker | null {
+  if (row.state === 'SPAATZ_COMPLETE') return null
+  const achv = row.nextAchvPublicNumber
+  if (row.state === 'READY') {
+    // Nothing blocks a READY cadet; the next step is the board, not a fix.
+    return achv !== null
+      ? { kind: 'neutral', label: `Next: Achv ${achv}`, title: 'Eligible now; awaiting promotion approval' }
+      : null
+  }
+  const hfzMissing = row.hfzValidUntil === null || row.hfzValidUntil < todayIso
+  if (achv !== null && achv >= 4 && hfzMissing) {
+    return {
+      kind: 'watch',
+      label: 'HFZ',
+      title:
+        row.hfzValidUntil === null
+          ? 'No HFZ credit on file; the next promotion requires one'
+          : `HFZ credit lapsed ${row.hfzValidUntil}; the next promotion requires a current one`,
+    }
+  }
+  if (row.tigCompleteOn !== null && row.tigCompleteOn > todayIso) {
+    return { kind: 'neutral', label: `TIG ${row.tigCompleteOn}`, title: 'Time in grade completes on this date' }
+  }
+  if (achv !== null) return { kind: 'neutral', label: `Next: Achv ${achv}` }
+  return null
 }
 
 /** ISO yyyy-mm-dd dates render verbatim; null renders as a neutral dash. */
@@ -132,4 +215,44 @@ export function trackLacksDuty(
     const fa = d.functArea.toUpperCase().trim()
     return fa === name || name.includes(fa) || fa.includes(name)
   })
+}
+
+/**
+ * The one discrepancy a senior roster row may carry (V2-DESIGN-PLAN.md
+ * section 6: one meaningful discrepancy indicator per row). Track-without-
+ * duty outranks duty-without-track; the returned sentence names it.
+ */
+export function seniorDiscrepancyOf(row: SeniorRow): string | null {
+  for (const t of row.tracks) {
+    if (trackLacksDuty(t, row.duties)) {
+      return `${t.track}: enrolled with no matching duty assignment`
+    }
+  }
+  for (const d of row.duties) {
+    if (dutyLacksTrack(d.functArea, row.tracks)) {
+      return `${d.duty}: missing specialty track${d.functArea !== null ? ` (${d.functArea})` : ''}`
+    }
+  }
+  return null
+}
+
+const TRACK_LEVEL_RANK: Record<string, number> = { MASTER: 3, SENIOR: 2, TECHNICIAN: 1, NONE: 0 }
+
+/** Highest-rated specialty track leads the row; the full list lives in the modal. */
+export function primaryTrackOf<T extends { trackLevel: string }>(tracks: readonly T[]): T | null {
+  let best: T | null = null
+  let bestRank = -1
+  for (const t of tracks) {
+    const rank = TRACK_LEVEL_RANK[t.trackLevel.toUpperCase().trim()] ?? 0
+    if (rank > bestRank) {
+      best = t
+      bestRank = rank
+    }
+  }
+  return best
+}
+
+/** Primary (non-assistant) duty leads the row; assistants trail with "(A)". */
+export function primaryDutyOf<T extends { asst: boolean }>(duties: readonly T[]): T | null {
+  return duties.find(d => !d.asst) ?? duties[0] ?? null
 }
