@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Readiness Hub · Home · Mission Brief mockup</title>
+<style>
+  :root{
+    --blue:#001871;      /* Symbol Blue: identity + interaction only */
+    --gray:#9EA2A2;      /* Silver Gray: structure only, never text */
+    --scarlet:#BA0C2F;   /* ACTION verdicts only */
+    --yellow:#FFCD00;    /* WATCH glyph fill only */
+    --blue-20:#CCD1E3;
+    --gray-20:#ECECEC;
+    --scarlet-20:#F1CFD5;
+    --yellow-20:#FFF5CC;
+    --black-20:#CCCCCC;
+    --ink:#000000;
+    --paper:#FFFFFF;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:var(--sans);font-size:13px;line-height:1.45;color:var(--ink);background:var(--paper);font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  summary{list-style:none;cursor:pointer}
+  summary::-webkit-details-marker{display:none}
+  .mono{font-family:var(--mono)}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+
+  /* ---------- glyph grammar ---------- */
+  .g{display:inline-block;flex:none;vertical-align:baseline}
+  .g-act{width:8px;height:8px;border-radius:50%;background:var(--scarlet)}
+  .g-watch{width:7px;height:7px;background:var(--yellow);border:1px solid var(--ink);transform:rotate(45deg)}
+  .g-ok{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--gray)}
+  .g-nodata{width:8px;height:8px;border-radius:50%;border:1.5px dashed var(--gray)}
+  .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:2px;white-space:nowrap}
+  .tag-act{color:var(--scarlet);background:var(--scarlet-20)}
+  .tag-watch{color:var(--ink);background:var(--yellow-20);border:1px solid var(--yellow)}
+  .tag-ok{color:var(--ink);background:var(--paper);border:1px solid var(--black-20)}
+
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:50;background:var(--paper);border-top:3px solid var(--blue);border-bottom:1px solid var(--black-20);display:flex;align-items:center;gap:10px;height:51px;padding:0 16px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;white-space:nowrap;color:var(--ink)}
+  .brand svg{display:block}
+  .tabs{display:flex;gap:2px;margin-left:10px;align-self:stretch}
+  .tab{display:flex;align-items:center;padding:0 10px;font-size:12.5px;color:var(--ink);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab:hover{text-decoration:none;background:var(--gray-20)}
+  .tab[aria-current="page"]{font-weight:700;color:var(--blue);border-bottom-color:var(--blue)}
+  .spacer{flex:1}
+  .menu{position:relative}
+  .menu>summary{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;border:1px solid var(--black-20);border-radius:2px;padding:5px 9px;background:var(--paper);white-space:nowrap}
+  .menu>summary:hover{border-color:var(--ink)}
+  .menu[open]>summary{border-color:var(--blue);color:var(--blue)}
+  .caret{font-size:9px}
+  .panel{position:absolute;right:0;top:calc(100% + 8px);min-width:250px;max-width:min(320px,calc(100vw - 24px));background:var(--paper);border:1px solid var(--ink);z-index:60;padding:6px 0}
+  .panel .ph{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px 4px}
+  .panel .prow{display:flex;gap:10px;align-items:baseline;padding:6px 12px;font-size:12px}
+  .panel .prow .mono{font-size:11px}
+  .panel .prow.sel{background:var(--blue-20);font-weight:700}
+  .panel .prow:hover{background:var(--gray-20)}
+  .panel .pnote{font-size:11px;padding:6px 12px 8px}
+  .panel label.prow{cursor:pointer;border-bottom:1px solid var(--gray-20);padding-bottom:9px;margin-bottom:2px}
+  .panel input[type="checkbox"]{accent-color:var(--blue)}
+  .panel .kvline{display:flex;justify-content:space-between;gap:12px;padding:4px 12px;font-size:11.5px}
+  .panel .kvline .mono{font-size:11px}
+  .userchip>summary{border-radius:50%;width:30px;height:30px;justify-content:center;padding:0;font-weight:700;background:var(--blue);color:var(--paper);border:none}
+  .userchip[open]>summary{color:var(--paper)}
+  .burger{display:none}
+  .burger>summary{border:1px solid var(--black-20);border-radius:2px;padding:5px 9px;font-size:14px;line-height:1}
+  .bpanel{position:absolute;left:0;right:0;top:51px;background:var(--paper);border-bottom:2px solid var(--ink);z-index:55;padding:6px 0 10px}
+  .bpanel a{display:block;padding:10px 20px;color:var(--ink);font-size:14px;border-top:1px solid var(--gray-20)}
+  .bpanel a[aria-current="page"]{font-weight:700;color:var(--blue);border-left:3px solid var(--blue);padding-left:17px}
+  .bpanel .bmeta{font-family:var(--mono);font-size:10.5px;padding:10px 20px 0;border-top:1px solid var(--gray-20);margin-top:6px}
+
+  /* ---------- layout + rail ---------- */
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:36px;max-width:1160px;margin:0 auto;padding:22px 20px 56px}
+  .rail{position:sticky;top:67px;align-self:start;font-family:var(--mono);font-size:11px}
+  .rail a{display:flex;gap:8px;align-items:center;padding:7px 10px;color:var(--ink);border-left:2px solid var(--gray-20);white-space:nowrap}
+  .rail a:hover{text-decoration:none;background:var(--gray-20)}
+  .rail a.cur{border-left-color:var(--blue);color:var(--blue);font-weight:700}
+  .rail .g{margin-left:auto}
+  section{scroll-margin-top:64px}
+
+  /* ---------- masthead ---------- */
+  .mast{padding:2px 0 6px}
+  h1{font-size:21px;font-weight:700;letter-spacing:-.01em;margin-top:2px}
+  .meta{font-size:12px;margin-top:3px}
+  .bluf{border:1px solid var(--ink);padding:12px 14px;margin:14px 0 14px}
+  .bluf b{font-size:13.5px}
+  .bluf .sub{font-size:12px;margin-top:4px}
+
+  /* ---------- sections ---------- */
+  .sechead{display:grid;grid-template-columns:16px 30px minmax(0,1fr) auto;align-items:center;gap:8px;padding:11px 0}
+  .num{font-family:var(--mono);font-size:11px}
+  .ttl{font-weight:700;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+  .stat{font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap}
+  section.sec-s{border-top:1px solid var(--black-20)}
+  .secbody{padding:2px 0 18px 62px}
+  .lead{font-size:13.5px;margin:2px 0 10px}
+
+  /* ---------- data rows ---------- */
+  .kvs{margin-top:4px}
+  .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:6px 0;border-top:1px solid var(--gray-20);align-items:baseline}
+  .kvs .kv:first-child{border-top:none}
+  .kv .k{font-size:12.5px}
+  .kv .k small{font-size:11.5px;display:block}
+  .kv .v{font-weight:600;text-align:right;white-space:nowrap;display:flex;gap:8px;align-items:baseline;justify-content:flex-end}
+  .kv .v .muted{font-weight:400}
+  .blockttl{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin:16px 0 2px}
+  .links{font-size:12px;margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+
+  /* ---------- disclosures + checklist ---------- */
+  .disc>summary{color:var(--blue);font-size:11.5px;display:inline-block;padding:2px 0}
+  .disc>summary:hover{text-decoration:underline}
+  .check{margin:6px 0 2px;border:1px solid var(--gray-20)}
+  .check li{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;padding:7px 10px;border-top:1px solid var(--gray-20);list-style:none;font-size:12px;align-items:baseline}
+  .check li:first-child{border-top:none}
+  .check .done{font-family:var(--mono)}
+  .check .date{font-family:var(--mono);font-size:11px}
+  .check li.open .item{font-weight:700}
+  .note{font-size:11.5px;margin-top:6px}
+
+  /* ---------- announcements / release notes ---------- */
+  .annc{display:grid;grid-template-columns:56px minmax(0,1fr);gap:12px;padding:10px 0;border-top:1px solid var(--gray-20);align-items:start}
+  .annc:first-of-type{border-top:none}
+  .annc .d{font-family:var(--mono);font-size:11px;padding-top:1px}
+  .annc b{display:block;font-size:13px}
+  .annc .by{font-size:11.5px}
+  .annc p.body{font-size:12.5px;margin-top:4px}
+  .rel li{list-style:none;padding:3px 0 3px 14px;position:relative;font-size:12.5px}
+  .rel li::before{content:"·";position:absolute;left:2px}
+
+  /* ---------- footer ---------- */
+  .foot{border-top:1px solid var(--black-20)}
+  .foot-in{display:flex;justify-content:space-between;gap:16px;max-width:1160px;margin:0 auto;padding:16px 20px;font-family:var(--mono);font-size:11px}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:940px){
+    .tabs{display:none}
+    .burger{display:block}
+    .unitname{display:none}
+    .layout{grid-template-columns:minmax(0,1fr);gap:0;padding:0 16px 48px}
+    .rail{position:sticky;top:51px;z-index:40;display:flex;overflow-x:auto;background:var(--paper);border-bottom:1px solid var(--black-20);margin:0 -16px 14px;padding:0 10px;scrollbar-width:none}
+    .rail::-webkit-scrollbar{display:none}
+    .rail a{border-left:none;border-bottom:2px solid transparent;padding:9px 10px}
+    .rail a.cur{border-bottom-color:var(--blue)}
+    .rail .g{margin-left:2px}
+    .secbody{padding-left:0}
+  }
+  @media (max-width:560px){
+    .asof{display:none}
+    .kv .v{flex-wrap:wrap}
+    .sechead{grid-template-columns:16px minmax(0,1fr) auto}
+    .num.secnum{display:none}
+    .annc{grid-template-columns:minmax(0,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <details class="burger menu">
+    <summary aria-label="Menu">☰</summary>
+    <nav class="bpanel">
+      <a href="#0" aria-current="page">Home</a>
+      <a href="#0">Unit Overview</a>
+      <a href="#0">Seniors</a>
+      <a href="#0">Cadets</a>
+      <a href="#0">Reports</a>
+      <a href="#0">Org Chart</a>
+      <a href="#0">Admin</a>
+      <p class="bmeta">DATA AS OF 28 AUG 03:00 · v2.0.0</p>
+    </nav>
+  </details>
+
+  <span class="brand">
+    <svg viewBox="0 0 24 24" width="22" height="22" role="img" aria-label="Logo slot, deployment configured">
+      <title>Logo slot (deployment-configured asset)</title>
+      <circle cx="12" cy="12" r="10.5" fill="none" stroke="#001871" stroke-width="2"/>
+      <path d="M12 6.5 L17 16.5 H7 Z" fill="#001871"/>
+    </svg>
+    Readiness Hub
+  </span>
+
+  <nav class="tabs" aria-label="Primary">
+    <a class="tab" href="#0" aria-current="page">Home</a>
+    <a class="tab" href="#0">Unit Overview</a>
+    <a class="tab" href="#0">Seniors</a>
+    <a class="tab" href="#0">Cadets</a>
+    <a class="tab" href="#0">Reports</a>
+    <a class="tab" href="#0">Org Chart</a>
+  </nav>
+
+  <span class="spacer"></span>
+
+  <details class="menu">
+    <summary>GLR-MI-104<span class="unitname"> · Riverside Composite Sqdn</span> <span class="caret">▾</span></summary>
+    <div class="panel" role="listbox" aria-label="Unit selector">
+      <label class="prow"><input type="checkbox"> Include sub-units of selection</label>
+      <p class="ph">Wing</p>
+      <p class="prow"><span class="mono">GLR-MI-001</span> Wing Headquarters</p>
+      <p class="ph">Lakeshore Group</p>
+      <p class="prow"><span class="mono">GLR-MI-090</span> Lakeshore Group HQ</p>
+      <p class="prow sel"><span class="mono">GLR-MI-104</span> Riverside Composite Sqdn</p>
+      <p class="prow"><span class="mono">GLR-MI-117</span> Harbor Beach Cadet Sqdn</p>
+      <p class="prow"><span class="mono">GLR-MI-133</span> Ottawa County Composite Sqdn</p>
+    </div>
+  </details>
+
+  <details class="menu asof">
+    <summary>as of 28 Aug 03:00</summary>
+    <div class="panel">
+      <p class="ph">Data currency</p>
+      <p class="kvline"><span>CAPWATCH extract</span><span class="mono">2026-08-28 03:00</span></p>
+      <p class="kvline"><span>Ingest run</span><span class="mono">#412 · OK · 03:19</span></p>
+      <p class="kvline"><span>Alert threshold</span><span class="mono">48 h</span></p>
+      <p class="kvline"><span>Deployment admin</span><span>Maj R. Whitfield</span></p>
+      <p class="pnote">Figures reflect last night's extract. This chip escalates only on a confirmed ingest failure.</p>
+    </div>
+  </details>
+
+  <details class="menu userchip">
+    <summary aria-label="User menu">JM</summary>
+    <div class="panel">
+      <p class="ph">Capt J. Morales · 612884</p>
+      <p class="prow">My Progress</p>
+      <p class="prow">Settings</p>
+      <p class="prow">Admin</p>
+      <p class="prow">Sign out</p>
+    </div>
+  </details>
+</header>
+
+<div class="layout">
+
+  <nav class="rail" aria-label="Sections">
+    <a href="#sec-status" class="cur"><span class="num">01</span> Your status <span class="g g-act" aria-hidden="true"></span></a>
+    <a href="#sec-unit"><span class="num">02</span> Your unit <span class="g g-watch" aria-hidden="true"></span></a>
+    <a href="#sec-platform"><span class="num">03</span> Platform</a>
+  </nav>
+
+  <main>
+    <div class="mast">
+      <p class="kicker">Daily brief · Sat 29 Aug 2026 · Data as of 28 Aug 03:00</p>
+      <h1>Good evening, Capt Morales.</h1>
+      <p class="meta">Signed in as <span class="mono">jmorales@wg.example.org</span> · matched to CAPID <span class="mono">612884</span> · Riverside Composite Sqdn</p>
+
+      <div class="bluf">
+        <p class="kicker">BLUF</p>
+        <p><b>One action this month: submit your Level 3 rating worksheet.</b></p>
+        <p class="sub">Your unit has 2 findings waiting in <a href="#sec-unit">Unit Overview</a>. Your GTL expires in 65 days.</p>
+      </div>
+    </div>
+
+    <!-- 01 YOUR STATUS -->
+    <section class="sec-s" id="sec-status" aria-labelledby="h-status">
+      <div class="sechead">
+        <span class="g g-act" aria-hidden="true"></span>
+        <span class="num secnum">01</span>
+        <span class="ttl" id="h-status">Your status</span>
+        <span class="stat">1 action · 1 watch</span>
+      </div>
+      <div class="secbody">
+        <p class="lead"><b>Next action:</b> submit your Level 3 specialty rating worksheet to your PDO. It is the last task between you and Level 3.</p>
+
+        <p class="blockttl">Professional development</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Level 3 in progress</span><span class="v">3 of 4 tasks done</span></div>
+        </div>
+        <details class="disc">
+          <summary>Show checklist</summary>
+          <ul class="check">
+            <li><span class="done" aria-hidden="true">✓</span><span class="item">Technician rating in primary specialty track</span><span class="date">done 14 Mar 2026</span></li>
+            <li><span class="done" aria-hidden="true">✓</span><span class="item">Education requirement</span><span class="date">done 02 Jun 2026</span></li>
+            <li><span class="done" aria-hidden="true">✓</span><span class="item">12 months serving in a duty position</span><span class="date">done 01 Jul 2026</span></li>
+            <li class="open"><span class="done" aria-hidden="true">·</span><span class="item">Submit rating worksheet to PDO</span><span class="date">open</span></li>
+          </ul>
+        </details>
+
+        <p class="blockttl">Emergency services currency</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Ground Team Leader <small>expires 02 Nov 2026</small></span><span class="v"><span class="tag tag-watch">Watch</span> 65 days</span></div>
+          <div class="kv"><span class="k">GES</span><span class="v">current</span></div>
+        </div>
+
+        <p class="blockttl">Awaiting approval</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Submitted tasks pending PDO or commander action</span><span class="v"><span class="muted">none</span></span></div>
+        </div>
+        <p class="note">Cadets see this section with their own rows: time-in-grade countdown, next achievement, HFZ validity, and orientation flights flown.</p>
+      </div>
+    </section>
+
+    <!-- 02 YOUR UNIT -->
+    <section class="sec-s" id="sec-unit" aria-labelledby="h-unit">
+      <div class="sechead">
+        <span class="g g-watch" aria-hidden="true"></span>
+        <span class="num secnum">02</span>
+        <span class="ttl" id="h-unit">Your unit</span>
+        <span class="stat">2 findings</span>
+      </div>
+      <div class="secbody">
+        <p class="lead"><b>Riverside Composite Squadron</b> <span class="mono" style="font-size:11px">GLR-MI-104</span> · mission-capable with gaps: 2 findings need action.</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Health</span><span class="v">R&amp;R 58 fair <span class="muted">·</span> ES 72 good</span></div>
+          <div class="kv"><span class="k">Meets</span><span class="v">Tuesdays 1830-2030</span></div>
+          <div class="kv"><span class="k">Location</span><span class="v">Riverside Armory, Grand Haven MI</span></div>
+          <div class="kv"><span class="k">Next meeting</span><span class="v">Tue 01 Sep</span></div>
+          <div class="kv"><span class="k">Strength</span><span class="v">41 <span class="muted">· 17 SM · 23 cadets · 1 patron</span></span></div>
+        </div>
+        <p class="links"><a href="#0">Open Unit Overview ›</a></p>
+      </div>
+    </section>
+
+    <!-- 03 PLATFORM -->
+    <section class="sec-s" id="sec-platform" aria-labelledby="h-platform">
+      <div class="sechead">
+        <span></span>
+        <span class="num secnum">03</span>
+        <span class="ttl" id="h-platform">Platform</span>
+        <span class="stat">2 notices</span>
+      </div>
+      <div class="secbody">
+        <p class="blockttl">Announcements</p>
+        <div class="annc">
+          <span class="d">24 AUG</span>
+          <div>
+            <b>Wing conference registration opens 01 Oct</b>
+            <span class="by">Posted by Wing Admin</span>
+            <details class="disc"><summary>Read more</summary>
+              <p class="body">Registration for the wing conference opens 01 Oct with an early rate through 15 Nov. Details will be posted here and emailed to unit commanders.</p>
+            </details>
+          </div>
+        </div>
+        <div class="annc">
+          <span class="d">18 AUG</span>
+          <div>
+            <b>Nightly ingest window moved to 03:00</b>
+            <span class="by">Posted by Deployment Admin</span>
+            <details class="disc"><summary>Read more</summary>
+              <p class="body">The CAPWATCH ingest now runs at 03:00 local so morning readers always see yesterday's extract. The as-of chip in the top bar shows the exact timestamp.</p>
+            </details>
+          </div>
+        </div>
+
+        <p class="blockttl">What's new</p>
+        <div class="annc">
+          <span class="d">29 AUG</span>
+          <div>
+            <b>v2.0.0</b>
+            <span class="by">From the changelog, baked at build time</span>
+            <ul class="rel" style="margin-top:4px">
+              <li>Rebuilt on TypeScript and PostgreSQL. Same six tabs, faster pages.</li>
+              <li>Unit Overview: Needs Attention queue and collapsible sections.</li>
+              <li>Every export now prints its as-of extract date.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="annc">
+          <span class="d">NEXT</span>
+          <div>
+            <b>Planned</b>
+            <ul class="rel" style="margin-top:4px">
+              <li>2.1: attendance and participation trends, recognition feed.</li>
+              <li>2.2: safety education currency, operational currency.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span>v2.0.0</span>
+    <span><a href="#0">Source on GitHub ↗</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

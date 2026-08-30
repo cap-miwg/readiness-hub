@@ -1,0 +1,1997 @@
+{
+  "APP_VERSION": "1.11.0",
+  "APP_CONFIG": {
+    "appName": "CAP Readiness Hub",
+    "appShortName": "Readiness Hub",
+    "logoUrl": ""
+  },
+  "APP_NAME": "CAP Readiness Hub",
+  "APP_SHORT_NAME": "Readiness Hub",
+  "FEEDBACK_CATEGORIES": [
+    {
+      "id": "bug",
+      "label": "Bug Report",
+      "icon": "Bug",
+      "description": "Something is not working correctly"
+    },
+    {
+      "id": "feature",
+      "label": "Feature Request",
+      "icon": "Lightbulb",
+      "description": "Suggest a new feature or improvement"
+    },
+    {
+      "id": "data-issue",
+      "label": "Data Issue",
+      "icon": "Database",
+      "description": "Incorrect or missing data"
+    },
+    {
+      "id": "ui-ux",
+      "label": "UI/UX Feedback",
+      "icon": "Palette",
+      "description": "Improve the look or usability"
+    },
+    {
+      "id": "question",
+      "label": "Question",
+      "icon": "HelpCircle",
+      "description": "Ask how something works"
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "icon": "MessageSquare",
+      "description": "General feedback"
+    }
+  ],
+  "DUTY_TO_TRACK_MAP": {
+    "AEROSPACE EDUCATION OFFICER": "AEROSPACE",
+    "CYBER EDUCATION OFFICER": "AEROSPACE",
+    "DIRECTOR OF AEROSPACE EDUCATION": "AEROSPACE",
+    "DEPUTY COMMANDER FOR CADETS": "CADET PROGRAMS",
+    "ACTIVITIES OFFICER": "CADET PROGRAMS",
+    "DRUG DEMAND REDUCTION OFFICER": "CADET PROGRAMS",
+    "FITNESS OFFICER": "CADET PROGRAMS",
+    "SQUADRON LEADERSHIP OFFICER": "CADET PROGRAMS",
+    "LEADERSHIP OFFICER": "CADET PROGRAMS",
+    "DIRECTOR OF CADET PROGRAMS": "CADET PROGRAMS",
+    "COMMANDER": "COMMAND",
+    "HISTORIAN": "HISTORIAN",
+    "HEALTH SERVICES OFFICER": "HEALTH SERVICES",
+    "DIRECTOR OF HEALTH SERVICES": "HEALTH SERVICES",
+    "COMMUNICATIONS OFFICER": "COMMUNICATIONS",
+    "DIRECTOR OF COMMUNICATIONS": "COMMUNICATIONS",
+    "DISASTER PREPAREDNESS OFFICER": "EMERGENCY SERVICES",
+    "EMERGENCY SERVICES OFFICER": "EMERGENCY SERVICES",
+    "EMERGENCY SERVICES TRAINING OFFICER": "EMERGENCY SERVICES",
+    "SEARCH AND RESCUE OFFICER": "EMERGENCY SERVICES",
+    "DIRECTOR OF EMERGENCY SERVICES": "EMERGENCY SERVICES",
+    "FINANCE OFFICER": "FINANCE",
+    "DIRECTOR OF FINANCE": "FINANCE",
+    "LEGAL OFFICER": "LEGAL",
+    "INFORMATION TECHNOLOGIES OFFICER": "INFORMATION TECHNOLOGY",
+    "WEB SECURITY ADMIN": "INFORMATION TECHNOLOGY",
+    "DIRECTOR OF INFORMATION TECHNOLOGY": "INFORMATION TECHNOLOGY",
+    "LOGISTICS OFFICER": "LOGISTICS",
+    "MAINTENANCE OFFICER": "LOGISTICS",
+    "SUPPLY OFFICER": "LOGISTICS",
+    "TRANSPORTATION OFFICER": "LOGISTICS",
+    "DIRECTOR OF LOGISTICS": "LOGISTICS",
+    "PUBLIC AFFAIRS OFFICER": "PUBLIC AFFAIRS",
+    "DIRECTOR OF PUBLIC AFFAIRS": "PUBLIC AFFAIRS",
+    "RECRUITING OFFICER": "RECRUITING AND RETENTION",
+    "RETENTION OFFICER": "RECRUITING AND RETENTION",
+    "RECRUITING AND RETENTION OFFICER": "RECRUITING AND RETENTION",
+    "DIRECTOR OF RECRUITING AND RETENTION": "RECRUITING AND RETENTION",
+    "ALERTING OFFICER": "OPERATIONS",
+    "HOMELAND SECURITY OFFICER": "OPERATIONS",
+    "OPERATIONS OFFICER": "OPERATIONS",
+    "SMALL UNMANNED AERIAL SYSTEMS OFFICER": "OPERATIONS",
+    "DIRECTOR OF OPERATIONS": "OPERATIONS",
+    "PERSONNEL OFFICER": "PERSONNEL",
+    "DIRECTOR OF PERSONNEL": "PERSONNEL",
+    "ADMINISTRATIVE OFFICER": "ADMINISTRATION",
+    "DIRECTOR OF ADMINISTRATION": "ADMINISTRATION",
+    "EDUCATION AND TRAINING OFFICER": "PROFESSIONAL DEVELOPMENT",
+    "TESTING OFFICER": "PROFESSIONAL DEVELOPMENT",
+    "DIRECTOR OF PROFESSIONAL DEVELOPMENT": "PROFESSIONAL DEVELOPMENT",
+    "DIRECTOR OF EDUCATION AND TRAINING": "PROFESSIONAL DEVELOPMENT",
+    "SAFETY OFFICER": "SAFETY",
+    "DIRECTOR OF SAFETY": "SAFETY",
+    "STANDARDIZATION AND EVALUATION OFFICER": "STANDARDS AND EVALUATIONS",
+    "STANDARDIZATION/EVALUATION OFFICER": "STANDARDS AND EVALUATIONS",
+    "DIRECTOR OF STANDARDIZATION AND EVALUATION": "STANDARDS AND EVALUATIONS",
+    "INSPECTOR GENERAL": "INSPECTOR GENERAL",
+    "CHAPLAIN": "CHAPLAIN",
+    "CHARACTER DEVELOPMENT INSTRUCTOR": "CHARACTER DEVELOPMENT"
+  },
+  "ES_STATUS_COLORS": {
+    "ACTIVE": {
+      "bg": "bg-emerald-100",
+      "text": "text-emerald-800",
+      "border": "border-emerald-300",
+      "badge": "green"
+    },
+    "TRAINING": {
+      "bg": "bg-amber-100",
+      "text": "text-amber-800",
+      "border": "border-amber-300",
+      "badge": "amber"
+    },
+    "EXPIRED": {
+      "bg": "bg-rose-100",
+      "text": "text-rose-800",
+      "border": "border-rose-300",
+      "badge": "red"
+    },
+    "NOT_APPROVED": {
+      "bg": "bg-slate-100",
+      "text": "text-slate-600",
+      "border": "border-slate-300",
+      "badge": "gray"
+    }
+  },
+  "ES_ACHIEVEMENT_IDS": {
+    "GES": "53",
+    "SET": "217",
+    "ICUT": "217",
+    "SET_ACTUAL": "124",
+    "VFR_PILOT": "44",
+    "MISSION_SCANNER": "55",
+    "GTL": "69",
+    "IC3": "61",
+    "DRIVERS_LICENSE": "211",
+    "BCUT": "212",
+    "ACUT": "213"
+  },
+  "ES_FUNCTIONAL_AREAS": {
+    "OPS-Emergency_Services": "Emergency Services",
+    "OPS-CAPPilot": "CAP Pilot",
+    "OPS-CAPPilot_OLD": "CAP Pilot (Outdated)",
+    "OPS-Emergency_Services_SAR": "Search & Rescue",
+    "OPS-Emergency_Services_DR": "Disaster Relief",
+    "OPS-DriversLicense": "Drivers License",
+    "Communications": "Communications",
+    "Cadet_Programs": "Cadet Programs",
+    "ET-Senior": "Education & Training - Senior",
+    "OPS-CounterDrug": "Counter Drug",
+    "OPS-ARCHER": "ARCHER",
+    "OPS-CISM": "CISM",
+    "OPS-OPSEC": "OPSEC",
+    "OPS-NOCAUG": "NOC Augmentee",
+    "OPS-K9Handler": "K9 Handler"
+  },
+  "ES_EXCLUDED_ACHIEVEMENT_IDS": [
+    "197",
+    "199",
+    "200",
+    "201",
+    "202",
+    "203",
+    "204",
+    "241",
+    "242",
+    "243",
+    "205",
+    "206",
+    "207",
+    "238",
+    "239",
+    "240",
+    "176",
+    "177",
+    "178",
+    "179",
+    "180",
+    "181",
+    "267",
+    "268",
+    "270",
+    "271",
+    "272",
+    "273",
+    "96",
+    "131",
+    "132",
+    "133",
+    "134",
+    "212",
+    "213",
+    "95",
+    "220",
+    "221",
+    "223"
+  ],
+  "ES_EXCLUDED_FUNCTIONAL_AREAS": [
+    "OPS-CAPPilot",
+    "OPS-CAPPilot_OLD",
+    "Cadet_Programs",
+    "ET-Senior"
+  ],
+  "ES_SKILLS_EVALUATOR_ALLOWED_FUNCTIONAL_AREAS": [
+    "OPS-Emergency_Services",
+    "Communications"
+  ],
+  "ES_PREREQUISITE_SPECIAL_CASES": {
+    "44": {
+      "name": "VFR Pilot",
+      "specialPrereqs": [
+        {
+          "type": "OR",
+          "options": [
+            "246",
+            "247"
+          ]
+        }
+      ]
+    },
+    "53": {
+      "name": "GES - General Emergency Services",
+      "specialPrereqs": [
+        {
+          "type": "CONDITIONAL_MEMBER_TYPE",
+          "senior": "96",
+          "cadet": "95"
+        },
+        {
+          "type": "TASK",
+          "taskID": "131"
+        }
+      ]
+    },
+    "64": {
+      "name": "PSC - Planning Section Chief",
+      "specialPrereqs": [
+        {
+          "type": "OR_WITH_CROSS_TRAINING",
+          "options": [
+            {
+              "achvID": "67",
+              "crossTraining": [
+                "70",
+                "71"
+              ]
+            },
+            {
+              "achvID": "68",
+              "crossTraining": [
+                "55"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "257": {
+      "name": "UASMP - sUAS Mission Pilot",
+      "specialPrereqs": [
+        {
+          "type": "TASK",
+          "taskID": "1502"
+        },
+        {
+          "type": "TASK",
+          "taskID": "1544"
+        }
+      ]
+    }
+  },
+  "ES_AGE_REQUIREMENTS": {
+    "55": 18,
+    "56": 18,
+    "57": 18,
+    "61": 21,
+    "63": 21,
+    "64": 21,
+    "65": 21,
+    "66": 21,
+    "68": 18,
+    "69": 18,
+    "72": 18,
+    "73": 18,
+    "77": 21,
+    "78": 18,
+    "81": 18,
+    "125": 21,
+    "128": 21,
+    "193": 18,
+    "211": 18
+  },
+  "ES_DASHBOARD_SPECIAL": {
+    "GES": "53",
+    "OPSEC": "169",
+    "SE_TRAINING": "124",
+    "CD_COUNTERDRUG": "112"
+  },
+  "ES_NO_SKILLS_EVALUATOR_IDS": [
+    "53",
+    "124",
+    "182",
+    "186",
+    "187",
+    "188",
+    "189",
+    "190",
+    "248",
+    "250",
+    "257"
+  ],
+  "ES_NON_EXPIRING_EXCLUSIONS": [
+    "198",
+    "187",
+    "188"
+  ],
+  "ES_TEAM_REQUIREMENTS": {
+    "fieldOps": {
+      "name": "Field Operations",
+      "shortName": "Field",
+      "icon": "Users",
+      "description": "Ground teams and urban direction finding",
+      "achvIDs": {
+        "GTL": "69",
+        "GTM1": "127",
+        "GTM2": "126",
+        "GTM3": "70",
+        "UDF": "71",
+        "GBD": "68"
+      },
+      "gtmAchvIDs": [
+        "70",
+        "126",
+        "127"
+      ]
+    },
+    "aircrew": {
+      "name": "Aircrew",
+      "shortName": "Air",
+      "icon": "Plane",
+      "description": "Airborne search and reconnaissance",
+      "minimum": {
+        "pilot": 1,
+        "scanner": 1
+      },
+      "preferred": {
+        "MP": 1,
+        "MO": 1,
+        "AP": 1
+      },
+      "achvIDs": {
+        "MP": "57",
+        "TMP": "56",
+        "MS": "55",
+        "MO": "81",
+        "AP": "193",
+        "AOBD": "67"
+      },
+      "pilotAchvIDs": [
+        "56",
+        "57"
+      ],
+      "scannerAchvIDs": [
+        "55",
+        "81"
+      ]
+    },
+    "suas": {
+      "name": "sUAS Team",
+      "shortName": "sUAS",
+      "icon": "Camera",
+      "description": "Small Unmanned Aerial Systems team",
+      "minimum": {
+        "UASMP": 1,
+        "UAST": 1
+      },
+      "achvIDs": {
+        "UASMP": "257",
+        "UAST": "258"
+      }
+    },
+    "missionBase": {
+      "name": "Mission Base",
+      "shortName": "Base",
+      "icon": "Radio",
+      "description": "Mission base operations staff",
+      "positions": [
+        {
+          "code": "MSA",
+          "name": "Mission Staff Assistant",
+          "achvID": "80"
+        },
+        {
+          "code": "MRO",
+          "name": "Mission Radio Operator",
+          "achvID": "76"
+        },
+        {
+          "code": "CUL",
+          "name": "Communications Unit Leader",
+          "achvID": "75"
+        },
+        {
+          "code": "FLM",
+          "name": "Flight Line Marshaller",
+          "achvID": "74"
+        },
+        {
+          "code": "FLS",
+          "name": "Flight Line Supervisor",
+          "achvID": "73"
+        },
+        {
+          "code": "PIO",
+          "name": "Public Information Officer",
+          "achvID": "72"
+        },
+        {
+          "code": "LO",
+          "name": "Liaison Officer",
+          "achvID": "78"
+        },
+        {
+          "code": "MSO",
+          "name": "Mission Safety Officer",
+          "achvID": "77"
+        }
+      ],
+      "minimumPositions": [
+        "MSA",
+        "MRO"
+      ]
+    },
+    "command": {
+      "name": "Command Staff",
+      "shortName": "Cmd",
+      "icon": "Shield",
+      "description": "Incident command and section chiefs",
+      "positions": [
+        {
+          "code": "IC3",
+          "name": "Incident Commander Level 3",
+          "achvID": "61",
+          "tier": 1
+        },
+        {
+          "code": "IC2",
+          "name": "Incident Commander Level 2",
+          "achvID": "125",
+          "tier": 2
+        },
+        {
+          "code": "IC1",
+          "name": "Incident Commander Level 1",
+          "achvID": "128",
+          "tier": 3
+        },
+        {
+          "code": "OSC",
+          "name": "Operations Section Chief",
+          "achvID": "63",
+          "section": true
+        },
+        {
+          "code": "PSC",
+          "name": "Planning Section Chief",
+          "achvID": "64",
+          "section": true
+        },
+        {
+          "code": "LSC",
+          "name": "Logistics Section Chief",
+          "achvID": "65",
+          "section": true
+        },
+        {
+          "code": "FASC",
+          "name": "Finance/Admin Section Chief",
+          "achvID": "66",
+          "section": true
+        },
+        {
+          "code": "GBD",
+          "name": "Ground Branch Director",
+          "achvID": "68",
+          "branch": true
+        },
+        {
+          "code": "AOBD",
+          "name": "Air Operations Branch Director",
+          "achvID": "67",
+          "branch": true
+        }
+      ],
+      "icAchvIDs": [
+        "61",
+        "125",
+        "128"
+      ],
+      "sectionChiefAchvIDs": [
+        "63",
+        "64",
+        "65",
+        "66"
+      ]
+    }
+  },
+  "ES_ACHV_TO_POSITION": {
+    "53": "GES",
+    "55": "MS",
+    "56": "TMP",
+    "57": "MP",
+    "61": "IC3",
+    "63": "OSC",
+    "64": "PSC",
+    "65": "LSC",
+    "66": "FASC",
+    "67": "AOBD",
+    "68": "GBD",
+    "69": "GTL",
+    "70": "GTM3",
+    "71": "UDF",
+    "72": "PIO",
+    "73": "FLS",
+    "74": "FLM",
+    "75": "CUL",
+    "76": "MRO",
+    "77": "MSO",
+    "78": "LO",
+    "80": "MSA",
+    "81": "MO",
+    "124": "SET",
+    "125": "IC2",
+    "126": "GTM2",
+    "127": "GTM1",
+    "128": "IC1",
+    "193": "AP",
+    "257": "UASMP",
+    "258": "UAST"
+  },
+  "ES_POSITION_TO_ACHV": {
+    "GES": "53",
+    "MS": "55",
+    "TMP": "56",
+    "MP": "57",
+    "IC3": "61",
+    "OSC": "63",
+    "PSC": "64",
+    "LSC": "65",
+    "FASC": "66",
+    "AOBD": "67",
+    "GBD": "68",
+    "GTL": "69",
+    "GTM3": "70",
+    "UDF": "71",
+    "PIO": "72",
+    "FLS": "73",
+    "FLM": "74",
+    "CUL": "75",
+    "MRO": "76",
+    "MSO": "77",
+    "LO": "78",
+    "MSA": "80",
+    "MO": "81",
+    "SET": "124",
+    "IC2": "125",
+    "GTM2": "126",
+    "GTM1": "127",
+    "IC1": "128",
+    "AP": "193",
+    "UASMP": "257",
+    "UAST": "258"
+  },
+  "ES_READINESS_WEIGHTS": {
+    "teamCapability": 0.35,
+    "qualificationHealth": 0.25,
+    "evaluatorCoverage": 0.15,
+    "riskMitigation": 0.15,
+    "pipelineStrength": 0.1
+  },
+  "ES_READINESS_THRESHOLDS": {
+    "excellent": 80,
+    "good": 65,
+    "fair": 50
+  },
+  "COMMUNICATIONS_DUTY_POSITIONS": [
+    "DIRECTOR OF COMMUNICATIONS",
+    "COMMUNICATIONS OFFICER",
+    "CADET COMMUNICATIONS OFFICER"
+  ],
+  "CADET_ACHIEVEMENT_TO_RANK": {
+    "1": "C/Amn",
+    "2": "C/A1C",
+    "3": "C/SrA",
+    "4": "C/SSgt",
+    "5": "C/TSgt",
+    "6": "C/MSgt",
+    "7": "C/SMSgt",
+    "8": "C/CMSgt",
+    "9": "C/CMSgt",
+    "10": "C/2d Lt",
+    "11": "C/2d Lt",
+    "12": "C/1st Lt",
+    "13": "C/1st Lt",
+    "14": "C/Capt",
+    "15": "C/Capt",
+    "16": "C/Capt",
+    "17": "C/Maj",
+    "18": "C/Maj",
+    "19": "C/Maj",
+    "20": "C/Lt Col",
+    "21": "C/Col"
+  },
+  "CADET_PHASES": {
+    "1": {
+      "name": "Phase I (Learning)",
+      "achievements": [
+        1,
+        2,
+        3
+      ],
+      "milestoneAchv": 4,
+      "milestoneName": "Wright Brothers"
+    },
+    "2": {
+      "name": "Phase II (Leadership)",
+      "achievements": [
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "milestoneAchv": 10,
+      "milestoneName": "Billy Mitchell",
+      "requiresEncampment": true
+    },
+    "3": {
+      "name": "Phase III (Command)",
+      "achievements": [
+        11,
+        12,
+        13
+      ],
+      "milestoneAchv": 14,
+      "milestoneName": "Amelia Earhart"
+    },
+    "4": {
+      "name": "Phase IV (Executive)",
+      "achievements": [
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "milestoneAchv": 20,
+      "milestoneName": "Ira C. Eaker",
+      "requiresCLS": true
+    },
+    "5": {
+      "name": "Spaatz Award",
+      "achievements": [],
+      "milestoneAchv": 21,
+      "milestoneName": "Carl A. Spaatz"
+    }
+  },
+  "CADET_MILESTONE_ACHIEVEMENTS": [
+    4,
+    10,
+    14,
+    20,
+    21
+  ],
+  "CADET_ACHIEVEMENT_PIONEERS": {
+    "1": "Curry",
+    "2": "Arnold",
+    "3": "Feik",
+    "5": "Rickenbacker",
+    "7": "Doolittle",
+    "8": "Goddard",
+    "9": "Armstrong",
+    "12": "Brown",
+    "17": "Boyd",
+    "18": "Ride"
+  },
+  "CADET_ACHIEVEMENT_NAMES": {
+    "1": "Achievement 1",
+    "2": "Achievement 2",
+    "3": "Achievement 3",
+    "4": "Wright Brothers",
+    "5": "Achievement 4",
+    "6": "Achievement 5",
+    "7": "Achievement 6",
+    "8": "Achievement 7",
+    "9": "Achievement 8",
+    "10": "Billy Mitchell",
+    "11": "Achievement 9",
+    "12": "Achievement 10",
+    "13": "Achievement 11",
+    "14": "Amelia Earhart",
+    "15": "Achievement 12",
+    "16": "Achievement 13",
+    "17": "Achievement 14",
+    "18": "Achievement 15",
+    "19": "Achievement 16",
+    "20": "Gen Ira C Eaker",
+    "21": "Gen Carl A Spaatz"
+  },
+  "CADET_PUBLIC_ACHIEVEMENT_NUMBERS": {
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "5": 4,
+    "6": 5,
+    "7": 6,
+    "8": 7,
+    "9": 8,
+    "11": 9,
+    "12": 10,
+    "13": 11,
+    "15": 12,
+    "16": 13,
+    "17": 14,
+    "18": 15,
+    "19": 16
+  },
+  "CADET_RANK_INSIGNIA": {
+    "1": "https://drive.google.com/thumbnail?id=167Z2v5uu9GWG8SBr_h67xVIj51AUj22s&sz=w200",
+    "2": "https://drive.google.com/thumbnail?id=1D2s7d9kILAEKmf5WsoqCsFQ3GV6qKEZA&sz=w200",
+    "3": "https://drive.google.com/thumbnail?id=1Yy6bs1qMLHKk1_GgkYHkRkD2NqEF2yEo&sz=w200",
+    "4": "https://drive.google.com/thumbnail?id=12_z47ceNd8Ipao-UXzD-wI6WD0wQOzvy&sz=w200",
+    "5": "https://drive.google.com/thumbnail?id=1-ItusNWLmJR5jzAQGgdTivQciPaPCS1y&sz=w200",
+    "6": "https://drive.google.com/thumbnail?id=1wVCkls5mJA8LCVR8C3UMW2VN_Gn2YqjS&sz=w200",
+    "7": "https://drive.google.com/thumbnail?id=1PbShr0Lpd4eP5IYJojxynFgW4VM-dQN7&sz=w200",
+    "8": "https://drive.google.com/thumbnail?id=1MeT5Iq_ZXgicPAFhvx_nwyOhp7jWnaD2&sz=w200",
+    "9": "https://drive.google.com/thumbnail?id=1MeT5Iq_ZXgicPAFhvx_nwyOhp7jWnaD2&sz=w200",
+    "10": "https://drive.google.com/thumbnail?id=18uWgxCSwESqSQ5kxI066uu1lMiKyKp9Q&sz=w200",
+    "11": "https://drive.google.com/thumbnail?id=18uWgxCSwESqSQ5kxI066uu1lMiKyKp9Q&sz=w200",
+    "12": "https://drive.google.com/thumbnail?id=1Ei_WCpLRL2aG4yBCNDPU3uupj9kg-q6D&sz=w200",
+    "13": "https://drive.google.com/thumbnail?id=1Ei_WCpLRL2aG4yBCNDPU3uupj9kg-q6D&sz=w200",
+    "14": "https://drive.google.com/thumbnail?id=1ofimebcDTSezpjFx1p5Km4JxKASQ6_da&sz=w200",
+    "15": "https://drive.google.com/thumbnail?id=1ofimebcDTSezpjFx1p5Km4JxKASQ6_da&sz=w200",
+    "16": "https://drive.google.com/thumbnail?id=1ofimebcDTSezpjFx1p5Km4JxKASQ6_da&sz=w200",
+    "17": "https://drive.google.com/thumbnail?id=1BqEUaSAeFpWBbYGZKsN2uDjLbsbqOWv9&sz=w200",
+    "18": "https://drive.google.com/thumbnail?id=1BqEUaSAeFpWBbYGZKsN2uDjLbsbqOWv9&sz=w200",
+    "19": "https://drive.google.com/thumbnail?id=1BqEUaSAeFpWBbYGZKsN2uDjLbsbqOWv9&sz=w200",
+    "20": "https://drive.google.com/thumbnail?id=1TnqlPKUWiSGe4nfANyj-FB0c5-i585r8&sz=w200",
+    "21": "https://drive.google.com/thumbnail?id=14GxKhbIbwq5p16CwmRGubkZDjqSNvVSS&sz=w200"
+  },
+  "CADET_TIME_IN_GRADE_DAYS": 56,
+  "CADET_MIN_TEST_SCORE": 80,
+  "CADET_REQUIREMENT_LABELS": {
+    "timeInGrade": "Time in Grade (8 weeks)",
+    "physicalFitness": {
+      "early": "Physical Fitness (HFZ attempted within 180 days)",
+      "standard": "Physical Fitness (HFZ passed within 180 days)"
+    },
+    "activeParticipation": "Active",
+    "cadetOath": "Oath",
+    "characterDevelopment": "Character Development",
+    "leadershipTest": "Leadership Test (80%+)",
+    "aerospaceTest": "Aerospace Test (80%+)",
+    "drillTest": "Drill & Ceremonies",
+    "sdaService": "SDA: Service",
+    "sdaPresentation": "SDA: Presentation",
+    "sdaWriting": "SDA: Writing",
+    "leadershipExpectations": "Leadership Expectations",
+    "uniformWear": "Uniform",
+    "leadershipFeedback": "Leadership Feedback",
+    "cadetWingmanCourse": "Cadet Wingman Course",
+    "wrightBrothersLeadershipExam": "Comprehensive Exam: Learn to Lead Ch. 1-3",
+    "mitchellLeadershipExam": "Comprehensive Exam: Learn to Lead Ch. 4-8",
+    "mitchellAerospaceExam": "Comprehensive Exam: Aerospace Dimensions 1-7",
+    "encampment": "Encampment (Required)",
+    "earhartLeadershipExam": "Comprehensive Exam: Learn to Lead Ch. 9-11",
+    "achievement8Speech": "Speech",
+    "achievement8Essay": "Essay",
+    "eakerSpeech": "Speech",
+    "eakerEssay": "Essay",
+    "cls": "Cadet Leadership School (RCLS/COS)",
+    "spaatzLeadershipExam": "Comprehensive Exam: Learn to Lead Ch. 1-16",
+    "spaatzJOFExam": "Comprehensive Exam: Journey of Flight",
+    "spaatzEssay": "Essay",
+    "spaatzCFA": "USAFA Candidate Fitness Assessment"
+  },
+  "CADET_DEFAULT_REQUIREMENTS": [
+    "physicalFitness",
+    "activeParticipation",
+    "cadetOath",
+    "characterDevelopment",
+    "timeInGrade"
+  ],
+  "CADET_ACHIEVEMENT_REQUIREMENTS": {
+    "1": [
+      "leadershipTest",
+      "drillTest",
+      "leadershipExpectations",
+      "cadetWingmanCourse",
+      "physicalFitness",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "2": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "3": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "4": [
+      "wrightBrothersLeadershipExam",
+      "drillTest",
+      "leadershipFeedback",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "5": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "6": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "7": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "8": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "9": [
+      "leadershipTest",
+      "aerospaceTest",
+      "drillTest",
+      "achievement8Speech",
+      "achievement8Essay",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "10": [
+      "mitchellLeadershipExam",
+      "mitchellAerospaceExam",
+      "encampment",
+      "leadershipFeedback",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "11": [
+      "leadershipTest",
+      "aerospaceTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "12": [
+      "leadershipTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "13": [
+      "leadershipTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "14": [
+      "earhartLeadershipExam",
+      "leadershipFeedback",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "15": [
+      "leadershipTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "16": [
+      "leadershipTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "17": [
+      "leadershipTest",
+      "aerospaceTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "18": [
+      "leadershipTest",
+      "aerospaceTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "19": [
+      "leadershipTest",
+      "aerospaceTest",
+      "sdaService",
+      "sdaPresentation",
+      "sdaWriting",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "characterDevelopment",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "20": [
+      "leadershipTest",
+      "eakerSpeech",
+      "eakerEssay",
+      "cls",
+      "leadershipFeedback",
+      "leadershipExpectations",
+      "uniformWear",
+      "physicalFitness",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ],
+    "21": [
+      "spaatzLeadershipExam",
+      "spaatzJOFExam",
+      "spaatzEssay",
+      "spaatzCFA",
+      "leadershipExpectations",
+      "uniformWear",
+      "activeParticipation",
+      "cadetOath",
+      "timeInGrade"
+    ]
+  },
+  "CADET_LEADERSHIP_EXPECTATIONS_TASKS": {
+    "1": "451",
+    "2": "458",
+    "3": "461",
+    "4": "503",
+    "5": "464",
+    "6": "467",
+    "7": "470",
+    "8": "473",
+    "9": "476",
+    "10": "506",
+    "11": "479",
+    "12": "482",
+    "13": "485",
+    "14": "509",
+    "15": "488",
+    "16": "491",
+    "17": "494",
+    "18": "497",
+    "19": "500",
+    "20": "512",
+    "21": "515"
+  },
+  "CADET_UNIFORM_TASKS": {
+    "2": "516",
+    "3": "517",
+    "4": "531",
+    "5": "518",
+    "6": "519",
+    "7": "520",
+    "8": "521",
+    "9": "522",
+    "10": "532",
+    "11": "523",
+    "12": "524",
+    "13": "525",
+    "14": "533",
+    "15": "526",
+    "16": "527",
+    "17": "528",
+    "18": "529",
+    "19": "530",
+    "20": "534",
+    "21": "535"
+  },
+  "CADET_DRILL_TASKS": {
+    "1": "328",
+    "2": "333",
+    "3": "344",
+    "4": "348",
+    "5": "352",
+    "6": "357",
+    "7": "362",
+    "8": "367",
+    "9": "372"
+  },
+  "CADET_CHARACTER_FORUM_TASKS": {
+    "2": "340",
+    "3": "345",
+    "5": "353",
+    "6": "358",
+    "7": "363",
+    "8": "368",
+    "9": "376",
+    "11": "400",
+    "12": "406",
+    "13": "412",
+    "15": "419",
+    "16": "424",
+    "17": "429",
+    "18": "434",
+    "19": "439"
+  },
+  "CADET_OATH_TASKS": {
+    "1": "450",
+    "2": "456",
+    "3": "459",
+    "4": "501",
+    "5": "462",
+    "6": "465",
+    "7": "468",
+    "8": "471",
+    "9": "474",
+    "10": "504",
+    "11": "477",
+    "12": "480",
+    "13": "483",
+    "14": "507",
+    "15": "486",
+    "16": "489",
+    "17": "492",
+    "18": "495",
+    "19": "498",
+    "20": "510",
+    "21": "513"
+  },
+  "CADET_ACTIVE_PARTICIPATION_TASKS": {
+    "1": "449",
+    "2": "457",
+    "3": "460",
+    "4": "502",
+    "5": "463",
+    "6": "466",
+    "7": "469",
+    "8": "472",
+    "9": "475",
+    "10": "505",
+    "11": "478",
+    "12": "481",
+    "13": "484",
+    "14": "508",
+    "15": "487",
+    "16": "490",
+    "17": "493",
+    "18": "496",
+    "19": "499",
+    "20": "511",
+    "21": "514"
+  },
+  "CADET_SDA_SERVICE_TASKS": {
+    "11": "404",
+    "12": "392",
+    "13": "410",
+    "15": "417",
+    "16": "422",
+    "17": "427",
+    "18": "432",
+    "19": "437"
+  },
+  "CADET_SDA_PRESENTATION_TASKS": {
+    "11": "393",
+    "12": "405",
+    "13": "411",
+    "15": "418",
+    "16": "423",
+    "17": "428",
+    "18": "433",
+    "19": "438"
+  },
+  "CADET_SDA_WRITING_TASKS": [
+    "384",
+    "385",
+    "386",
+    "387",
+    "388",
+    "389",
+    "390",
+    "391"
+  ],
+  "CADET_PHASE_LEADERSHIP_FEEDBACK_TASKS": {
+    "1": "452",
+    "2": "453",
+    "3": "454",
+    "4": "455"
+  },
+  "CADET_ACHIEVEMENT_PATH_IDS": {
+    "1": "31",
+    "2": "32",
+    "3": "33",
+    "5": "35",
+    "6": "36",
+    "7": "37",
+    "8": "38",
+    "9": "39",
+    "11": "41",
+    "12": "42",
+    "13": "43",
+    "15": "45",
+    "16": "46",
+    "17": "47",
+    "18": "48",
+    "19": "49"
+  },
+  "ACHIEVEMENT_LEADERSHIP_MODULE_TASKS": {
+    "1": [
+      "325",
+      "326"
+    ],
+    "2": [
+      "331"
+    ],
+    "3": [
+      "342"
+    ],
+    "5": [
+      "350"
+    ],
+    "6": [
+      "355"
+    ],
+    "7": [
+      "360"
+    ],
+    "8": [
+      "365"
+    ],
+    "9": [
+      "370"
+    ],
+    "11": [
+      "382"
+    ],
+    "12": [
+      "402"
+    ],
+    "13": [
+      "408"
+    ],
+    "15": [
+      "416"
+    ],
+    "16": [
+      "421"
+    ],
+    "17": [
+      "426"
+    ],
+    "18": [
+      "431"
+    ],
+    "19": [
+      "436"
+    ]
+  },
+  "AEROSPACE_DIMENSIONS_MODULES": [
+    {
+      "moduleNum": 1,
+      "taskId": "334",
+      "achievementId": "2",
+      "title": "Aerospace Dimensions 1 - Introduction to Flight"
+    },
+    {
+      "moduleNum": 2,
+      "taskId": "335",
+      "achievementId": "3",
+      "title": "Aerospace Dimensions 2 - Aircraft Systems & Airports"
+    },
+    {
+      "moduleNum": 3,
+      "taskId": "336",
+      "achievementId": "5",
+      "title": "Aerospace Dimensions 3 - Air Environment"
+    },
+    {
+      "moduleNum": 4,
+      "taskId": "337",
+      "achievementId": "6",
+      "title": "Aerospace Dimensions 4 - Rockets"
+    },
+    {
+      "moduleNum": 5,
+      "taskId": "338",
+      "achievementId": "7",
+      "title": "Aerospace Dimensions 5 - Space Environment"
+    },
+    {
+      "moduleNum": 6,
+      "taskId": "339",
+      "achievementId": "8",
+      "title": "Aerospace Dimensions 6 - Spacecraft"
+    },
+    {
+      "moduleNum": 7,
+      "taskId": "375",
+      "achievementId": "9",
+      "title": "Aerospace Dimensions 7 - Cyber Security"
+    }
+  ],
+  "ACHIEVEMENT_AEROSPACE_MODULE_TASKS": {
+    "2": [
+      "334"
+    ],
+    "3": [
+      "335"
+    ],
+    "5": [
+      "336"
+    ],
+    "6": [
+      "337"
+    ],
+    "7": [
+      "338"
+    ],
+    "8": [
+      "339"
+    ],
+    "9": [
+      "375"
+    ],
+    "11": [
+      "394"
+    ],
+    "17": [
+      "397"
+    ],
+    "18": [
+      "398"
+    ],
+    "19": [
+      "399"
+    ]
+  },
+  "LEVELS": [
+    {
+      "id": "L1",
+      "label": "1",
+      "name": "Level 1",
+      "pathMatch": "Level 1",
+      "baseLevel": 1,
+      "legacyKey": "LV1"
+    },
+    {
+      "id": "L2P1",
+      "label": "2.1",
+      "name": "Level 2 Part 1",
+      "pathMatch": "Level 2 Part 1",
+      "baseLevel": 2
+    },
+    {
+      "id": "L2P2",
+      "label": "2.2",
+      "name": "Level 2 Part 2",
+      "pathMatch": "Level 2 Part 2",
+      "fallbackMatch": "Level 2",
+      "baseLevel": 2,
+      "legacyKey": "LV2"
+    },
+    {
+      "id": "L3",
+      "label": "3",
+      "name": "Level 3",
+      "pathMatch": "Level 3",
+      "baseLevel": 3,
+      "legacyKey": "LV3"
+    },
+    {
+      "id": "L4",
+      "label": "4",
+      "name": "Level 4",
+      "pathMatch": "Level 4",
+      "baseLevel": 4,
+      "legacyKey": "LV4"
+    },
+    {
+      "id": "L5",
+      "label": "5",
+      "name": "Level 5",
+      "pathMatch": "Level 5",
+      "baseLevel": 5,
+      "legacyKey": "LV5"
+    }
+  ],
+  "LEVEL_ORDER": [
+    "L1",
+    "L2P1",
+    "L2P2",
+    "L3",
+    "L4",
+    "L5"
+  ],
+  "LEVEL_DISPLAY_MAP": {
+    "L1": {
+      "id": "L1",
+      "label": "1",
+      "name": "Level 1",
+      "pathMatch": "Level 1",
+      "baseLevel": 1,
+      "legacyKey": "LV1"
+    },
+    "L2P1": {
+      "id": "L2P1",
+      "label": "2.1",
+      "name": "Level 2 Part 1",
+      "pathMatch": "Level 2 Part 1",
+      "baseLevel": 2
+    },
+    "L2P2": {
+      "id": "L2P2",
+      "label": "2.2",
+      "name": "Level 2 Part 2",
+      "pathMatch": "Level 2 Part 2",
+      "fallbackMatch": "Level 2",
+      "baseLevel": 2,
+      "legacyKey": "LV2"
+    },
+    "L3": {
+      "id": "L3",
+      "label": "3",
+      "name": "Level 3",
+      "pathMatch": "Level 3",
+      "baseLevel": 3,
+      "legacyKey": "LV3"
+    },
+    "L4": {
+      "id": "L4",
+      "label": "4",
+      "name": "Level 4",
+      "pathMatch": "Level 4",
+      "baseLevel": 4,
+      "legacyKey": "LV4"
+    },
+    "L5": {
+      "id": "L5",
+      "label": "5",
+      "name": "Level 5",
+      "pathMatch": "Level 5",
+      "baseLevel": 5,
+      "legacyKey": "LV5"
+    }
+  },
+  "MODERATED_MODULES": {
+    "L2P1": [
+      "Accountability and Responsibility of the Adult Leader",
+      "Cadet Protection from the Senior Perspective",
+      "Choosing Your Duty Assignment and Specialty Track",
+      "Bringing Your Service to Civil Air Patrol"
+    ],
+    "L2P2": [
+      "Communication Fundamentals",
+      "Civil Air Patrol Communication Fundamentals",
+      "Mentoring",
+      "Basic Drill",
+      "Leadership Fundamentals",
+      "Leading Volunteers"
+    ],
+    "L3": [
+      "Compliance Requirements",
+      "Command Responsibility in Finance",
+      "Safety and Risk Management for Squadron Level Leaders",
+      "Stewardship and Risk Management",
+      "Advanced Civil Air Patrol Communications",
+      "Communication Skills for Command",
+      "The Care and Feeding of a Member",
+      "Developing Our Members",
+      "Motivating and Mentoring",
+      "Effective Volunteer Teams",
+      "Leading People and Managing Stuff",
+      "Customs, Courtesies, and Ceremonies",
+      "Taking Command",
+      "Squadrons and the Missions",
+      "Meetings and Meeting Planning",
+      "Data-Driven Decision Making",
+      "Public Affairs and Branding",
+      "Reaching Outside the Squadron",
+      "Commander's Intent",
+      "Appointing and Utilizing Staff",
+      "The Role and Responsibilities of the Squadron/Flight Commander"
+    ],
+    "L4": [
+      "Developing Personal Leadership Philosophy",
+      "The Role and Responsibilities of the Group Commander",
+      "Maintaining High Performing Teams",
+      "Engaging and Working with the Cadet Advisory Council",
+      "Management Principles",
+      "Mentoring Skills and Program Development",
+      "Shaping Cultures of Trust and Innovation",
+      "Using New Media to Communicate",
+      "Boards and Board Leadership",
+      "The Civil Air Patrol Safety Program for Group or Wing Level Leader",
+      "Planning and Leading A Major Activity",
+      "Prioritization and Time Management",
+      "Recruiting and Retention",
+      "Staff Processes Group Staffing",
+      "Effective Communication with External Partners",
+      "Leadership Challenges Today Membership Issues",
+      "Group Staffing",
+      "Role of the Group"
+    ],
+    "L5": [
+      "Local to the Global: A Broadened View of Civil Air Patrol",
+      "Emerging Leadership Trends",
+      "Committees and Teams",
+      "Boards at the Region and National Level",
+      "Strategic Engagement with the Cadet Advisory Council",
+      "Ethical Leadership",
+      "Mentoring Programs",
+      "Developing Staff and Succession Planning",
+      "Preparing to Serve on Region or National Staff",
+      "Region Commander Roles and Responsibilities",
+      "Civil Air Patrol Governance",
+      "Selecting Members of the Board of Governors",
+      "The Chief Operating Officer and CAP-USAF Commander Perspectives",
+      "The National Commander's Perspective",
+      "Operations at a Strategic Level",
+      "Safety and Risk Management for Region and National Leaders",
+      "Marketing and Strategic Communications",
+      "Logistics and Property Management",
+      "Fleet Management",
+      "Logistics at the Region Level",
+      "Leading Change",
+      "Government Relations",
+      "Financial Management",
+      "Finances at the Region Level",
+      "The Civil Air Patrol Strategic Plan",
+      "Linking the Region to the Strategic Plan",
+      "Strategic Leadership",
+      "Challenging Situations and Region Command",
+      "Civil Air Patrol Culture and Its Unique Challenges",
+      "Capstone Project"
+    ]
+  },
+  "MODERATED_LOOKUP": {
+    "L2P1": [
+      "ACCOUNTABILITYANDRESPONSIBILITYOFTHEADULTLEADER",
+      "CADETPROTECTIONFROMTHESENIORPERSPECTIVE",
+      "CHOOSINGYOURDUTYASSIGNMENTANDSPECIALTYTRACK",
+      "BRINGINGYOURSERVICETOCIVILAIRPATROL"
+    ],
+    "L2P2": [
+      "COMMUNICATIONFUNDAMENTALS",
+      "CIVILAIRPATROLCOMMUNICATIONFUNDAMENTALS",
+      "MENTORING",
+      "BASICDRILL",
+      "LEADERSHIPFUNDAMENTALS",
+      "LEADINGVOLUNTEERS"
+    ],
+    "L3": [
+      "COMPLIANCEREQUIREMENTS",
+      "COMMANDRESPONSIBILITYINFINANCE",
+      "SAFETYANDRISKMANAGEMENTFORSQUADRONLEVELLEADERS",
+      "STEWARDSHIPANDRISKMANAGEMENT",
+      "ADVANCEDCIVILAIRPATROLCOMMUNICATIONS",
+      "COMMUNICATIONSKILLSFORCOMMAND",
+      "THECAREANDFEEDINGOFAMEMBER",
+      "DEVELOPINGOURMEMBERS",
+      "MOTIVATINGANDMENTORING",
+      "EFFECTIVEVOLUNTEERTEAMS",
+      "LEADINGPEOPLEANDMANAGINGSTUFF",
+      "CUSTOMSCOURTESIESANDCEREMONIES",
+      "TAKINGCOMMAND",
+      "SQUADRONSANDTHEMISSIONS",
+      "MEETINGSANDMEETINGPLANNING",
+      "DATADRIVENDECISIONMAKING",
+      "PUBLICAFFAIRSANDBRANDING",
+      "REACHINGOUTSIDETHESQUADRON",
+      "COMMANDERSINTENT",
+      "APPOINTINGANDUTILIZINGSTAFF",
+      "THEROLEANDRESPONSIBILITIESOFTHESQUADRONFLIGHTCOMMANDER"
+    ],
+    "L4": [
+      "DEVELOPINGPERSONALLEADERSHIPPHILOSOPHY",
+      "THEROLEANDRESPONSIBILITIESOFTHEGROUPCOMMANDER",
+      "MAINTAININGHIGHPERFORMINGTEAMS",
+      "ENGAGINGANDWORKINGWITHTHECADETADVISORYCOUNCIL",
+      "MANAGEMENTPRINCIPLES",
+      "MENTORINGSKILLSANDPROGRAMDEVELOPMENT",
+      "SHAPINGCULTURESOFTRUSTANDINNOVATION",
+      "USINGNEWMEDIATOCOMMUNICATE",
+      "BOARDSANDBOARDLEADERSHIP",
+      "THECIVILAIRPATROLSAFETYPROGRAMFORGROUPORWINGLEVELLEADER",
+      "PLANNINGANDLEADINGAMAJORACTIVITY",
+      "PRIORITIZATIONANDTIMEMANAGEMENT",
+      "RECRUITINGANDRETENTION",
+      "STAFFPROCESSESGROUPSTAFFING",
+      "EFFECTIVECOMMUNICATIONWITHEXTERNALPARTNERS",
+      "LEADERSHIPCHALLENGESTODAYMEMBERSHIPISSUES",
+      "GROUPSTAFFING",
+      "ROLEOFTHEGROUP"
+    ],
+    "L5": [
+      "LOCALTOTHEGLOBALABROADENEDVIEWOFCIVILAIRPATROL",
+      "EMERGINGLEADERSHIPTRENDS",
+      "COMMITTEESANDTEAMS",
+      "BOARDSATTHEREGIONANDNATIONALLEVEL",
+      "STRATEGICENGAGEMENTWITHTHECADETADVISORYCOUNCIL",
+      "ETHICALLEADERSHIP",
+      "MENTORINGPROGRAMS",
+      "DEVELOPINGSTAFFANDSUCCESSIONPLANNING",
+      "PREPARINGTOSERVEONREGIONORNATIONALSTAFF",
+      "REGIONCOMMANDERROLESANDRESPONSIBILITIES",
+      "CIVILAIRPATROLGOVERNANCE",
+      "SELECTINGMEMBERSOFTHEBOARDOFGOVERNORS",
+      "THECHIEFOPERATINGOFFICERANDCAPUSAFCOMMANDERPERSPECTIVES",
+      "THENATIONALCOMMANDERSPERSPECTIVE",
+      "OPERATIONSATASTRATEGICLEVEL",
+      "SAFETYANDRISKMANAGEMENTFORREGIONANDNATIONALLEADERS",
+      "MARKETINGANDSTRATEGICCOMMUNICATIONS",
+      "LOGISTICSANDPROPERTYMANAGEMENT",
+      "FLEETMANAGEMENT",
+      "LOGISTICSATTHEREGIONLEVEL",
+      "LEADINGCHANGE",
+      "GOVERNMENTRELATIONS",
+      "FINANCIALMANAGEMENT",
+      "FINANCESATTHEREGIONLEVEL",
+      "THECIVILAIRPATROLSTRATEGICPLAN",
+      "LINKINGTHEREGIONTOTHESTRATEGICPLAN",
+      "STRATEGICLEADERSHIP",
+      "CHALLENGINGSITUATIONSANDREGIONCOMMAND",
+      "CIVILAIRPATROLCULTUREANDITSUNIQUECHALLENGES",
+      "CAPSTONEPROJECT"
+    ]
+  },
+  "LEVEL2_TRACK_CHOICES": {
+    "190": "CADET",
+    "268": "MILITARY",
+    "269": "NEW",
+    "270": "PROFESSIONAL"
+  },
+  "LEVEL2_TASK_TRACKS": {
+    "16": [
+      "ALL"
+    ],
+    "17": [
+      "ALL"
+    ],
+    "18": [
+      "ALL"
+    ],
+    "19": [
+      "MILITARY"
+    ],
+    "20": [
+      "ALL"
+    ],
+    "21": [
+      "NEW",
+      "PROFESSIONAL"
+    ],
+    "22": [
+      "ALL"
+    ],
+    "23": [
+      "NEW",
+      "PROFESSIONAL"
+    ],
+    "24": [
+      "MILITARY"
+    ],
+    "25": [
+      "CADET"
+    ],
+    "26": [
+      "NEW",
+      "MILITARY",
+      "PROFESSIONAL"
+    ],
+    "27": [
+      "CADET"
+    ],
+    "28": [
+      "NEW",
+      "PROFESSIONAL"
+    ],
+    "29": [
+      "MILITARY"
+    ],
+    "30": [
+      "NEW"
+    ],
+    "31": [
+      "MILITARY"
+    ],
+    "32": [
+      "CADET"
+    ],
+    "33": [
+      "PROFESSIONAL"
+    ],
+    "34": [
+      "NEW",
+      "PROFESSIONAL"
+    ],
+    "35": [
+      "CADET"
+    ],
+    "36": [
+      "NEW",
+      "CADET"
+    ],
+    "37": [
+      "ALL"
+    ],
+    "38": [
+      "ALL"
+    ],
+    "39": [
+      "ALL"
+    ],
+    "40": [
+      "ALL"
+    ],
+    "41": [
+      "ALL"
+    ],
+    "42": [
+      "ALL"
+    ],
+    "43": [
+      "ALL"
+    ],
+    "44": [
+      "NEW",
+      "PROFESSIONAL"
+    ],
+    "45": [
+      "MILITARY"
+    ],
+    "46": [
+      "ALL"
+    ],
+    "47": [
+      "ALL"
+    ],
+    "49": [
+      "ALL"
+    ],
+    "50": [
+      "ALL"
+    ],
+    "51": [
+      "MILITARY",
+      "PROFESSIONAL"
+    ],
+    "52": [
+      "CADET"
+    ],
+    "53": [
+      "ALL"
+    ],
+    "54": [
+      "ALL"
+    ],
+    "186": [
+      "ALL"
+    ],
+    "190": [
+      "CADET"
+    ],
+    "250": [
+      "ALL"
+    ],
+    "268": [
+      "MILITARY"
+    ],
+    "269": [
+      "NEW"
+    ],
+    "270": [
+      "PROFESSIONAL"
+    ],
+    "280": [
+      "ALL"
+    ],
+    "281": [
+      "ALL"
+    ],
+    "290": [
+      "PROFESSIONAL",
+      "MILITARY"
+    ]
+  },
+  "DATA_CONSTANTS": {
+    "CACHE_KEY": "cap_data_cache_v5",
+    "CACHE_MAX_AGE_MS": 21600000,
+    "ITEMS_PER_PAGE": 50
+  },
+  "QUA_OPERATIONAL_ES_ACHIEVEMENT_IDS": [
+    "70",
+    "71",
+    "69",
+    "126",
+    "127",
+    "68",
+    "258",
+    "257",
+    "55",
+    "81",
+    "193",
+    "56",
+    "57",
+    "67",
+    "80",
+    "76",
+    "75",
+    "74",
+    "73",
+    "72",
+    "66",
+    "78",
+    "77",
+    "65",
+    "64",
+    "63",
+    "61",
+    "125",
+    "128"
+  ],
+  "QUA_CAPTAIN_OR_HIGHER_RANKS": [
+    "CAPT",
+    "CPT",
+    "CAPTAIN",
+    "MAJ",
+    "MAJOR",
+    "LT COL",
+    "LTCOL",
+    "LTC",
+    "LIEUTENANT COLONEL",
+    "COL",
+    "COLONEL",
+    "BRIG GEN",
+    "BG",
+    "BRIGADIER GENERAL",
+    "MAJ GEN",
+    "MG",
+    "MAJOR GENERAL",
+    "LT GEN",
+    "LTG",
+    "LIEUTENANT GENERAL",
+    "GEN",
+    "GENERAL"
+  ],
+  "QUA_NCO_RANKS": [
+    "CMSGT",
+    "CHIEF MASTER SERGEANT",
+    "CHIEF MASTER SGT",
+    "SMSGT",
+    "SENIOR MASTER SERGEANT",
+    "SENIOR MASTER SGT",
+    "MSGT",
+    "MASTER SERGEANT",
+    "MASTER SGT",
+    "TSGT",
+    "TECHNICAL SERGEANT",
+    "TECHNICAL SGT",
+    "SSGT",
+    "STAFF SERGEANT",
+    "STAFF SGT",
+    "SGT",
+    "SERGEANT"
+  ],
+  "QUA_ELIGIBLE_UNIT_TYPES": {
+    "GROUP": {
+      "type": "GROUP",
+      "threshold": 15,
+      "label": "Group"
+    },
+    "SENIOR_SQUADRON": {
+      "type": "SENIOR",
+      "threshold": 10,
+      "label": "Senior Squadron"
+    },
+    "COMPOSITE_SQUADRON": {
+      "type": "COMPOSITE",
+      "threshold": 10,
+      "label": "Composite Squadron"
+    }
+  },
+  "QUA_CADET_PROTECTION_COURSES": [
+    "Cadet Protection Basic Course",
+    "Cadet Protection",
+    "CPPT",
+    "Cadet Protection Program Training"
+  ],
+  "QUA_YEAGER_AWARD_NAME": "YEAGER",
+  "PROMOTION_RULES": {
+    "2D LT": {
+      "next": "1st Lt",
+      "tigMonths": 18,
+      "level": 2
+    },
+    "1ST LT": {
+      "next": "Capt",
+      "tigMonths": 30,
+      "level": 3
+    },
+    "CAPT": {
+      "next": "Maj",
+      "tigMonths": 36,
+      "level": 4
+    },
+    "MAJ": {
+      "next": "Lt Col",
+      "tigMonths": 48,
+      "level": 5
+    },
+    "LT COL": {
+      "next": "Col",
+      "tigMonths": 60,
+      "level": 5
+    },
+    "FO": {
+      "next": "TFO",
+      "tigMonths": 18,
+      "level": 2
+    },
+    "TFO": {
+      "next": "SFO",
+      "tigMonths": 30,
+      "level": 3
+    },
+    "SFO": {
+      "next": "Capt",
+      "tigMonths": 0,
+      "level": 3
+    },
+    "SM": {
+      "next": "2d Lt",
+      "tigMonths": 0,
+      "level": 1,
+      "requiredParts": [
+        "L1",
+        "L2P1"
+      ]
+    },
+    "SSGT": {
+      "next": "TSgt",
+      "tigMonths": 12,
+      "level": 2
+    },
+    "TSGT": {
+      "next": "MSgt",
+      "tigMonths": 24,
+      "level": 3,
+      "dutyReq": "Unit NCO",
+      "dutyMonths": 24
+    },
+    "MSGT": {
+      "next": "SMSgt",
+      "tigMonths": 36,
+      "level": 4,
+      "dutyReq": "NCO Advisor",
+      "dutyMonths": 36
+    },
+    "SMSGT": {
+      "next": "CMSgt",
+      "tigMonths": 48,
+      "level": 5,
+      "dutyReq": "Command NCO",
+      "dutyMonths": 48
+    }
+  }
+}

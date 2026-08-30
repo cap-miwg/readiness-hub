@@ -1,0 +1,62 @@
+name: readiness-hub
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: readiness
+      POSTGRES_USER: readiness
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readiness -d readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: .
+      args:
+        # Keeps the web bundle's baked-in version in step with the server.
+        APP_VERSION: ${APP_VERSION:-2.0.0-dev}
+    image: readiness-hub:v2
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://readiness:${DB_PASSWORD}@db:5432/readiness
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      AUTH_MODE: ${AUTH_MODE:-dev}
+      APP_NAME: ${APP_NAME:-Readiness Hub}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ALLOWED_DOMAINS: ${ALLOWED_DOMAINS:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      CAPWATCH_ORGID: ${CAPWATCH_ORGID:-}
+      ANCHOR_ORGID: ${ANCHOR_ORGID:-}
+      ESERVICES_USERNAME: ${ESERVICES_USERNAME:-}
+      ESERVICES_PASSWORD: ${ESERVICES_PASSWORD:-}
+      CAPWATCH_FETCH_CRON: ${CAPWATCH_FETCH_CRON:-}
+      DEV_ALLOW_REAL_INGEST: ${DEV_ALLOW_REAL_INGEST:-}
+      # Mount your official logo (Brand Portal asset) and point this at it,
+      # e.g. via a docker-compose.override.yml volume. Unset = placeholder.
+      BRAND_LOGO_FILE: ${BRAND_LOGO_FILE:-}
+      TZ: ${TZ:-America/New_York}
+    ports:
+      # Bound to localhost by default. To serve the network, change the bind
+      # address AND switch to AUTH_MODE=google behind TLS (see DEPLOYMENT.md).
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  pgdata:

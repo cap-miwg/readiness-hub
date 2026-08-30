@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Readiness Hub · Unit Overview · Mission Brief mockup</title>
+<style>
+  :root{
+    --blue:#001871;      /* Symbol Blue: identity + interaction only */
+    --gray:#9EA2A2;      /* Silver Gray: structure only, never text */
+    --scarlet:#BA0C2F;   /* ACTION verdicts only */
+    --yellow:#FFCD00;    /* WATCH glyph fill only */
+    --blue-20:#CCD1E3;
+    --gray-20:#ECECEC;
+    --scarlet-20:#F1CFD5;
+    --yellow-20:#FFF5CC;
+    --black-20:#CCCCCC;
+    --ink:#000000;
+    --paper:#FFFFFF;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:var(--sans);font-size:13px;line-height:1.45;color:var(--ink);background:var(--paper);font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  summary{list-style:none;cursor:pointer}
+  summary::-webkit-details-marker{display:none}
+  .mono{font-family:var(--mono)}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+
+  /* ---------- glyph grammar ---------- */
+  .g{display:inline-block;flex:none;vertical-align:baseline}
+  .g-act{width:8px;height:8px;border-radius:50%;background:var(--scarlet)}
+  .g-watch{width:7px;height:7px;background:var(--yellow);border:1px solid var(--ink);transform:rotate(45deg)}
+  .g-ok{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--gray)}
+  .g-nodata{width:8px;height:8px;border-radius:50%;border:1.5px dashed var(--gray)}
+  .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:2px;white-space:nowrap}
+  .tag-act{color:var(--scarlet);background:var(--scarlet-20)}
+  .tag-watch{color:var(--ink);background:var(--yellow-20);border:1px solid var(--yellow)}
+  .tag-ok{color:var(--ink);background:var(--paper);border:1px solid var(--black-20)}
+
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:50;background:var(--paper);border-top:3px solid var(--blue);border-bottom:1px solid var(--black-20);display:flex;align-items:center;gap:10px;height:51px;padding:0 16px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;white-space:nowrap;color:var(--ink)}
+  .brand svg{display:block}
+  .tabs{display:flex;gap:2px;margin-left:10px;align-self:stretch}
+  .tab{display:flex;align-items:center;padding:0 10px;font-size:12.5px;color:var(--ink);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab:hover{text-decoration:none;background:var(--gray-20)}
+  .tab[aria-current="page"]{font-weight:700;color:var(--blue);border-bottom-color:var(--blue)}
+  .spacer{flex:1}
+  .menu{position:relative}
+  .menu>summary{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;border:1px solid var(--black-20);border-radius:2px;padding:5px 9px;background:var(--paper);white-space:nowrap}
+  .menu>summary:hover{border-color:var(--ink)}
+  .menu[open]>summary{border-color:var(--blue);color:var(--blue)}
+  .caret{font-size:9px}
+  .panel{position:absolute;right:0;top:calc(100% + 8px);min-width:250px;max-width:min(320px,calc(100vw - 24px));background:var(--paper);border:1px solid var(--ink);z-index:60;padding:6px 0}
+  .panel .ph{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px 4px}
+  .panel .prow{display:flex;gap:10px;align-items:baseline;padding:6px 12px;font-size:12px}
+  .panel .prow .mono{font-size:11px}
+  .panel .prow.sel{background:var(--blue-20);font-weight:700}
+  .panel .prow:hover{background:var(--gray-20)}
+  .panel .pnote{font-size:11px;padding:6px 12px 8px}
+  .panel label.prow{cursor:pointer;border-bottom:1px solid var(--gray-20);padding-bottom:9px;margin-bottom:2px}
+  .panel input[type="checkbox"]{accent-color:var(--blue)}
+  .panel .kvline{display:flex;justify-content:space-between;gap:12px;padding:4px 12px;font-size:11.5px}
+  .panel .kvline .mono{font-size:11px}
+  .userchip>summary{border-radius:50%;width:30px;height:30px;justify-content:center;padding:0;font-weight:700;background:var(--blue);color:var(--paper);border:none}
+  .userchip[open]>summary{color:var(--paper)}
+  .burger{display:none}
+  .burger>summary{border:1px solid var(--black-20);border-radius:2px;padding:5px 9px;font-size:14px;line-height:1}
+  .bpanel{position:absolute;left:0;right:0;top:51px;background:var(--paper);border-bottom:2px solid var(--ink);z-index:55;padding:6px 0 10px}
+  .bpanel a{display:block;padding:10px 20px;color:var(--ink);font-size:14px;border-top:1px solid var(--gray-20)}
+  .bpanel a[aria-current="page"]{font-weight:700;color:var(--blue);border-left:3px solid var(--blue);padding-left:17px}
+  .bpanel .bmeta{font-family:var(--mono);font-size:10.5px;padding:10px 20px 0;border-top:1px solid var(--gray-20);margin-top:6px}
+
+  /* ---------- layout + rail ---------- */
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:36px;max-width:1160px;margin:0 auto;padding:22px 20px 56px}
+  .rail{position:sticky;top:67px;align-self:start;font-family:var(--mono);font-size:11px}
+  .rail a{display:flex;gap:8px;align-items:center;padding:7px 10px;color:var(--ink);border-left:2px solid var(--gray-20);white-space:nowrap}
+  .rail a:hover{text-decoration:none;background:var(--gray-20)}
+  .rail a.cur{border-left-color:var(--blue);color:var(--blue);font-weight:700}
+  .rail .g{margin-left:auto}
+  section,details.sec{scroll-margin-top:64px}
+
+  /* ---------- masthead ---------- */
+  .mast{padding:2px 0 6px}
+  h1{font-size:21px;font-weight:700;letter-spacing:-.01em;margin-top:2px}
+  .meta{font-size:12px;margin-top:3px}
+  .bluf{border:1px solid var(--ink);padding:12px 14px;margin:14px 0 6px}
+  .bluf b{font-size:13.5px}
+  .statusline{font-family:var(--mono);font-size:11px;margin-top:8px;display:flex;flex-wrap:wrap;gap:4px 16px}
+  .statusline span{display:inline-flex;align-items:center;gap:6px}
+  .secctl{display:flex;justify-content:flex-end;padding:4px 0 8px}
+  .secctl button{font-family:var(--mono);font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:4px 0}
+  .secctl button:hover{text-decoration:underline}
+
+  /* ---------- sections ---------- */
+  .sechead{display:grid;grid-template-columns:16px 30px minmax(0,1fr) auto 18px;align-items:center;gap:8px;padding:11px 0}
+  .sec>summary:hover .ttl{color:var(--blue)}
+  .num{font-family:var(--mono);font-size:11px}
+  .ttl{font-weight:700;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+  .stat{font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap}
+  .tgl{font-size:10px;text-align:right}
+  .sec .tgl::after{content:"▸"}
+  .sec[open] .tgl::after{content:"▾"}
+  .sec,section.sec-s{border-top:1px solid var(--black-20)}
+  .secbody{padding:2px 0 18px 62px}
+  .lead{font-size:13.5px;margin:2px 0 10px}
+  .lead b{font-weight:700}
+
+  /* ---------- findings ---------- */
+  .finding{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:12px;padding:10px 0;border-top:1px solid var(--gray-20);align-items:start}
+  .finding:first-of-type{border-top:none}
+  .finding .fn{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+  .finding .fn .num{font-size:10px}
+  .finding p{font-size:12.5px}
+  .finding p b{display:block;font-size:13px}
+  .flink{font-size:12px;white-space:nowrap;padding-top:2px}
+
+  /* ---------- data rows ---------- */
+  .kvs{margin-top:4px}
+  .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:6px 0;border-top:1px solid var(--gray-20);align-items:baseline}
+  .kvs .kv:first-child{border-top:none}
+  .kv .k{font-size:12.5px}
+  .kv .k small{font-size:11.5px;display:block}
+  .kv .v{font-weight:600;text-align:right;white-space:nowrap;display:flex;gap:8px;align-items:baseline;justify-content:flex-end}
+  .kv .v .muted{font-weight:400}
+  .blockttl{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin:16px 0 2px}
+
+  /* ---------- stats strip ---------- */
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--gray-20);border:1px solid var(--gray-20);margin-top:2px}
+  .stats>div{background:var(--paper);padding:10px 12px}
+  .stats .f{font-size:19px;font-weight:700}
+  .stats .l{font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;margin-top:2px}
+
+  /* ---------- meter + disclosure ---------- */
+  .scorerow{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px}
+  .scorerow .big{font-size:20px;font-weight:700}
+  .scorerow .word{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .meter{height:4px;background:var(--gray-20);margin:6px 0 4px}
+  .meter i{display:block;height:100%;background:var(--ink)}
+  .disc>summary{color:var(--blue);font-size:11.5px;display:inline-block;padding:2px 0}
+  .disc>summary:hover{text-decoration:underline}
+  .fine{font-family:var(--mono);font-size:11px;background:var(--gray-20);padding:8px 10px;margin:6px 0 2px;line-height:1.7}
+  .note{font-size:11.5px;margin-top:6px}
+  .links{font-size:12px;margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+
+  /* ---------- footer ---------- */
+  .foot{border-top:1px solid var(--black-20)}
+  .foot-in{display:flex;justify-content:space-between;gap:16px;max-width:1160px;margin:0 auto;padding:16px 20px;font-family:var(--mono);font-size:11px}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:940px){
+    .tabs{display:none}
+    .burger{display:block}
+    .unitname{display:none}
+    .layout{grid-template-columns:minmax(0,1fr);gap:0;padding:0 16px 48px}
+    .rail{position:sticky;top:51px;z-index:40;display:flex;overflow-x:auto;background:var(--paper);border-bottom:1px solid var(--black-20);margin:0 -16px 14px;padding:0 10px;scrollbar-width:none}
+    .rail::-webkit-scrollbar{display:none}
+    .rail a{border-left:none;border-bottom:2px solid transparent;padding:9px 10px}
+    .rail a.cur{border-bottom-color:var(--blue)}
+    .rail .g{margin-left:2px}
+    .secbody{padding-left:0}
+  }
+  @media (max-width:560px){
+    .asof{display:none}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .stats>div:last-child{grid-column:span 2}
+    .finding{grid-template-columns:minmax(0,1fr)}
+    .finding .fn{flex-direction:row;align-items:baseline;gap:8px}
+    .flink{padding-top:0}
+    .kv .v{flex-wrap:wrap}
+    .sechead{grid-template-columns:16px minmax(0,1fr) auto 18px}
+    .num.secnum{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <details class="burger menu">
+    <summary aria-label="Menu">☰</summary>
+    <nav class="bpanel">
+      <a href="#0">Home</a>
+      <a href="#0" aria-current="page">Unit Overview</a>
+      <a href="#0">Seniors</a>
+      <a href="#0">Cadets</a>
+      <a href="#0">Reports</a>
+      <a href="#0">Org Chart</a>
+      <a href="#0">Admin</a>
+      <p class="bmeta">DATA AS OF 28 AUG 03:00 · v2.0.0</p>
+    </nav>
+  </details>
+
+  <span class="brand">
+    <svg viewBox="0 0 24 24" width="22" height="22" role="img" aria-label="Logo slot, deployment configured">
+      <title>Logo slot (deployment-configured asset)</title>
+      <circle cx="12" cy="12" r="10.5" fill="none" stroke="#001871" stroke-width="2"/>
+      <path d="M12 6.5 L17 16.5 H7 Z" fill="#001871"/>
+    </svg>
+    Readiness Hub
+  </span>
+
+  <nav class="tabs" aria-label="Primary">
+    <a class="tab" href="#0">Home</a>
+    <a class="tab" href="#0" aria-current="page">Unit Overview</a>
+    <a class="tab" href="#0">Seniors</a>
+    <a class="tab" href="#0">Cadets</a>
+    <a class="tab" href="#0">Reports</a>
+    <a class="tab" href="#0">Org Chart</a>
+  </nav>
+
+  <span class="spacer"></span>
+
+  <details class="menu">
+    <summary>GLR-MI-104<span class="unitname"> · Riverside Composite Sqdn</span> <span class="caret">▾</span></summary>
+    <div class="panel" role="listbox" aria-label="Unit selector">
+      <label class="prow"><input type="checkbox"> Include sub-units of selection</label>
+      <p class="ph">Wing</p>
+      <p class="prow"><span class="mono">GLR-MI-001</span> Wing Headquarters</p>
+      <p class="ph">Lakeshore Group</p>
+      <p class="prow"><span class="mono">GLR-MI-090</span> Lakeshore Group HQ</p>
+      <p class="prow sel"><span class="mono">GLR-MI-104</span> Riverside Composite Sqdn</p>
+      <p class="prow"><span class="mono">GLR-MI-117</span> Harbor Beach Cadet Sqdn</p>
+      <p class="prow"><span class="mono">GLR-MI-133</span> Ottawa County Composite Sqdn</p>
+    </div>
+  </details>
+
+  <details class="menu asof">
+    <summary>as of 28 Aug 03:00</summary>
+    <div class="panel">
+      <p class="ph">Data currency</p>
+      <p class="kvline"><span>CAPWATCH extract</span><span class="mono">2026-08-28 03:00</span></p>
+      <p class="kvline"><span>Ingest run</span><span class="mono">#412 · OK · 03:19</span></p>
+      <p class="kvline"><span>Alert threshold</span><span class="mono">48 h</span></p>
+      <p class="kvline"><span>Deployment admin</span><span>Maj R. Whitfield</span></p>
+      <p class="pnote">Figures reflect last night's extract. This chip escalates only on a confirmed ingest failure.</p>
+    </div>
+  </details>
+
+  <details class="menu userchip">
+    <summary aria-label="User menu">JM</summary>
+    <div class="panel">
+      <p class="ph">Capt J. Morales · 612884</p>
+      <p class="prow">My Progress</p>
+      <p class="prow">Settings</p>
+      <p class="prow">Admin</p>
+      <p class="prow">Sign out</p>
+    </div>
+  </details>
+</header>
+
+<div class="layout">
+
+  <nav class="rail" aria-label="Sections">
+    <a href="#sec-situation" class="cur"><span class="num">01</span> Situation <span class="g g-act" aria-hidden="true"></span></a>
+    <a href="#sec-strength"><span class="num">02</span> Strength</a>
+    <a href="#sec-rr"><span class="num">03</span> Recruiting <span class="g g-watch" aria-hidden="true"></span></a>
+    <a href="#sec-es"><span class="num">04</span> Emerg Services <span class="g g-act" aria-hidden="true"></span></a>
+    <a href="#sec-cadets"><span class="num">05</span> Cadet Programs <span class="g g-watch" aria-hidden="true"></span></a>
+    <a href="#sec-pd"><span class="num">06</span> Prof Development <span class="g g-ok" aria-hidden="true"></span></a>
+    <a href="#sec-participation"><span class="num">07</span> Participation <span class="g g-nodata" aria-hidden="true"></span></a>
+    <a href="#sec-workspace"><span class="num">08</span> Workspace <span class="g g-ok" aria-hidden="true"></span></a>
+  </nav>
+
+  <main>
+    <div class="mast">
+      <p class="kicker">Unit overview · Composite squadron · Data as of 28 Aug 03:00</p>
+      <h1>Riverside Composite Squadron</h1>
+      <p class="meta"><span class="mono">GLR-MI-104</span> · Meets Tuesdays 1830-2030 · Riverside Armory, Grand Haven MI · Next meeting Tue 01 Sep</p>
+
+      <div class="bluf">
+        <p class="kicker">BLUF</p>
+        <p><b>Mission-capable with gaps. 2 findings need action, 2 to watch.</b></p>
+        <p class="statusline">
+          <span><span class="g g-watch" aria-hidden="true"></span>R&amp;R 58 FAIR</span>
+          <span><span class="g g-act" aria-hidden="true"></span>ES 72 GOOD</span>
+          <span><span class="g g-ok" aria-hidden="true"></span>4 CADETS READY</span>
+          <span><span class="g g-nodata" aria-hidden="true"></span>PARTICIPATION NOT RECORDED</span>
+        </p>
+      </div>
+      <div class="secctl"><button id="xall" type="button">Expand all</button></div>
+    </div>
+
+    <!-- 01 SITUATION -->
+    <section class="sec-s" id="sec-situation" aria-labelledby="h-situation">
+      <div class="sechead">
+        <span class="g g-act" aria-hidden="true"></span>
+        <span class="num secnum">01</span>
+        <span class="ttl" id="h-situation">Situation · Needs attention</span>
+        <span class="stat">4 findings</span>
+        <span></span>
+      </div>
+
+      <div class="finding">
+        <span class="fn"><span class="num">F1</span><span class="tag tag-act">Action</span></span>
+        <p><b>Mission Scanner/Observer is single-deep.</b> One member holds the unit's only MSO qualification. Losing them removes the capability.</p>
+        <a class="flink" href="#sec-es">View position ›</a>
+      </div>
+      <div class="finding">
+        <span class="fn"><span class="num">F2</span><span class="tag tag-act">Action</span></span>
+        <p><b>4 ES qualifications lapse within 30 days.</b> 2 GTM2, 1 MRO, 1 GES. Renewal tasks can start now.</p>
+        <a class="flink" href="#sec-es">Open expiring list ›</a>
+      </div>
+      <div class="finding">
+        <span class="fn"><span class="num">F3</span><span class="tag tag-watch">Watch</span></span>
+        <p><b>3 cadets' HFZ expires before their TIG date.</b> They will be blocked at promotion time unless retested.</p>
+        <a class="flink" href="#sec-cadets">Open cadet list ›</a>
+      </div>
+      <div class="finding">
+        <span class="fn"><span class="num">F4</span><span class="tag tag-watch">Watch</span></span>
+        <p><b>Recruiting is the weakest sustainability leg.</b> Component score 22 of 100: 0.6 new members per month over 12 months.</p>
+        <a class="flink" href="#sec-rr">See recruiting ›</a>
+      </div>
+      <p class="note">When nothing needs attention this section reads: "No findings. Unit is steady."</p>
+    </section>
+
+    <!-- 02 STRENGTH -->
+    <section class="sec-s" id="sec-strength" aria-labelledby="h-strength">
+      <div class="sechead">
+        <span></span>
+        <span class="num secnum">02</span>
+        <span class="ttl" id="h-strength">Strength</span>
+        <span class="stat">41 members</span>
+        <span></span>
+      </div>
+      <div class="stats">
+        <div><p class="f">41</p><p class="l">Members</p></div>
+        <div><p class="f">17</p><p class="l">Seniors</p></div>
+        <div><p class="f">23</p><p class="l">Cadets</p></div>
+        <div><p class="f">1</p><p class="l">Patron</p></div>
+        <div><p class="f">-2</p><p class="l">Net · 12 mo</p></div>
+      </div>
+    </section>
+
+    <!-- 03 RECRUITING & RETENTION (collapsed) -->
+    <details class="sec" id="sec-rr">
+      <summary class="sechead">
+        <span class="g g-watch" aria-hidden="true"></span>
+        <span class="num secnum">03</span>
+        <span class="ttl">Recruiting &amp; Retention</span>
+        <span class="stat">58 · FAIR · 1 watch</span>
+        <span class="tgl"></span>
+      </summary>
+      <div class="secbody">
+        <p class="lead"><b>Focus: recruiting.</b> The recruiting leg (22) is the lowest component of the sustainability score.</p>
+
+        <div class="scorerow"><span class="big">58</span><span class="word">Fair</span><span class="mono" style="font-size:11px">Sustainability score</span></div>
+        <div class="meter" role="img" aria-label="Sustainability score 58 of 100"><i style="width:58%"></i></div>
+        <details class="disc">
+          <summary>How this is computed</summary>
+          <p class="fine">recruiting 22 × 0.25 · retention 71 × 0.35 · growth 55 × 0.25 · stability 84 × 0.15<br>bands: 80+ excellent · 65+ good · 50+ fair · 12 months of data analyzed</p>
+        </details>
+
+        <div class="kvs">
+          <div class="kv"><span class="k">Recruiting rate <small>average new members per month, 12 mo</small></span><span class="v"><span class="tag tag-watch">Watch</span> 0.6</span></div>
+          <div class="kv"><span class="k">Retention rate <small>12 mo</small></span><span class="v">71%</span></div>
+          <div class="kv"><span class="k">Net growth <small>12 mo</small></span><span class="v">-2 members</span></div>
+          <div class="kv"><span class="k">Stability <small>membership variation</small></span><span class="v">4.1% <span class="muted">stable</span></span></div>
+        </div>
+
+        <p class="blockttl">Renewal watch</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Memberships expiring within 30 days</span><span class="v">3</span></div>
+          <div class="kv"><span class="k">Within 60 days</span><span class="v">5</span></div>
+          <div class="kv"><span class="k">Within 90 days</span><span class="v">8</span></div>
+        </div>
+        <p class="links"><a href="#0">Open renewal list ›</a></p>
+      </div>
+    </details>
+
+    <!-- 04 EMERGENCY SERVICES (expanded) -->
+    <details class="sec" id="sec-es" open>
+      <summary class="sechead">
+        <span class="g g-act" aria-hidden="true"></span>
+        <span class="num secnum">04</span>
+        <span class="ttl">Emergency Services</span>
+        <span class="stat">72 · GOOD · 2 action</span>
+        <span class="tgl"></span>
+      </summary>
+      <div class="secbody">
+        <p class="lead"><b>Can field 2 ground teams and 1 sUAS team. Cannot field a UDF team.</b></p>
+
+        <div class="scorerow"><span class="big">72</span><span class="word">Good</span><span class="mono" style="font-size:11px">ES readiness score</span></div>
+        <div class="meter" role="img" aria-label="ES readiness score 72 of 100"><i style="width:72%"></i></div>
+        <details class="disc">
+          <summary>How this is computed</summary>
+          <p class="fine">teams 68 × 0.35 · qual health 74 × 0.25 · SET 66 × 0.15 · risk 70 × 0.15 · pipeline 85 × 0.10<br>bands: 80+ excellent · 65+ good · 50+ fair</p>
+        </details>
+
+        <p class="blockttl">Team capabilities</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Ground teams <small>3 GTL, 11 GTM qualified</small></span><span class="v">2 fieldable</span></div>
+          <div class="kv"><span class="k">UDF team <small>needs 2 UDF technicians</small></span><span class="v"><span class="tag tag-watch">Watch</span> 0</span></div>
+          <div class="kv"><span class="k">sUAS team</span><span class="v">1 fieldable</span></div>
+          <div class="kv"><span class="k">Mission base <small>4 of 8 position types covered</small></span><span class="v">6 qualified</span></div>
+          <div class="kv"><span class="k">Command staff <small>no qualified IC</small></span><span class="v"><span class="tag tag-watch">Watch</span> 2 qualified</span></div>
+          <div class="kv"><span class="k">Aircrew <small>not a flying unit · excluded from scoring</small></span><span class="v"><span class="muted">n/a</span></span></div>
+        </div>
+
+        <p class="blockttl">Qualification health</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Active qualifications</span><span class="v">38</span></div>
+          <div class="kv"><span class="k">In training</span><span class="v">21</span></div>
+          <div class="kv"><span class="k">Expired</span><span class="v">9</span></div>
+          <div class="kv"><span class="k">Lapsing within 30 days <small>finding F2</small></span><span class="v"><span class="tag tag-act">Action</span> 4</span></div>
+          <div class="kv"><span class="k">Members without GES</span><span class="v"><span class="tag tag-watch">Watch</span> 5</span></div>
+        </div>
+
+        <p class="blockttl">Evaluators</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Potential evaluators <small>task coverage 61% · gaps: GBD, MSA, sUAS technician +2</small></span><span class="v">8</span></div>
+        </div>
+
+        <p class="blockttl">Single points of failure</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Mission Scanner/Observer <small>finding F1 · member name appears on the position drill-down at unit scope</small></span><span class="v"><span class="tag tag-act">Action</span> 1 qualified</span></div>
+        </div>
+
+        <p class="blockttl">Training pipeline</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Members in ES training <small>top demand: GTM3 (9) · UDF (5) · MRO (4)</small></span><span class="v">21</span></div>
+        </div>
+        <p class="links"><a href="#0">View position ›</a><a href="#0">Open expiring list ›</a><a href="#0">ES deep dive ›</a></p>
+      </div>
+    </details>
+
+    <!-- 05 CADET PROGRAMS (collapsed) -->
+    <details class="sec" id="sec-cadets">
+      <summary class="sechead">
+        <span class="g g-watch" aria-hidden="true"></span>
+        <span class="num secnum">05</span>
+        <span class="ttl">Cadet Programs</span>
+        <span class="stat">4 READY · 3 blocked</span>
+        <span class="tgl"></span>
+      </summary>
+      <div class="secbody">
+        <p class="lead"><b>4 cadets can promote now.</b> HFZ is the most common blocker.</p>
+        <div class="kvs">
+          <div class="kv"><span class="k">Promotion-ready now</span><span class="v">4</span></div>
+          <div class="kv"><span class="k">Blocked by HFZ <small>3 expire before TIG date · finding F3</small></span><span class="v"><span class="tag tag-watch">Watch</span> 3</span></div>
+          <div class="kv"><span class="k">Blocked by TIG</span><span class="v">9</span></div>
+          <div class="kv"><span class="k">Tested, awaiting board</span><span class="v">2</span></div>
+          <div class="kv"><span class="k">Milestone radar <small>within one achievement of Mitchell</small></span><span class="v">2 cadets</span></div>
+        </div>
+        <p class="links"><a href="#0">Open Cadets ›</a><a href="#0">Test night view ›</a></p>
+      </div>
+    </details>
+
+    <!-- 06 PROFESSIONAL DEVELOPMENT (collapsed) -->
+    <details class="sec" id="sec-pd">
+      <summary class="sechead">
+        <span class="g g-ok" aria-hidden="true"></span>
+        <span class="num secnum">06</span>
+        <span class="ttl">Professional Development</span>
+        <span class="stat">STEADY · 2 pending</span>
+        <span class="tgl"></span>
+      </summary>
+      <div class="secbody">
+        <div class="kvs">
+          <div class="kv"><span class="k">Levels funnel <small>17 senior members</small></span><span class="v"><span class="mono" style="font-weight:600">L1 17 · L2 9 · L3 4 · L4 2 · L5 1</span></span></div>
+          <div class="kv"><span class="k">Completed, awaiting approval <small>oldest 12 days</small></span><span class="v">2 tasks</span></div>
+          <div class="kv"><span class="k">Teach this next <small>largest shared demand</small></span><span class="v">Level 2 core module · 5 waiting</span></div>
+        </div>
+        <p class="links"><a href="#0">Open Seniors ›</a></p>
+      </div>
+    </details>
+
+    <!-- 07 PARTICIPATION (collapsed, no data) -->
+    <details class="sec" id="sec-participation">
+      <summary class="sechead">
+        <span class="g g-nodata" aria-hidden="true"></span>
+        <span class="num secnum">07</span>
+        <span class="ttl">Participation</span>
+        <span class="stat">NOT RECORDED</span>
+        <span class="tgl"></span>
+      </summary>
+      <div class="secbody">
+        <p class="lead">No attendance recorded in eServices for this unit.</p>
+        <p class="note">Units that log attendance will see meeting trends, quiet-member early warning, and guest counts here. Ships in 2.1. A unit that does not log attendance is never painted red for it.</p>
+      </div>
+    </details>
+
+    <!-- 08 WORKSPACE (collapsed, admin-leaning) -->
+    <details class="sec" id="sec-workspace">
+      <summary class="sechead">
+        <span class="g g-ok" aria-hidden="true"></span>
+        <span class="num secnum">08</span>
+        <span class="ttl">Workspace Adoption</span>
+        <span class="stat">29% ACTIVE · admin</span>
+        <span class="tgl"></span>
+      </summary>
+      <div class="secbody">
+        <div class="kvs">
+          <div class="kv"><span class="k">Active in last 30 days</span><span class="v">12 of 41 <span class="muted">29%</span></span></div>
+          <div class="kv"><span class="k">Never signed in</span><span class="v">8 accounts</span></div>
+        </div>
+        <p class="note">Account-level detail lives in Reports. This section renders only when adoption data is loaded.</p>
+      </div>
+    </details>
+
+    <p class="note" style="margin-top:16px">Every figure on this page is computed from the CAPWATCH extract of 28 Aug 03:00. Each score explains its own math in place.</p>
+  </main>
+</div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span>v2.0.0</span>
+    <span><a href="#0">Source on GitHub ↗</a></span>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var secs=document.querySelectorAll("details.sec");
+    var btn=document.getElementById("xall");
+    if(!btn)return;
+    btn.addEventListener("click",function(){
+      var openAll=Array.prototype.some.call(secs,function(d){return !d.open});
+      Array.prototype.forEach.call(secs,function(d){d.open=openAll});
+      btn.textContent=openAll?"Collapse all":"Expand all";
+    });
+  })();
+</script>
+</body>
+</html>

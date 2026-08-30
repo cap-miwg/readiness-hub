@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.local
+.DS_Store
+coverage/
+web/dist/
+server/dist/
+_data/
+*.tsbuildinfo
+docker-compose.override.yml
