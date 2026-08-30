@@ -1,19 +1,35 @@
-/** @type {import('tailwindcss').Config} */
+/** @type {import('tailwindcss').Config}
+ * CAP brand token mapping (docs/design/V2-DESIGN-PLAN.md section 3).
+ * Components use these semantic names; raw Tailwind hue classes
+ * (bg-blue-500, text-red-600, ...) are banned by scripts/check-brand.sh.
+ */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        // v1 leaned on Tailwind blue/indigo defaults; keep that family as the brand.
-        brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+        paper: 'var(--paper)',
+        ink: 'var(--ink)',
+        ink2: 'var(--ink-2)',
+        hairline: 'var(--hairline)',
+        muted: 'var(--muted)',
+        symbol: {
+          DEFAULT: 'var(--cap-symbol-blue)',
+          20: 'var(--cap-symbol-blue-20)',
         },
+        scarlet: {
+          DEFAULT: 'var(--cap-scarlet)',
+          20: 'var(--cap-scarlet-20)',
+        },
+        afyellow: {
+          DEFAULT: 'var(--cap-af-yellow)',
+          20: 'var(--cap-af-yellow-20)',
+        },
+        gray20: 'var(--cap-silver-gray-20)',
+      },
+      fontFamily: {
+        sans: ['Ubuntu', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        display: ['Rajdhani', 'Ubuntu', '-apple-system', 'sans-serif'],
       },
     },
   },

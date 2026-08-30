@@ -8,3 +8,4 @@ web/dist/
 server/dist/
 _data/
 *.tsbuildinfo
+docker-compose.override.yml

@@ -510,6 +510,119 @@ export const TABLES: TableSpec[] = [
       Rank: 'string',
     },
   },
+  // --- Meetings and participation (owner-approved 2026-08-30) ---
+  {
+    file: 'OrgMeetings.txt',
+    table: 'org_meetings',
+    required: false,
+    columns: {
+      ORGID: 'int',
+      MeetTime: 'string',
+      MeetDay: 'string',
+      ActivityDate: 'date',
+      Descr: 'string',
+    },
+  },
+  {
+    file: 'AttendanceLogMeeting.txt',
+    table: 'attendance_meetings',
+    required: false,
+    columns: {
+      AttendanceLogID: 'int',
+      ORGID: 'int',
+      MemberType: 'string',
+      StartDate: 'date',
+      EndDate: 'date',
+    },
+  },
+  {
+    file: 'AttendanceLogAttendee.txt',
+    table: 'attendance_attendees',
+    required: false,
+    columns: {
+      AttendanceLogID: 'int',
+      CAPID: 'int',
+      Present: 'bool',
+      Excused: 'bool',
+      Uniform: 'bool',
+    },
+  },
+  {
+    // Guests are often minors with no membership consent: the ONLY column
+    // ingested is the meeting id, for per-meeting guest counts. Names,
+    // phones, and emails in this file are never stored.
+    file: 'AttendanceLogGuest.txt',
+    table: 'attendance_guests',
+    required: false,
+    columns: {
+      AttendanceLogID: 'int',
+    },
+  },
+  // --- Logistics (owner-approved 2026-08-30; ORMS remains system of record) ---
+  {
+    // cap_id in the vehicle tables is the CAP vehicle number, not a member.
+    file: 'vehicles.txt',
+    table: 'vehicles',
+    required: false,
+    columns: {
+      ORGID: 'int',
+      cap_id: 'string',
+      make: 'string',
+      yr_mfgr: 'string',
+      veh_type: 'string',
+      roadable: 'bool',
+      odometer: 'string',
+    },
+  },
+  {
+    file: 'vehicles_maintenance.txt',
+    table: 'vehicles_maintenance',
+    required: false,
+    columns: {
+      cap_id: 'string',
+      DateOfMaint: 'date',
+    },
+  },
+  {
+    file: 'vehicles_usage.txt',
+    table: 'vehicles_usage',
+    required: false,
+    columns: {
+      cap_id: 'string',
+      UsageDate: 'date',
+      TotalTimesUsed: 'string',
+      TotalHoursUsed: 'string',
+      TotalMiles: 'string',
+    },
+  },
+  {
+    file: 'equipment.txt',
+    table: 'equipment',
+    required: false,
+    columns: {
+      assetcd: 'string',
+      noun: 'string',
+      make: 'string',
+      model: 'string',
+      inserv: 'string',
+      status: 'string',
+      ORGID: 'int',
+      IssuedCAPID: 'int',
+      IssuedDate: 'date',
+    },
+  },
+  {
+    file: 'property.txt',
+    table: 'property',
+    required: false,
+    columns: {
+      prop_code: 'string',
+      prop_type: 'string',
+      city: 'string',
+      state: 'string',
+      ORGID: 'int',
+    },
+  },
 ]
 
 /** Adoption sideload CSVs (optional, not CAPWATCH). Same parse rules. */

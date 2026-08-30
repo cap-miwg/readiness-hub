@@ -1,6 +1,21 @@
 # Readiness Hub v2 Design Plan
 
-Status: awaiting owner sign-off. Nothing in this plan is implemented yet.
+Status: SIGNED OFF by the owner on 2026-08-30, with the amendments below. Implementation in progress on the v2 branch.
+
+## Decisions recorded (2026-08-30)
+
+- D1 approved: Quiet Authority + grafts.
+- D2 approved as recommended: desktop tabs stay visible, hamburger below the tablet breakpoint, unit selector moves into the single top bar.
+- D3 AMENDED by owner: brand typography is Rajdhani (headings, subheadings, short lines) and Ubuntu or Noticia Text (long-form body). Implemented self-hosted: Rajdhani 500/600/700 + Ubuntu 400/400i/500/700, latin subsets, licenses vendored. Noticia Text reserved for genuinely long-form surfaces (none in the app today).
+- D4 approved (Silver Gray never load-bearing; ink labels; Symbol Blue focus ring).
+- D5 approved (v1-parity visibility at 2.0, default-own-unit scoping in 2.1), with an owner AMENDMENT to the risk framing: attendance data does not gate on scoping. Owner's position: this data is already member-visible in eServices, so surfacing it does not increase exposure. The scoping-before-attendance gate is removed.
+- D6 approved (2.0 design-release discipline), superseded in part by D7/D8 approvals below: attendance and logistics ingestion were explicitly pulled into the current build.
+- D7 APPROVED AND ACCELERATED: ingest AttendanceLog now (guest names still never stored; counts only).
+- D8 REVERSED by owner: ingest the logistics family (vehicles, maintenance, usage, equipment, property) now. ORMS remains the system of record; the app is a read-only view.
+- D9 approved (SPOF position-at-rest, names on drill-down).
+- D10 approved (neutral as-of chip).
+- D11 approved (My Progress identity matching with graceful non-match).
+- D12 resolved: owner supplied the official Brand Portal logo kit; deployments mount it via BRAND_LOGO_FILE, the repo ships a neutral placeholder and never commits the trademarked mark.
 
 This plan is the product of a 39-agent design council: 23 CAP duty-position personas (squadron commander through region commander, plus cadets, new members, and every squadron staff officer), 8 design/engineering specialists, a synthesis pass, three competing visual directions built as working mockups, a three-judge panel, and a completeness critic run against the owner's feedback as a checklist.
 

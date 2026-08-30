@@ -57,6 +57,28 @@ async function main() {
     return { ok: true, ingest }
   })
 
+  // Deployment logo slot (V2-DESIGN-PLAN.md D12): serves the volume-mounted
+  // official mark; 404 lets the web app fall back to its neutral placeholder.
+  app.get('/brand/logo', async (_req, reply) => {
+    const file = config.BRAND_LOGO_FILE
+    if (!file || !existsSync(file)) {
+      reply.code(404).send({ error: 'no logo configured' })
+      return
+    }
+    const type = file.endsWith('.svg')
+      ? 'image/svg+xml'
+      : file.endsWith('.png')
+        ? 'image/png'
+        : null
+    if (!type) {
+      reply.code(404).send({ error: 'unsupported logo format (svg or png)' })
+      return
+    }
+    const { readFile } = await import('node:fs/promises')
+    const body = await readFile(file)
+    reply.header('cache-control', 'public, max-age=3600').type(type).send(body)
+  })
+
   await migrate(msg => app.log.info(msg))
   await refuseDevOverRealData()
 

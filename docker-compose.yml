@@ -43,6 +43,9 @@ services:
       ESERVICES_PASSWORD: ${ESERVICES_PASSWORD:-}
       CAPWATCH_FETCH_CRON: ${CAPWATCH_FETCH_CRON:-}
       DEV_ALLOW_REAL_INGEST: ${DEV_ALLOW_REAL_INGEST:-}
+      # Mount your official logo (Brand Portal asset) and point this at it,
+      # e.g. via a docker-compose.override.yml volume. Unset = placeholder.
+      BRAND_LOGO_FILE: ${BRAND_LOGO_FILE:-}
       TZ: ${TZ:-America/New_York}
     ports:
       # Bound to localhost by default. To serve the network, change the bind

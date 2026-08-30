@@ -7,6 +7,12 @@ const schema = z.object({
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 chars'),
   AUTH_MODE: z.enum(['dev', 'google']).default('dev'),
   APP_NAME: z.string().default('Readiness Hub'),
+  /**
+   * Path to the deployment's official logo file (svg/png), volume-mounted.
+   * The repo never bundles the trademarked CAP mark (V2-DESIGN-PLAN.md D12);
+   * unset -> the web app renders its neutral placeholder.
+   */
+  BRAND_LOGO_FILE: z.string().default(''),
   BASE_URL: z.string().default('http://localhost:8080'),
   GOOGLE_CLIENT_ID: z.string().default(''),
   GOOGLE_CLIENT_SECRET: z.string().default(''),
