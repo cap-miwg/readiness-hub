@@ -171,6 +171,34 @@ export interface OrgStatsSlice {
   perUnit: Map<number, JsonOrgStatsMetrics | null>
 }
 
+/** One unit that logged attendance in the trailing 12 months (recorded). */
+export interface ParticipationUnitSlice {
+  orgid: number
+  meetings90: number
+  attendeeRows90: number
+  presentRows90: number
+  guests90: number
+  /** ACTIVE members of this logging unit with no Present=true row in 60 days. */
+  quietCount: number
+}
+
+/** A named quiet member; loaded only at single-unit scope (D9). */
+export interface QuietMemberSlice {
+  capid: number
+  fullName: string
+  orgid: number
+  lastPresentOn: Date | null
+  rows90: number
+  present90: number
+}
+
+export interface ParticipationSlice {
+  /** Logging units in scope; scope units absent here are NOT RECORDED. */
+  units: ParticipationUnitSlice[]
+  /** Non-null only when the resolved scope is a single unit (D9). */
+  quietMembers: QuietMemberSlice[] | null
+}
+
 export interface PlConfigSlice {
   paths: PlPathRow[]
   groupsByPathId: Map<number, PlGroupRow[]>
@@ -201,6 +229,7 @@ export type ReportDataNeed =
   | 'plConfig'
   | 'aerospace'
   | 'cac'
+  | 'participation'
 
 export interface ReportData {
   asOf: Date
@@ -230,6 +259,7 @@ export interface ReportData {
   aeTaskCompletions: AeTaskCompletionSlice[]
   orgStats: OrgStatsSlice
   plConfig: PlConfigSlice | null
+  participation: ParticipationSlice
 }
 
 /** Empty scaffold for tests and for defaulting unloaded slices. */
@@ -259,6 +289,7 @@ export function emptyReportData(over: Partial<ReportData> = {}): ReportData {
     aeTaskCompletions: [],
     orgStats: { scoped: null, perUnit: new Map() },
     plConfig: null,
+    participation: { units: [], quietMembers: null },
     ...over,
   }
 }

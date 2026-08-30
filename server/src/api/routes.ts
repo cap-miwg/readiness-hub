@@ -11,6 +11,11 @@ import { registerMemberRoutes } from './members.js'
 import { registerFeedbackRoutes } from './feedback.js'
 import { registerAdminRoutes } from './admin.js'
 import { registerReportRoutes } from './reports.js'
+import { registerFindingsRoutes } from './findings.js'
+import { registerMyProgressRoutes } from './myProgress.js'
+import { registerAnnouncementRoutes } from './announcements.js'
+import { registerParticipationRoutes } from './participation.js'
+import { registerLogisticsRoutes } from './logistics.js'
 
 export async function registerApi(app: FastifyInstance): Promise<void> {
   registerMetaRoutes(app)
@@ -18,5 +23,10 @@ export async function registerApi(app: FastifyInstance): Promise<void> {
   registerMemberRoutes(app)
   registerFeedbackRoutes(app)
   registerAdminRoutes(app)
+  registerFindingsRoutes(app)
+  registerMyProgressRoutes(app)
+  registerAnnouncementRoutes(app)
+  registerParticipationRoutes(app)
+  registerLogisticsRoutes(app)
   await registerReportRoutes(app)
 }

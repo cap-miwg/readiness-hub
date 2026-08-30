@@ -27,6 +27,12 @@ import {
   orgSummaryOf,
 } from './scope.js'
 import {
+  meetingLineOf,
+  strengthDeltaOf,
+  strengthSeriesOf,
+  type OrgMeetingSourceRow,
+} from './findings.js'
+import {
   adoptionUnitKey,
   anchorOrgidOf,
   buildOrgTree,
@@ -112,6 +118,27 @@ async function handleOrgs(_req: FastifyRequest, reply: FastifyReply): Promise<vo
   reply.send(body)
 }
 
+interface DbOrgMeetingRow {
+  meet_day: string | null
+  meet_time: string | null
+  descr: string | null
+  activity_date: Date | null
+}
+
+/** OrgMeetings rows for the requested org itself (masthead line, never aggregated). */
+async function loadMeetingRows(orgid: number): Promise<OrgMeetingSourceRow[]> {
+  const res = await pool.query<DbOrgMeetingRow>(
+    'SELECT meet_day, meet_time, descr, activity_date FROM org_meetings WHERE orgid = $1',
+    [orgid],
+  )
+  return res.rows.map(r => ({
+    meetDay: r.meet_day,
+    meetTime: r.meet_time,
+    descr: r.descr,
+    activityDate: isoDate(r.activity_date),
+  }))
+}
+
 async function handleOverview(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const ctx = await resolveOrgScope(req, reply)
   if (ctx === null) return
@@ -123,7 +150,11 @@ async function handleOverview(req: FastifyRequest, reply: FastifyReply): Promise
   }
 
   const realScopeOrgids = ctx.scopeOrgids.filter(id => id !== UNASSIGNED_ORGID)
-  const [info, settings] = await Promise.all([loadOrgInfo(realScopeOrgids), loadOrgSettings()])
+  const [info, settings, meetingRows] = await Promise.all([
+    loadOrgInfo(realScopeOrgids),
+    loadOrgSettings(),
+    loadMeetingRows(ctx.orgid),
+  ])
   const excluded = new Set(settings.excludedUnits.map(normalizeUnit))
   const includedOrgids = realScopeOrgids.filter(id => {
     if (id === ctx.orgid) return true
@@ -177,6 +208,11 @@ async function handleOverview(req: FastifyRequest, reply: FastifyReply): Promise
     es: computed.es,
     orgStats: computed.orgStats,
     comparison,
+    // Redesign figure-strip support (V2-DESIGN-PLAN.md sections 5-6): the
+    // masthead meeting line and the 12-month strength delta + sparkline.
+    meetingLine: meetingLineOf(meetingRows),
+    strengthDelta12mo: strengthDeltaOf(computed.orgStats),
+    strengthSeries: strengthSeriesOf(computed.orgStats),
   }
   reply.send(body)
 }

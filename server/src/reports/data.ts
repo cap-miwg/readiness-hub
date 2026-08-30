@@ -7,6 +7,12 @@
  */
 
 import { pool } from '../db/pool.js'
+import { UNASSIGNED_ORGID } from '../ingest/orgTree.js'
+import {
+  loadParticipationUnitAggs,
+  loadQuietCounts,
+  loadQuietMembers,
+} from '../api/participation.js'
 import type { Role } from '../shared/contracts.js'
 import { AEROSPACE_DIMENSIONS_MODULES, LEVELS, type LevelId } from '../domain/constants/index.js'
 import { deriveLevelPathMap } from '../domain/senior.js'
@@ -492,6 +498,30 @@ export async function loadReportData(
 
   if (need.has('plConfig')) {
     data.plConfig = await loadPlConfig(scope.scopeOrgids)
+  }
+
+  if (need.has('participation')) {
+    // Loaders live in api/participation.ts (shared with the participation
+    // endpoint). Named quiet members load only at single-unit scope (D9).
+    const realScope = scope.scopeOrgids.filter(id => id !== UNASSIGNED_ORGID)
+    const singleUnit = realScope.length === 1
+    const [unitAggs, quietCounts, quietNamed] = await Promise.all([
+      loadParticipationUnitAggs(realScope, scope.asOf),
+      loadQuietCounts(realScope, scope.asOf),
+      singleUnit ? loadQuietMembers(realScope, scope.asOf) : Promise.resolve(null),
+    ])
+    const quietByOrgid = new Map(quietCounts.map(r => [r.orgid, r.quietCount]))
+    data.participation = {
+      units: unitAggs.map(u => ({
+        orgid: u.orgid,
+        meetings90: u.meetings90,
+        attendeeRows90: u.attendeeRows90,
+        presentRows90: u.presentRows90,
+        guests90: u.guests90,
+        quietCount: quietByOrgid.get(u.orgid) ?? 0,
+      })),
+      quietMembers: quietNamed,
+    }
   }
 
   if (need.has('aerospace')) {

@@ -99,6 +99,9 @@ export function registerMetaRoutes(app: FastifyInstance): void {
       downloadDate: isoTimestamp(lastRun?.download_date ?? null),
       memberCount: memberRes.rows[0]?.n ?? 0,
       orgCount,
+      // The Home "About the data" panel's next-expected fact (V2-DESIGN-PLAN.md
+      // section 5); null when no scheduled fetch is configured.
+      ingestSchedule: config.CAPWATCH_FETCH_CRON || null,
     }
     reply.send(meta)
   })

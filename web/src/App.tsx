@@ -12,6 +12,7 @@ import {
 import { SearchX } from 'lucide-react'
 import { ApiError, setUnauthorizedHandler, useMe } from './api/client'
 import Layout from './components/Layout'
+import SettingsStub from './components/SettingsStub'
 import { Banner, EmptyState, Spinner } from './components/ui'
 import Admin from './pages/Admin'
 import Cadets from './pages/Cadets'
@@ -53,7 +54,7 @@ function UnauthorizedRedirector() {
 
 function FullScreen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-paper p-4">
       <div className="w-full max-w-md text-center">{children}</div>
     </div>
   )
@@ -85,7 +86,7 @@ function RequireAuth() {
           <button
             type="button"
             onClick={() => void meQ.refetch()}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            className="rounded-md border border-hairline bg-paper px-4 py-2 text-sm font-semibold text-ink hover:border-muted"
           >
             Try again
           </button>
@@ -132,6 +133,7 @@ export default function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/orgchart" element={<OrgChart />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/settings" element={<SettingsStub />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import {
-  AlertTriangle,
-  Check,
-  ChevronDown,
-  Clock,
-  LogOut,
-  Menu,
-  MessageSquare,
-  RefreshCw,
-  User,
-} from 'lucide-react'
+import { LogOut, Menu, MessageSquare, RefreshCw, Settings, X } from 'lucide-react'
 import clsx from 'clsx'
-import type { MeResponse, OrgTreeNode } from '@shared/contracts'
+import type { MeResponse } from '@shared/contracts'
 import { APP_NAME_FALLBACK, logout, useMeta, useOrgs } from '../api/client'
 import FeedbackModal from '../features/feedback/FeedbackModal'
 import { orgScopeSearch, useOrgScope } from '../lib/urlState'
-import { Badge, Banner, Spinner } from './ui'
+import AsOfChip, { dataAgeOf } from './AsOfChip'
+import BrandMark from './BrandMark'
+import UnitSelector from './UnitSelector'
+import { flattenOrgTree } from './charter'
+import { Badge, Banner } from './ui'
+
+/*
+ * The Quiet Authority shell (V2-DESIGN-PLAN.md section 4): one white 56px
+ * row with a bottom hairline. Logo slot + wordmark, six tabs on desktop
+ * (D2), right cluster of unit selector, as-of chip, user menu. Below lg the
+ * tabs collapse into a hamburger drawer and the unit selector opens as a
+ * full-height sheet. Admin is an operator surface: it lives in the user
+ * menu and the drawer, not the tab row.
+ */
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home' },
@@ -32,44 +35,26 @@ const ADMIN_ITEM = { path: '/admin', label: 'Admin' } as const
 export const BUILD_VERSION: string =
   (import.meta.env.VITE_APP_VERSION as string | undefined) ?? 'dev'
 
-interface FlatOrg {
-  orgid: number
-  label: string
-  depth: number
+function initialsOf(name: string, email: string): string {
+  const src = (name.trim() || email).trim()
+  const parts = src.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    const first = parts[0]?.[0] ?? ''
+    const last = parts[parts.length - 1]?.[0] ?? ''
+    return (first + last).toUpperCase()
+  }
+  return src.slice(0, 2).toUpperCase()
 }
 
-function flattenOrgTree(node: OrgTreeNode, depth = 0, out: FlatOrg[] = []): FlatOrg[] {
-  out.push({ orgid: node.orgid, label: node.name, depth })
-  for (const child of node.children) flattenOrgTree(child, depth + 1, out)
-  return out
+interface UserMenuProps {
+  me: MeResponse
+  onFeedback: () => void
+  onLogout: () => void
+  signingOut: boolean
 }
 
-// 26h: the scheduled ingest is daily (04:00, docs/ARCHITECTURE.md Ingest);
-// anything older than one cycle plus slack means the pipeline is stalled.
-const STALE_AFTER_HOURS = 26
-
-interface DataAge {
-  text: string
-  stale: boolean
-  exact: string
-}
-
-function dataAge(downloadDate: string | null, nowMs: number): DataAge | null {
-  if (!downloadDate) return null
-  const parsed = new Date(downloadDate)
-  if (Number.isNaN(parsed.getTime())) return null
-  const hours = (nowMs - parsed.getTime()) / 3_600_000
-  let text: string
-  if (hours < 1) text = 'under 1h old'
-  else if (hours < 48) text = `${Math.floor(hours)}h old`
-  else text = `${Math.floor(hours / 24)}d old`
-  return { text, stale: hours > STALE_AFTER_HOURS, exact: parsed.toLocaleString() }
-}
-
-function UserMenu({ me }: { me: MeResponse }) {
+function UserMenu({ me, onFeedback, onLogout, signingOut }: UserMenuProps) {
   const [open, setOpen] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
-  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -90,15 +75,8 @@ function UserMenu({ me }: { me: MeResponse }) {
     }
   }, [open])
 
-  const onLogout = async () => {
-    setSigningOut(true)
-    try {
-      await logout()
-    } finally {
-      // Full reload clears all client cache regardless of logout outcome.
-      window.location.href = '/login'
-    }
-  }
+  const itemClass =
+    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-ink hover:bg-gray20'
 
   return (
     <div ref={rootRef} className="relative">
@@ -107,48 +85,51 @@ function UserMenu({ me }: { me: MeResponse }) {
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex items-center gap-2 rounded-lg border border-blue-700 bg-blue-800 px-2.5 py-1.5 text-sm text-blue-100 hover:bg-blue-700"
+        aria-label="Account menu"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-symbol-20 font-display text-xs font-semibold text-symbol"
       >
-        <User className="h-4 w-4" aria-hidden />
-        <span className="hidden max-w-[160px] truncate sm:inline">{me.name || me.email}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-blue-300" aria-hidden />
+        {initialsOf(me.name, me.email)}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-2 text-slate-800 shadow-lg">
-          <div className="px-2 py-1.5">
-            <div className="truncate text-sm font-bold">{me.name || me.email}</div>
-            <div className="truncate text-xs text-slate-500">{me.email}</div>
+        <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-hairline bg-paper p-2 shadow-lg">
+          <div className="border-b border-hairline px-2 pb-2 pt-1.5">
+            <div className="truncate text-sm font-semibold text-ink">{me.name || me.email}</div>
+            <div className="truncate text-xs text-ink2">{me.email}</div>
             <div className="mt-1.5 flex items-center gap-2">
-              <Badge tone={me.role === 'admin' ? 'amber' : 'blue'}>{me.role}</Badge>
-              {me.authMode === 'dev' && <Badge tone="red">dev auth</Badge>}
+              <Badge tone={me.role === 'admin' ? 'blue' : 'slate'}>{me.role}</Badge>
+              {me.authMode === 'dev' && <Badge tone="amber">dev auth</Badge>}
             </div>
           </div>
-          <div className="mt-1 border-t border-slate-100 pt-1">
+          <div className="mt-1">
+            {me.role === 'admin' && (
+              <NavLink to="/admin" onClick={() => setOpen(false)} className={itemClass}>
+                <Settings className="h-4 w-4 text-ink2" aria-hidden />
+                Admin
+              </NavLink>
+            )}
+            <NavLink to="/settings" onClick={() => setOpen(false)} className={itemClass}>
+              <Settings className="h-4 w-4 text-ink2" aria-hidden />
+              Settings
+            </NavLink>
             <button
               type="button"
               data-testid="feedback-open"
               onClick={() => {
                 setOpen(false)
-                setFeedbackOpen(true)
+                onFeedback()
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className={itemClass}
             >
-              <MessageSquare className="h-4 w-4" aria-hidden />
+              <MessageSquare className="h-4 w-4 text-ink2" aria-hidden />
               Send feedback
             </button>
-            <button
-              type="button"
-              onClick={() => void onLogout()}
-              disabled={signingOut}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              <LogOut className="h-4 w-4" aria-hidden />
+            <button type="button" onClick={onLogout} disabled={signingOut} className={clsx(itemClass, 'disabled:opacity-50')}>
+              <LogOut className="h-4 w-4 text-ink2" aria-hidden />
               {signingOut ? 'Signing out...' : 'Sign out'}
             </button>
           </div>
         </div>
       )}
-      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   )
 }
@@ -160,6 +141,8 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
   const [navOpen, setNavOpen] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [dismissedVersionPrompt, setDismissedVersionPrompt] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 60_000)
@@ -194,60 +177,98 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
   }, [orgsQ.data, flatOrgs, scope.orgid, me.homeOrgid, setOrgid])
 
   const selectedOrgid = scope.orgid ?? orgsQ.data?.anchorOrgid ?? null
-  const age = dataAge(meta?.downloadDate ?? null, nowMs)
   const versionMismatch =
     !dismissedVersionPrompt &&
     meta !== undefined &&
     BUILD_VERSION !== 'dev' &&
     meta.appVersion !== BUILD_VERSION
 
-  const navItems = me.role === 'admin' ? [...NAV_ITEMS, ADMIN_ITEM] : [...NAV_ITEMS]
   const scopeSearch = orgScopeSearch(scope)
+  const drawerItems = me.role === 'admin' ? [...NAV_ITEMS, ADMIN_ITEM] : [...NAV_ITEMS]
+  const age = dataAgeOf(meta?.downloadDate ?? null, nowMs)
+
+  const onLogout = async () => {
+    setSigningOut(true)
+    try {
+      await logout()
+    } finally {
+      // Full reload clears all client cache regardless of logout outcome.
+      window.location.href = '/login'
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-16 font-sans text-slate-900">
-      <header className="sticky top-0 z-50 bg-blue-900 text-white shadow">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2 sm:px-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <NavLink to={{ pathname: '/', search: scopeSearch }} className="min-w-0">
-              <h1 className="truncate text-lg font-bold leading-tight">{appName}</h1>
-            </NavLink>
+    <div className="min-h-screen bg-paper pb-16 font-sans text-ink">
+      <header className="sticky top-0 z-50 border-b border-hairline bg-paper">
+        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-2 px-3 sm:px-4 lg:gap-4">
+          <button
+            type="button"
+            onClick={() => setNavOpen(v => !v)}
+            aria-expanded={navOpen}
+            aria-controls="nav-drawer"
+            aria-label="Menu"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-ink hover:bg-gray20 lg:hidden"
+          >
+            {navOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
+          </button>
+
+          <NavLink
+            to={{ pathname: '/', search: scopeSearch }}
+            className="flex min-w-0 items-center gap-2.5"
+            aria-label={`${appName} home`}
+          >
+            <BrandMark />
+            <span className="truncate font-display text-base font-bold text-ink">{appName}</span>
+          </NavLink>
+
+          <nav aria-label="Primary" className="hidden self-stretch lg:ml-2 lg:flex">
+            {NAV_ITEMS.map(item => (
+              <NavLink
+                key={item.path}
+                to={{ pathname: item.path, search: scopeSearch }}
+                end={item.path === '/'}
+                className={({ isActive }) =>
+                  clsx(
+                    'flex items-center whitespace-nowrap px-3 font-display text-[15px]',
+                    isActive
+                      ? 'font-semibold text-symbol shadow-[inset_0_-2px_0_var(--cap-symbol-blue)]'
+                      : 'font-medium text-ink hover:shadow-[inset_0_-2px_0_var(--hairline)]',
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <UnitSelector
+              tree={orgsQ.data?.tree}
+              loading={orgsQ.isPending}
+              error={orgsQ.error ? orgsQ.error.message : null}
+              selectedOrgid={selectedOrgid}
+              descendants={scope.descendants}
+              onSelect={orgid => setOrgid(orgid)}
+              onDescendantsChange={setDescendants}
+            />
+            <div className="hidden lg:block">
+              <AsOfChip meta={meta} pending={metaQ.isPending} nowMs={nowMs} />
+            </div>
+            <div className="hidden lg:block">
+              <UserMenu
+                me={me}
+                onFeedback={() => setFeedbackOpen(true)}
+                onLogout={() => void onLogout()}
+                signingOut={signingOut}
+              />
+            </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setNavOpen(v => !v)}
-              aria-expanded={navOpen}
-              className="flex items-center gap-2 rounded-lg border border-blue-700 bg-blue-800 px-3 py-1.5 text-sm md:hidden"
-            >
-              <Menu className="h-4 w-4" aria-hidden /> Menu
-            </button>
-
-            <nav className="hidden max-w-full shrink-0 gap-1 overflow-x-auto rounded-lg bg-blue-800 p-1 md:flex">
-              {navItems.map(item => (
-                <NavLink
-                  key={item.path}
-                  to={{ pathname: item.path, search: scopeSearch }}
-                  end={item.path === '/'}
-                  className={({ isActive }) =>
-                    clsx(
-                      'whitespace-nowrap rounded px-3 py-1.5 text-sm font-semibold transition-all',
-                      isActive ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-200 hover:text-white',
-                    )
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-
-            <UserMenu me={me} />
-          </div>
-
-          {navOpen && (
-            <nav className="flex w-full flex-col gap-1 rounded-lg bg-blue-800 p-2 md:hidden">
-              {navItems.map(item => (
+        {navOpen && (
+          <div id="nav-drawer" className="border-t border-hairline bg-paper px-4 pb-6 lg:hidden">
+            <nav aria-label="Primary, mobile" className="flex flex-col">
+              {drawerItems.map(item => (
                 <NavLink
                   key={item.path}
                   to={{ pathname: item.path, search: scopeSearch }}
@@ -255,8 +276,8 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
                   onClick={() => setNavOpen(false)}
                   className={({ isActive }) =>
                     clsx(
-                      'rounded px-3 py-2 text-left text-sm font-semibold transition-colors',
-                      isActive ? 'bg-white text-blue-900' : 'text-blue-100 hover:bg-blue-700',
+                      'border-b border-hairline py-3 font-display text-base',
+                      isActive ? 'font-semibold text-symbol' : 'font-medium text-ink',
                     )
                   }
                 >
@@ -264,94 +285,60 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
                 </NavLink>
               ))}
             </nav>
-          )}
-        </div>
 
-        <div className="border-t border-blue-800 bg-blue-900/95">
-          <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-4">
-            <div className="relative min-w-[220px] flex-1 sm:max-w-[360px]">
-              {orgsQ.isPending ? (
-                <div className="flex items-center gap-2 rounded border border-blue-700 bg-blue-800 px-2 py-2 text-sm text-blue-200">
-                  <Spinner /> Loading units...
+            <div className="pt-3 text-sm">
+              <div className="truncate font-semibold text-ink">{me.name || me.email}</div>
+              <div className="truncate text-xs text-ink2">
+                {me.email} ({me.role})
+              </div>
+              {age !== null && meta?.downloadDate && (
+                <div className={clsx('tnum mt-1 text-xs', age.stale ? 'text-scarlet' : 'text-ink2')}>
+                  {age.stale && <span className="sr-only">Alert: data may be stale. </span>}
+                  Data as of{' '}
+                  {new Date(meta.downloadDate).toLocaleDateString('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
                 </div>
-              ) : orgsQ.error ? (
-                <div
-                  className="truncate rounded border border-red-400 bg-red-900/40 px-2 py-2 text-sm text-red-100"
-                  title={orgsQ.error.message}
-                >
-                  Units unavailable: {orgsQ.error.message}
-                </div>
-              ) : (
-                <>
-                  <label className="sr-only" htmlFor="org-select">
-                    Unit
-                  </label>
-                  <select
-                    id="org-select"
-                    value={selectedOrgid ?? ''}
-                    onChange={e => {
-                      const v = Number(e.target.value)
-                      setOrgid(Number.isSafeInteger(v) ? v : null)
-                    }}
-                    className="w-full cursor-pointer appearance-none truncate rounded border border-blue-700 bg-blue-800 py-2 pl-2 pr-8 text-sm font-bold text-white focus:ring-1 focus:ring-blue-400"
-                  >
-                    {flatOrgs.map(o => (
-                      <option key={o.orgid} value={o.orgid}>
-                        {'\u00A0'.repeat(o.depth * 3)}
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-blue-300"
-                    aria-hidden
-                  />
-                </>
               )}
             </div>
 
-            <label
-              className="group flex shrink-0 cursor-pointer select-none items-center gap-2 rounded-lg border border-blue-600 bg-blue-800/80 px-3 py-2 text-xs font-semibold text-blue-50 shadow-sm transition-colors hover:bg-blue-800"
-              title="Aggregate data from subordinate units"
-            >
-              <input
-                type="checkbox"
-                checked={scope.descendants}
-                onChange={e => setDescendants(e.target.checked)}
-                className="sr-only"
-              />
-              <span
-                className={clsx(
-                  'flex h-4 w-4 items-center justify-center rounded border',
-                  scope.descendants ? 'border-green-400 bg-green-500' : 'border-blue-300 bg-blue-900/60',
-                )}
+            <div className="mt-2 flex flex-col">
+              <NavLink
+                to="/settings"
+                onClick={() => setNavOpen(false)}
+                className="flex items-center gap-2 border-t border-hairline py-3 text-sm font-medium text-ink"
               >
-                {scope.descendants && <Check className="h-3 w-3 text-white" aria-hidden />}
-              </span>
-              <span className="whitespace-nowrap">Include Sub-Units</span>
-            </label>
-
-            <div className="ml-auto flex items-center gap-2">
-              {metaQ.isPending ? null : age === null ? (
-                <Badge tone="amber" title="No CAPWATCH extract has been ingested yet">
-                  <AlertTriangle className="h-3 w-3" aria-hidden /> No data
-                </Badge>
-              ) : age.stale ? (
-                <Badge tone="red" title={`CAPWATCH extract generated ${age.exact}; expected a daily refresh`}>
-                  <AlertTriangle className="h-3 w-3" aria-hidden /> Data {age.text} (stale)
-                </Badge>
-              ) : (
-                <Badge tone="blue" title={`CAPWATCH extract generated ${age.exact}`}>
-                  <Clock className="h-3 w-3" aria-hidden /> Data {age.text}
-                </Badge>
-              )}
+                <Settings className="h-4 w-4 text-ink2" aria-hidden />
+                Settings
+              </NavLink>
+              <button
+                type="button"
+                onClick={() => {
+                  setNavOpen(false)
+                  setFeedbackOpen(true)
+                }}
+                className="flex items-center gap-2 border-t border-hairline py-3 text-left text-sm font-medium text-ink"
+              >
+                <MessageSquare className="h-4 w-4 text-ink2" aria-hidden />
+                Send feedback
+              </button>
+              <button
+                type="button"
+                onClick={() => void onLogout()}
+                disabled={signingOut}
+                className="flex items-center gap-2 border-t border-hairline py-3 text-left text-sm font-medium text-ink disabled:opacity-50"
+              >
+                <LogOut className="h-4 w-4 text-ink2" aria-hidden />
+                {signingOut ? 'Signing out...' : 'Sign out'}
+              </button>
             </div>
           </div>
-        </div>
+        )}
       </header>
 
       {me.authMode === 'dev' && (
-        <div className="mx-auto max-w-[1440px] px-3 pt-3 sm:px-4">
+        <div className="mx-auto max-w-[1024px] px-4 pt-3 sm:px-6">
           <Banner kind="warn">
             Development auth mode is active: no Google sign-in, sessions are local test users. Not
             for production use.
@@ -360,7 +347,7 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
       )}
 
       {versionMismatch && meta && (
-        <div className="mx-auto max-w-[1440px] px-3 pt-3 sm:px-4">
+        <div className="mx-auto max-w-[1024px] px-4 pt-3 sm:px-6">
           <Banner
             kind="info"
             action={
@@ -368,14 +355,14 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
                 <button
                   type="button"
                   onClick={() => window.location.reload()}
-                  className="inline-flex items-center gap-1.5 rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-symbol px-2.5 py-1 text-xs font-semibold text-paper hover:opacity-90"
                 >
                   <RefreshCw className="h-3 w-3" aria-hidden /> Reload
                 </button>
                 <button
                   type="button"
                   onClick={() => setDismissedVersionPrompt(true)}
-                  className="rounded px-2 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                  className="rounded-md px-2 py-1 text-xs font-semibold text-symbol hover:bg-gray20"
                 >
                   Later
                 </button>
@@ -388,7 +375,9 @@ export default function Layout({ me, children }: { me: MeResponse; children: Rea
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-[1440px] px-3 py-6 sm:px-4">{children}</main>
+      <main className="mx-auto w-full max-w-[1024px] px-4 pb-6 pt-8 sm:px-6">{children}</main>
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   )
 }

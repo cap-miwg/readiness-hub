@@ -33,15 +33,17 @@ const EXPECTED_IDS = [
   'qua',
   'recruiting-trends',
   'retention-analysis',
+  'participation-summary',
+  'quiet-members',
   'cac-representatives',
 ]
 
 describe('report catalog', () => {
-  it('carries all 20 v1 reports with unique ids', () => {
+  it('carries all 20 v1 reports plus the 2 v2 participation reports with unique ids', () => {
     const metas = listReportMeta()
-    expect(metas).toHaveLength(20)
+    expect(metas).toHaveLength(22)
     const ids = metas.map(m => m.id)
-    expect(new Set(ids).size).toBe(20)
+    expect(new Set(ids).size).toBe(22)
     expect(ids.slice().sort()).toEqual(EXPECTED_IDS.slice().sort())
     for (const id of EXPECTED_IDS) expect(REPORTS_BY_ID.has(id)).toBe(true)
   })

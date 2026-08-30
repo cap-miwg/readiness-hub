@@ -42,6 +42,12 @@ export interface MetaResponse {
   downloadDate: string | null
   memberCount: number
   orgCount: number
+  /**
+   * CAPWATCH_FETCH_CRON verbatim when a scheduled fetch is configured, else
+   * null. Feeds the Home "About the data" panel's next-expected fact
+   * (V2-DESIGN-PLAN.md section 5); the client humanizes the cron.
+   */
+  ingestSchedule: string | null
 }
 
 /**
@@ -56,6 +62,8 @@ export interface OrgTreeNode {
   orgid: number
   name: string
   unit: string
+  /** Wing code (e.g. MI) for the MI-104 charter chip; '' on pseudo-nodes. */
+  wing?: string
   type: string
   scope: string
   /** ACTIVE include-list members whose home org is this node (self scope). */
@@ -116,6 +124,14 @@ export interface UnitComparisonRow {
   growthStatus: string | null
 }
 
+/** One point of the 12-month strength sparkline (org_statistics TOTAL counts). */
+export interface StrengthPoint {
+  /** Month key, yyyy-mm. */
+  month: string
+  /** Combined (senior + cadet) TOTAL for that month across the scope. */
+  total: number
+}
+
 export interface OverviewResponse {
   orgid: number
   descendants: boolean
@@ -137,6 +153,21 @@ export interface OverviewResponse {
    * excluded units dropped (v1 AppUnitOverview.html:1852-1866).
    */
   comparison: UnitComparisonRow[] | null
+  /**
+   * Masthead meeting line for the requested org itself (never aggregated),
+   * from the OrgMeetings ingest: "Meets Thursdays 18:30, Riverside Armory".
+   * Null when the unit records no meeting in eServices (render nothing, per
+   * the NOT RECORDED convention).
+   */
+  meetingLine?: string | null
+  /**
+   * Combined membership now minus 12 months ago for the scope, from the
+   * computed org_stats monthly series; null with under 12 months of history.
+   * Renders as the delta under the Members figure.
+   */
+  strengthDelta12mo?: number | null
+  /** Up to 12 monthly points, oldest first, for the ink sparkline. */
+  strengthSeries?: StrengthPoint[]
 }
 
 export interface EsAnalysisResponse {
@@ -151,6 +182,147 @@ export interface OrgChartResponse {
   descendants: boolean
   scope: 'self' | 'subtree'
   orgchart: OrgChartNode | null
+}
+
+// --- Needs Attention findings (V2-DESIGN-PLAN.md section 6, module 1) ---
+
+/**
+ * ACTION = scarlet verdict (actionable now), WATCH = bordered yellow diamond
+ * (approaching problem), PLAN = Symbol Blue chip (scheduled work).
+ */
+export type FindingCategory = 'action' | 'watch' | 'plan'
+
+/**
+ * One ranked queue row: one sentence, one deep link. Text carries counts,
+ * never member names (D9); the SPOF finding names the position at rest.
+ */
+export interface Finding {
+  /** Stable slug per finding kind, e.g. 'es-quals-expired', 'spof-gtl'. */
+  id: string
+  category: FindingCategory
+  /** One plain-English sentence. */
+  text: string
+  /** App-relative deep link carrying orgid (and descendants) params. */
+  href: string
+  /** Short verb phrase for the action link, e.g. "Review expirations". */
+  actionLabel: string
+  /** 1-based position in the ranked queue (action > watch > plan). */
+  rank: number
+}
+
+/**
+ * GET /api/orgs/:orgid/findings?descendants=. Capped at 5; findings is []
+ * for a healthy scope (the calm empty state renders client-side).
+ */
+export interface FindingsResponse {
+  orgid: number
+  descendants: boolean
+  findings: Finding[]
+}
+
+// --- My Progress (D11, Home platform page) ---
+
+export type MyProgressScope = 'senior' | 'cadet' | 'other'
+
+export interface MyProgressFigure {
+  label: string
+  /** Display-ready value ("148", "2 of 5", "Met", "Not recorded"). */
+  value: string
+  caption?: string
+}
+
+export interface MyProgressChecklistItem {
+  label: string
+  done: boolean
+  /** Progress or evidence detail ("8 of 12 months"); null when none. */
+  detail: string | null
+}
+
+export interface MyProgressExpiringQual {
+  qualification: string
+  /** ISO yyyy-mm-dd. */
+  expiration: string | null
+  daysUntil: number | null
+}
+
+export interface MyProgressMember {
+  capid: number
+  fullName: string
+  rank: string
+  orgid: number
+  /** "GLR-MI-104" style label; null for the Unassigned pseudo-org. */
+  unitLabel: string | null
+  scope: MyProgressScope
+}
+
+/**
+ * GET /api/me/progress. Identity resolution per D11: the session email's
+ * local part as an integer CAPID, else a unique MbrContact PRIMARY EMAIL
+ * match; zero or ambiguous matches return matched: false and nothing else
+ * (the card degrades gracefully, never guesses). Copy is plain English: no
+ * bare acronyms without expansion on first use.
+ */
+export interface MyProgressResponse {
+  matched: boolean
+  member?: MyProgressMember
+  /** One or two plain-English sentences naming the next concrete step. */
+  nextAction?: string
+  /** Up to three personal figures for the quiet numeral strip. */
+  figures: MyProgressFigure[]
+  /** Requirement checklist toward the next promotion or achievement. */
+  checklist?: MyProgressChecklistItem[]
+  /** Active Emergency Services qualifications expiring within 90 days. */
+  expiringQuals?: MyProgressExpiringQual[]
+}
+
+// --- Announcements (admin-authored, V2-DESIGN-PLAN.md section 5) ---
+
+/**
+ * body is stored and served as PLAIN TEXT: the web renders it as text with
+ * line breaks only, never as HTML or Markdown.
+ */
+export interface Announcement {
+  id: number
+  /** ISO timestamp. */
+  createdAt: string
+  authorEmail: string
+  title: string
+  body: string
+  /** ISO yyyy-mm-dd display window; null = unbounded on that side. */
+  startsAt: string | null
+  endsAt: string | null
+  archived: boolean
+}
+
+/** GET /api/announcements: active window only, newest first, limit 10. */
+export interface AnnouncementsResponse {
+  announcements: Announcement[]
+}
+
+/** GET /api/admin/announcements: everything incl. archived and scheduled. */
+export interface AdminAnnouncementsResponse {
+  announcements: Announcement[]
+}
+
+/**
+ * POST /api/admin/announcements body. title <= 120 chars, body <= 2000 chars
+ * of plain text, dates ISO yyyy-mm-dd with endsAt >= startsAt when both set.
+ */
+export interface AnnouncementInput {
+  title: string
+  body: string
+  startsAt?: string | null
+  endsAt?: string | null
+}
+
+/** PUT /api/admin/announcements/:id body (full replace + archive toggle). */
+export interface AnnouncementUpdateInput extends AnnouncementInput {
+  archived?: boolean
+}
+
+/** POST/PUT reply. DELETE replies { ok: true }. */
+export interface AnnouncementMutationResponse {
+  announcement: Announcement
 }
 
 // --- Senior dashboard ---

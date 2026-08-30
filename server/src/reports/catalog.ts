@@ -1,7 +1,8 @@
 /**
  * The report catalog: the 20 v1 reports (Index.html:4274-4455 reportCatalog),
- * same ids, titles, icons, accents, and tags, each bound to its server-side
- * generator and to the data slices its loader must fetch.
+ * same ids, titles, icons, accents, and tags, plus the v2 participation
+ * reports (attendance module, D7), each bound to its server-side generator
+ * and to the data slices its loader must fetch.
  */
 
 import type { ReportMeta, ReportResult } from '../shared/reportContracts.js'
@@ -19,9 +20,11 @@ import {
   generateMostNeededTraining,
   generateNearPromotionReport,
   generateOFlightReport,
+  generateParticipationSummaryReport,
   generatePromotionEligibilityReport,
   generatePromotionRequirementsReport,
   generateQCUAReport,
+  generateQuietMembersReport,
   generateQUAReport,
   generateRecentPromotionsReport,
   generateRecruitingTrendsReport,
@@ -285,6 +288,32 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     },
     needs: ['orgStats'],
     generate: generateRetentionAnalysisReport,
+  },
+  {
+    meta: {
+      id: 'participation-summary',
+      title: 'Participation Summary',
+      description:
+        'Meeting attendance per unit for the last 90 days: meetings logged, average attendance rate, guest counts, and quiet members (no recorded attendance in 60 days)',
+      icon: 'CalendarCheck',
+      accent: 'blue',
+      tags: ['senior', 'cadet', 'participation', 'readiness'],
+    },
+    needs: ['participation'],
+    generate: generateParticipationSummaryReport,
+  },
+  {
+    meta: {
+      id: 'quiet-members',
+      title: 'Quiet Members',
+      description:
+        'Active members with no recorded meeting attendance in the last 60 days, in units that log attendance (names at single-unit scope, per-unit counts above it)',
+      icon: 'UserMinus',
+      accent: 'amber',
+      tags: ['senior', 'cadet', 'participation', 'retention'],
+    },
+    needs: ['participation'],
+    generate: generateQuietMembersReport,
   },
   {
     meta: {

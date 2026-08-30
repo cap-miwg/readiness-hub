@@ -208,6 +208,7 @@ function nodeFor(orgid: number, src: OrgTreeSource): OrgTreeNode {
     orgid,
     name: info?.name ?? `Org ${orgid}`,
     unit: info?.unit ?? '',
+    wing: info?.wing ?? '',
     type: info?.type ?? '',
     scope: info?.scope ?? '',
     memberCount: src.counts.get(orgid) ?? 0,

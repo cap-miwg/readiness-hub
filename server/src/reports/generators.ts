@@ -24,6 +24,7 @@ import {
   type LevelId,
 } from '../domain/constants/index.js'
 import { phaseFromAchievement } from '../domain/cadet.js'
+import { UNASSIGNED_ORGID } from '../ingest/orgTree.js'
 import type { RequirementKey } from '../domain/constants/index.js'
 import { ageAsOf, approachingAge, daysUntil } from '../domain/timeSensitive.js'
 import type { ReportColumn, ReportResult } from '../shared/reportContracts.js'
@@ -2176,5 +2177,156 @@ export function generateCACRepresentativesReport(data: ReportData): ReportResult
     groupedReps,
     totalScopeReps: scopeReps.length,
     totalAllReps: allReps.length,
+  })
+}
+
+// --- 21. Participation Summary (v2 attendance module, D7) ---
+
+/** Integer percent from present/rows; null when there are no attendee rows. */
+function percentOf(present: number, rows: number): number | null {
+  if (rows <= 0) return null
+  return Math.round((present / rows) * 100)
+}
+
+/**
+ * Per unit in scope: meetings logged in the trailing 90 days, average
+ * attendance rate (Present rows / attendee rows), guest count, and quiet
+ * members. Units with no attendance log in 12 months render the neutral
+ * "Not recorded" state (never a red verdict); their figure cells are null.
+ * Guests are counts only; guest identities are never ingested.
+ */
+export function generateParticipationSummaryReport(data: ReportData): ReportResult {
+  const columns = [
+    col('unit', 'Unit'),
+    col('status', 'Attendance Log'),
+    col('meetings', 'Meetings (90d)'),
+    col('avgRate', 'Avg Attendance % (90d)'),
+    col('guests', 'Guests (90d)'),
+    col('quiet', 'Quiet Members (60d)'),
+  ]
+  const byOrgid = new Map(data.participation.units.map(u => [u.orgid, u]))
+  const scopeUnits = [...data.scopeOrgids].filter(id => id !== UNASSIGNED_ORGID)
+  interface SummaryRow extends Row {
+    unit: string
+    recorded: boolean
+    avgRate: number | null
+  }
+  const rows: SummaryRow[] = scopeUnits.map(orgid => {
+    const u = byOrgid.get(orgid)
+    const unit = unitDisplayName(data.orgs, orgid)
+    if (u === undefined) {
+      return {
+        orgid,
+        unit,
+        recorded: false,
+        status: 'Not recorded',
+        meetings: null,
+        avgRate: null,
+        guests: null,
+        quiet: null,
+      }
+    }
+    return {
+      orgid,
+      unit,
+      recorded: true,
+      status: 'Recorded',
+      meetings: u.meetings90,
+      avgRate: percentOf(u.presentRows90, u.attendeeRows90),
+      guests: u.guests90,
+      quiet: u.quietCount,
+    }
+  })
+  // Worklist order: recorded units worst attendance first, not-recorded last.
+  rows.sort((a, b) => {
+    if (a.recorded !== b.recorded) return a.recorded ? -1 : 1
+    if (a.recorded) {
+      const ra = a.avgRate ?? Number.POSITIVE_INFINITY
+      const rb = b.avgRate ?? Number.POSITIVE_INFINITY
+      if (ra !== rb) return ra - rb
+    }
+    return a.unit.localeCompare(b.unit)
+  })
+  const recorded = data.participation.units
+  return finish(data, columns, rows, data.members.length, {
+    unitsInScope: scopeUnits.length,
+    unitsRecorded: recorded.length,
+    meetings90: recorded.reduce((sum, u) => sum + u.meetings90, 0),
+    guests90: recorded.reduce((sum, u) => sum + u.guests90, 0),
+    quietTotal: recorded.reduce((sum, u) => sum + u.quietCount, 0),
+  })
+}
+
+// --- 22. Quiet Members (v2 attendance module, D7/D9) ---
+
+/**
+ * ACTIVE members with zero Present=true rows in the trailing 60 days, in
+ * units that log attendance. Names appear only when the resolved scope is a
+ * single unit (the loader only populates the named slice there, per D9);
+ * any wider scope gets per-unit counts instead.
+ */
+export function generateQuietMembersReport(data: ReportData): ReportResult {
+  const named = data.participation.quietMembers
+  if (named !== null) {
+    const columns = [
+      col('name', 'Member'),
+      col('unit', 'Unit'),
+      col('lastPresent', 'Last Present'),
+      col('rate90', '90-Day Attendance %'),
+    ]
+    const rows: Row[] = [...named]
+      .sort((a, b) => {
+        // Never-present first, then oldest last-present date first.
+        const ta = a.lastPresentOn?.getTime() ?? Number.NEGATIVE_INFINITY
+        const tb = b.lastPresentOn?.getTime() ?? Number.NEGATIVE_INFINITY
+        if (ta !== tb) return ta - tb
+        return a.fullName.localeCompare(b.fullName)
+      })
+      .map(r => ({
+        capid: r.capid,
+        name: r.fullName,
+        unit: unitDisplayName(data.orgs, r.orgid),
+        lastPresent: isoDate(r.lastPresentOn),
+        rate90: percentOf(r.present90, r.rows90),
+      }))
+    return finish(data, columns, rows, data.members.length, {
+      view: 'members',
+      quietTotal: rows.length,
+    })
+  }
+
+  // Scope wider than one unit: counts per unit only, never names (D9).
+  const columns = [
+    col('unit', 'Unit'),
+    col('status', 'Attendance Log'),
+    col('quiet', 'Quiet Members (60d)'),
+  ]
+  const byOrgid = new Map(data.participation.units.map(u => [u.orgid, u]))
+  const scopeUnits = [...data.scopeOrgids].filter(id => id !== UNASSIGNED_ORGID)
+  interface UnitRow extends Row {
+    unit: string
+    recorded: boolean
+    quiet: number | null
+  }
+  const rows: UnitRow[] = scopeUnits.map(orgid => {
+    const u = byOrgid.get(orgid)
+    return {
+      orgid,
+      unit: unitDisplayName(data.orgs, orgid),
+      recorded: u !== undefined,
+      status: u !== undefined ? 'Recorded' : 'Not recorded',
+      quiet: u !== undefined ? u.quietCount : null,
+    }
+  })
+  rows.sort((a, b) => {
+    if (a.recorded !== b.recorded) return a.recorded ? -1 : 1
+    const qa = a.quiet ?? -1
+    const qb = b.quiet ?? -1
+    if (qa !== qb) return qb - qa
+    return a.unit.localeCompare(b.unit)
+  })
+  return finish(data, columns, rows, data.members.length, {
+    view: 'unit-summary',
+    quietTotal: data.participation.units.reduce((sum, u) => sum + u.quietCount, 0),
   })
 }

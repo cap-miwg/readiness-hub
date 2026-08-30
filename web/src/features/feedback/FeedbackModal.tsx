@@ -30,7 +30,7 @@ function submitErrorMessage(err: unknown): string {
 }
 
 function counterClass(length: number, max: number): string {
-  return length >= max ? 'text-red-600' : 'text-slate-400'
+  return length >= max ? 'text-scarlet' : 'text-ink2'
 }
 
 export default function FeedbackModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -80,7 +80,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
               type="button"
               onClick={close}
               data-testid="feedback-cancel"
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-md border border-hairline px-3 py-1.5 text-sm font-semibold text-ink hover:border-muted"
             >
               Cancel
             </button>
@@ -89,9 +89,9 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
               onClick={() => void onSubmit()}
               disabled={!canSubmit}
               data-testid="feedback-submit"
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-symbol px-3 py-1.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-50"
             >
-              {submitting && <Spinner className="text-white" />}
+              {submitting && <Spinner className="text-paper" />}
               {submitting ? 'Sending...' : 'Send feedback'}
             </button>
           </div>
@@ -101,7 +101,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
               type="button"
               onClick={close}
               data-testid="feedback-done"
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+              className="rounded-md bg-symbol px-3 py-1.5 text-sm font-semibold text-paper hover:opacity-90"
             >
               Done
             </button>
@@ -111,9 +111,9 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
     >
       {result !== null ? (
         <div data-testid="feedback-success" className="flex flex-col items-center gap-2 py-4 text-center">
-          <CheckCircle2 className="h-10 w-10 text-green-600" aria-hidden />
-          <div className="text-sm font-bold text-slate-800">Feedback sent. Thank you!</div>
-          <div className="text-sm text-slate-500">
+          <CheckCircle2 className="h-10 w-10 text-symbol" aria-hidden />
+          <div className="text-sm font-semibold text-ink">Feedback sent. Thank you!</div>
+          <div className="text-sm text-ink2">
             Recorded as feedback #{result.id}
             {githubIssueOf(result) !== null && <> and filed as GitHub issue #{githubIssueOf(result)}</>}.
           </div>
@@ -126,7 +126,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
             </Banner>
           )}
           <div>
-            <label htmlFor="feedback-category" className="mb-1 block text-xs font-semibold text-slate-600">
+            <label htmlFor="feedback-category" className="mb-1 block text-xs font-semibold text-ink2">
               Category
             </label>
             <select
@@ -134,7 +134,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
               data-testid="feedback-category"
               value={category}
               onChange={e => setCategory(e.target.value as FeedbackCategory)}
-              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:border-symbol focus:outline-none"
             >
               {CATEGORIES.map(c => (
                 <option key={c.value} value={c.value}>
@@ -145,7 +145,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
           </div>
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label htmlFor="feedback-title" className="text-xs font-semibold text-slate-600">
+              <label htmlFor="feedback-title" className="text-xs font-semibold text-ink2">
                 Title
               </label>
               <span className={`text-xs ${counterClass(title.length, FEEDBACK_TITLE_MAX)}`}>
@@ -160,12 +160,12 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
               maxLength={FEEDBACK_TITLE_MAX}
               onChange={e => setTitle(e.target.value)}
               placeholder="One-line summary"
-              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-hairline px-2 py-1.5 text-sm text-ink focus:border-symbol focus:outline-none"
             />
           </div>
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label htmlFor="feedback-body" className="text-xs font-semibold text-slate-600">
+              <label htmlFor="feedback-body" className="text-xs font-semibold text-ink2">
                 Details
               </label>
               <span className={`text-xs ${counterClass(body.length, FEEDBACK_BODY_MAX)}`}>
@@ -180,10 +180,10 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
               onChange={e => setBody(e.target.value)}
               rows={6}
               placeholder="What happened, what you expected, or what you would like to see"
-              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-hairline px-2 py-1.5 text-sm text-ink focus:border-symbol focus:outline-none"
             />
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink2">
             Your name and email are recorded with the feedback so we can follow up.
           </p>
         </div>

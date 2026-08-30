@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogIn, ShieldCheck, User } from 'lucide-react'
+import { LogIn, User } from 'lucide-react'
 import {
   APP_NAME_FALLBACK,
   devLogin,
@@ -10,6 +10,7 @@ import {
   useMe,
   type DevUser,
 } from '../api/client'
+import BrandMark from '../components/BrandMark'
 import { Badge, Banner, Card, Spinner } from '../components/ui'
 
 /**
@@ -86,19 +87,19 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-700 to-indigo-800 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-paper p-4">
       <div className="w-full max-w-md">
-        <div className="mb-6 text-center text-white">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
-            <ShieldCheck className="h-8 w-8" aria-hidden />
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex justify-center">
+            <BrandMark className="h-12 w-12" />
           </div>
-          <h1 className="text-2xl font-bold">{APP_NAME_FALLBACK}</h1>
-          <p className="mt-1 text-sm text-blue-200">
-            Readiness, training, and staffing in one place
-          </p>
+          <h1 className="font-display text-[28px] font-bold leading-tight text-ink">
+            {APP_NAME_FALLBACK}
+          </h1>
+          <p className="mt-1 text-sm text-ink2">Readiness, training, and staffing in one place</p>
         </div>
 
-        <Card className="shadow-xl">
+        <Card>
           {errorParam && <Banner kind="error" className="mb-4">{loginErrorMessage(errorParam)}</Banner>}
 
           {(probe.state === 'loading' || meQ.isPending) && (
@@ -116,7 +117,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setProbeAttempt(n => n + 1)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="w-full rounded-md border border-hairline px-4 py-2 text-sm font-semibold text-ink hover:border-muted"
               >
                 Try again
               </button>
@@ -127,12 +128,12 @@ export default function Login() {
             <div className="space-y-4 py-2 text-center">
               <a
                 href="/auth/login"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-blue-700"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-symbol px-4 py-2.5 font-display font-semibold text-paper transition-opacity hover:opacity-90"
               >
                 <LogIn className="h-5 w-5" aria-hidden />
                 Continue with Google
               </a>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink2">
                 Access is limited to this deployment's allowed Google Workspace domains (for
                 example, your wing's cap.gov domain). Personal Gmail accounts cannot sign in. If
                 you have multiple Google accounts, pick your CAP account in the Google chooser.
@@ -150,25 +151,25 @@ export default function Login() {
                   DEV_USERS configuration.
                 </Banner>
               ) : (
-                <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                <ul className="divide-y divide-hairline rounded-md border border-hairline">
                   {probe.users.map(u => (
                     <li key={u.email}>
                       <button
                         type="button"
                         disabled={pendingEmail !== null}
                         onClick={() => void onDevLogin(u.email)}
-                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50/60 disabled:opacity-50"
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-gray20 disabled:opacity-50"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100">
-                          <User className="h-4 w-4 text-slate-500" aria-hidden />
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray20">
+                          <User className="h-4 w-4 text-ink2" aria-hidden />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-slate-800">
+                          <span className="block truncate text-sm font-semibold text-ink">
                             {u.name || u.email}
                           </span>
-                          <span className="block truncate text-xs text-slate-500">{u.email}</span>
+                          <span className="block truncate text-xs text-ink2">{u.email}</span>
                         </span>
-                        {u.role && <Badge tone={u.role === 'admin' ? 'amber' : 'blue'}>{u.role}</Badge>}
+                        {u.role && <Badge tone={u.role === 'admin' ? 'blue' : 'slate'}>{u.role}</Badge>}
                         {pendingEmail === u.email && <Spinner />}
                       </button>
                     </li>
