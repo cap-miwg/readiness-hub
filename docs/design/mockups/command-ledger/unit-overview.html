@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Readiness Hub · Unit Overview · Command Ledger direction</title>
+<style>
+  /* ============================================================
+     COMMAND LEDGER · token layer (same sheet as home.html)
+     ============================================================ */
+  :root {
+    --blue: #001871;
+    --gray: #9EA2A2;
+    --red: #BA0C2F;
+    --yellow: #FFCD00;
+    --blue20: #CCD1E3;
+    --gray20: #ECECEC;
+    --red20: #F1CED5;
+    --yellow20: #FFF5CC;
+    --black20: #CCCCCC;
+    --paper: #FFFDF5;
+    --card: #FFFFFF;
+    --ink: rgba(0, 0, 0, 0.88);
+    --ink2: rgba(0, 0, 0, 0.57);
+    --hair: rgba(0, 0, 0, 0.12);
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: var(--sans); font-size: 14px; line-height: 1.55; color: var(--ink); background: var(--paper); }
+  .num { font-variant-numeric: tabular-nums lining-nums; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--blue); outline-offset: 2px;
+  }
+
+  /* ---------- Chrome (identical to home.html) ---------- */
+  .chrome { background: var(--blue); color: #fff; }
+  .chrome-brand { max-width: 1120px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-slot { width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .wordmark { font-size: 17px; font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; }
+  .wordmark small { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.14em; color: rgba(255,255,255,0.7); text-transform: uppercase; }
+  .chrome-context { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .unit-select {
+    appearance: none; -webkit-appearance: none;
+    font: 600 13px/1.2 var(--sans); font-variant-numeric: tabular-nums;
+    color: #fff; background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.35); border-radius: 4px;
+    padding: 7px 30px 7px 10px; max-width: 320px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.5'/></svg>");
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+  .unit-select option, .unit-select optgroup { color: #000; background: #fff; }
+  .subunits { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); white-space: nowrap; cursor: pointer; }
+  .subunits input { accent-color: #fff; width: 14px; height: 14px; }
+  .asof-chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
+    color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 999px; padding: 4px 10px; cursor: default;
+  }
+  .asof-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gray); }
+  .user-btn { font: 600 13px/1.2 var(--sans); color: #fff; background: none; border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; padding: 7px 10px; cursor: pointer; white-space: nowrap; }
+  .hamburger { display: none; background: none; border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; padding: 7px 9px; cursor: pointer; color: #fff; }
+  .chrome-tabs { border-top: 1px solid rgba(255,255,255,0.2); }
+  .chrome-tabs ul { max-width: 1120px; margin: 0 auto; padding: 0 24px; list-style: none; display: flex; gap: 4px; overflow-x: auto; }
+  .chrome-tabs a { display: block; padding: 10px 14px 8px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.78); border-bottom: 2px solid transparent; white-space: nowrap; }
+  .chrome-tabs a:hover { color: #fff; text-decoration: none; }
+  .chrome-tabs a[aria-current="page"] { color: #fff; border-bottom-color: #fff; }
+  .drawer { display: none; background: var(--blue); border-top: 1px solid rgba(255,255,255,0.2); }
+  .drawer.open { display: block; }
+  .drawer nav a { display: block; padding: 12px 24px; min-height: 44px; font-size: 15px; font-weight: 600; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.12); }
+  .drawer-group { padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+  .drawer-label { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
+  .drawer .unit-select { width: 100%; max-width: none; }
+  .drawer .subunits { margin-top: 10px; }
+  .drawer .meta { font-size: 12px; color: rgba(255,255,255,0.75); }
+
+  /* ---------- Dateline ---------- */
+  .dateline {
+    max-width: 1120px; margin: 0 auto; padding: 10px 24px;
+    display: flex; flex-wrap: wrap; gap: 4px 18px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink2); border-bottom: 1px solid var(--hair);
+  }
+  .dateline .num { letter-spacing: 0.06em; }
+
+  /* ---------- Page frame ---------- */
+  .page { max-width: 1120px; margin: 0 auto; padding: 28px 24px 40px; }
+  .kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink2); margin-bottom: 6px; }
+  h1 { font-family: var(--serif); font-size: 30px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
+  .standfirst { margin-top: 6px; font-size: 14px; color: var(--ink2); }
+  .standfirst .num { color: var(--ink2); }
+
+  /* ---------- Morning line: the ten-second verdict ---------- */
+  .verdict { margin-top: 18px; background: var(--blue20); border-radius: 6px; padding: 16px 20px; }
+  .verdict .lede { font-size: 16.5px; line-height: 1.45; color: #000; max-width: 72ch; }
+  .verdict .lede strong { color: var(--blue); }
+  .scoreboard { margin-top: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .score .k { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blue); }
+  .score .v { font-size: 24px; font-weight: 700; color: var(--blue); font-variant-numeric: tabular-nums lining-nums; line-height: 1.2; }
+  .score .v small { font-size: 12px; font-weight: 600; }
+
+  /* ---------- Needs Attention queue ---------- */
+  .queue { margin-top: 26px; border-top: 2px solid #000; padding-top: 14px; }
+  .queue-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .queue-head h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; }
+  .queue-head .note { font-size: 12px; color: var(--ink2); margin-left: auto; }
+  .finding { display: flex; align-items: baseline; gap: 14px; padding: 13px 0; }
+  .finding + .finding { border-top: 1px solid var(--gray20); }
+  .finding .idx { flex: none; width: 26px; font-size: 15px; font-weight: 700; color: var(--gray); font-variant-numeric: tabular-nums; }
+  .flag {
+    flex: none; display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    border-radius: 3px; padding: 3px 8px; transform: translateY(-1px);
+  }
+  .flag svg { display: block; }
+  .flag-action { background: var(--red); color: #fff; }
+  .flag-watch  { background: var(--yellow); color: #000; }
+  .flag-plan   { background: var(--blue); color: #fff; }
+  .finding .body { font-size: 14.5px; }
+  .finding .body .fact { font-weight: 650; }
+  .finding .go { white-space: nowrap; margin-left: auto; font-weight: 600; font-size: 13.5px; flex: none; }
+
+  /* ---------- Collapsible section grammar ---------- */
+  .sec { border-top: 2px solid #000; margin-top: 26px; }
+  .sec > summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 2px; min-height: 52px;
+  }
+  .sec > summary::-webkit-details-marker { display: none; }
+  .sec > summary:hover { background: rgba(0,0,0,0.02); }
+  .sec .caret { flex: none; transition: transform 0.15s ease; color: var(--ink2); }
+  .sec[open] .caret { transform: rotate(90deg); }
+  .sec h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; }
+  /* Status-bearing rest state: one figure, one state word, one alert count. */
+  .rest { margin-left: auto; display: flex; align-items: center; gap: 14px; font-variant-numeric: tabular-nums lining-nums; }
+  .rest .fig { font-size: 15px; font-weight: 700; }
+  .rest .fig small { font-weight: 500; color: var(--ink2); font-size: 12px; }
+  .rest .state { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink2); }
+  .alertchip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; }
+  .alertchip .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-red { background: var(--red); }
+  .dot-yellow { background: var(--yellow); border: 1px solid rgba(0,0,0,0.25); }
+  .dot-blue { background: var(--blue); }
+  .dot-none { background: var(--gray20); border: 1px solid var(--black20); }
+  .sec-body { padding: 2px 2px 24px; }
+
+  .card { background: var(--card); border: 1px solid var(--hair); border-radius: 6px; padding: 18px 20px; }
+  .card + .card { margin-top: 14px; }
+  .capability { font-size: 16px; line-height: 1.45; }
+  .capability strong { font-weight: 700; }
+
+  /* ---------- Ledger rows ---------- */
+  .ledger { margin-top: 6px; }
+  .lhead {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink2); padding: 14px 0 6px;
+  }
+  .lrow { display: flex; align-items: baseline; gap: 8px; min-height: 34px; padding: 6px 0; }
+  .lrow + .lrow { border-top: 1px solid var(--gray20); }
+  .lrow .label { font-size: 13.5px; }
+  .lrow .sub { display: block; font-size: 12px; color: var(--ink2); }
+  .lrow .leader { flex: 1; border-bottom: 1px dotted var(--gray); transform: translateY(-4px); min-width: 24px; }
+  .lrow .value { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; text-align: right; }
+  .lrow .value small { font-weight: 500; color: var(--ink2); }
+
+  /* Component bars: quiet, blue only */
+  .comp { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 12px; padding: 7px 0; }
+  .comp + .comp { border-top: 1px solid var(--gray20); }
+  .comp .cl { font-size: 13px; }
+  .comp .track { display: block; height: 3px; background: var(--gray20); border-radius: 2px; overflow: hidden; }
+  .comp .fill { display: block; height: 3px; background: var(--blue); }
+  .comp .cv { font-size: 13.5px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+
+  /* Inline SPOF finding row inside a section body */
+  .inline-finding {
+    margin-top: 14px; display: flex; align-items: baseline; gap: 12px;
+    background: var(--red20); border-radius: 4px; padding: 10px 14px;
+  }
+  .inline-finding .txt { font-size: 13.5px; }
+  .inline-finding .go { margin-left: auto; font-weight: 600; font-size: 13px; white-space: nowrap; }
+
+  /* Methodology popover as a quiet disclosure */
+  .method { margin-top: 12px; }
+  .method summary {
+    list-style: none; cursor: pointer; display: inline-block;
+    font-size: 12.5px; font-weight: 600; color: var(--blue);
+  }
+  .method summary::-webkit-details-marker { display: none; }
+  .method[open] summary { margin-bottom: 6px; }
+  .method p { font-size: 12px; color: var(--ink2); max-width: 70ch; }
+
+  .sparkline { display: block; margin-top: 4px; }
+
+  .footnote { margin-top: 8px; font-size: 12px; color: var(--ink2); }
+
+  /* ---------- Footer ---------- */
+  .footer {
+    max-width: 1120px; margin: 0 auto; padding: 16px 24px 28px; border-top: 1px solid var(--hair);
+    display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ink2);
+  }
+  .footer .gh { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 900px) {
+    .chrome-tabs, .chrome-context { display: none; }
+    .hamburger { display: inline-flex; margin-left: auto; }
+    .page { padding: 22px 16px 32px; }
+    .dateline, .footer { padding-left: 16px; padding-right: 16px; }
+    .chrome-brand { padding: 10px 16px; }
+    h1 { font-size: 25px; }
+    .scoreboard { grid-template-columns: repeat(2, 1fr); }
+    .twocol { grid-template-columns: 1fr; }
+    .queue-head { flex-direction: column; gap: 2px; }
+    .queue-head .note { margin-left: 0; }
+    .finding { flex-wrap: wrap; }
+    .finding .go { margin-left: 40px; flex-basis: 100%; }
+    .rest .state { display: none; }
+    .comp { grid-template-columns: 96px 1fr 40px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="chrome">
+  <div class="chrome-brand">
+    <span class="logo-slot" role="img" aria-label="Organization logo placeholder">
+      <svg width="34" height="34" viewBox="0 0 34 34">
+        <circle cx="17" cy="17" r="15.5" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+        <path d="M17 8 L26 24 H8 Z" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="wordmark">Readiness Hub<small>Logo slot · your organization</small></span>
+
+    <div class="chrome-context">
+      <select class="unit-select num" aria-label="Unit scope">
+        <optgroup label="Wing">
+          <option>GLR-MI-001 · Wing Headquarters</option>
+        </optgroup>
+        <optgroup label="Group 3 (Southeast)">
+          <option>GLR-MI-090 · Group 3 Headquarters</option>
+          <option selected>GLR-MI-104 · Riverside Composite Sqdn</option>
+          <option>GLR-MI-112 · Lakeshore Cadet Sqdn</option>
+          <option>GLR-MI-118 · Millbrook Senior Flight</option>
+        </optgroup>
+        <optgroup label="Group 5 (West)">
+          <option>GLR-MI-130 · Cedar Falls Composite Sqdn</option>
+          <option>GLR-MI-142 · Ironfield Cadet Sqdn</option>
+        </optgroup>
+      </select>
+      <label class="subunits"><input type="checkbox"> Sub-units</label>
+      <span class="asof-chip" title="Extract 2026-08-28 02:14 · Ingest OK in 41s · Next expected 2026-08-30 02:00">
+        <span class="asof-dot"></span> As of 28 Aug
+      </span>
+      <button class="user-btn" type="button">Capt J. Morales ▾</button>
+    </div>
+
+    <button class="hamburger" type="button" aria-expanded="false" aria-controls="drawer" onclick="toggleDrawer(this)">
+      <svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true">
+        <path d="M0 1h18M0 7h18M0 13h18" stroke="#FFFFFF" stroke-width="2"/>
+      </svg>
+      <span style="position:absolute;left:-9999px">Menu</span>
+    </button>
+  </div>
+
+  <nav class="chrome-tabs" aria-label="Primary">
+    <ul>
+      <li><a href="#">Home</a></li>
+      <li><a href="#" aria-current="page">Unit Overview</a></li>
+      <li><a href="#">Seniors</a></li>
+      <li><a href="#">Cadets</a></li>
+      <li><a href="#">Reports</a></li>
+      <li><a href="#">Org Chart</a></li>
+    </ul>
+  </nav>
+
+  <div class="drawer" id="drawer">
+    <nav aria-label="Primary, mobile">
+      <a href="#">Home</a>
+      <a href="#" aria-current="page">Unit Overview</a>
+      <a href="#">Seniors</a>
+      <a href="#">Cadets</a>
+      <a href="#">Reports</a>
+      <a href="#">Org Chart</a>
+    </nav>
+    <div class="drawer-group">
+      <div class="drawer-label">Scope</div>
+      <select class="unit-select num" aria-label="Unit scope">
+        <optgroup label="Group 3 (Southeast)">
+          <option selected>GLR-MI-104 · Riverside Composite Sqdn</option>
+          <option>GLR-MI-112 · Lakeshore Cadet Sqdn</option>
+        </optgroup>
+      </select>
+      <label class="subunits"><input type="checkbox"> Include sub-units</label>
+    </div>
+    <div class="drawer-group">
+      <div class="drawer-label">Data</div>
+      <div class="meta num">Extract of 28 Aug 2026, 02:14 · ingest OK</div>
+    </div>
+    <div class="drawer-group">
+      <div class="drawer-label">Capt J. Morales</div>
+      <div class="meta">Profile · Settings · Sign out</div>
+    </div>
+  </div>
+</header>
+
+<div class="dateline num">
+  <span>Saturday, 29 August 2026</span>
+  <span>Unit Overview</span>
+  <span>Data as of 28 Aug 2026, 02:14</span>
+</div>
+
+<main class="page">
+
+  <!-- Calm masthead: charter first, then the facts everyone asks for -->
+  <div class="masthead">
+    <div class="kicker num">GLR-MI-104 · Composite Squadron · Group 3</div>
+    <h1>Riverside Composite Squadron</h1>
+    <p class="standfirst num">Meets Tuesdays, 18:30, Riverside Armory · 42 members · 19 seniors, 21 cadets, 2 patrons</p>
+  </div>
+
+  <!-- THE MORNING LINE: is my unit healthy, answered in one read -->
+  <section class="verdict" aria-label="Unit health verdict">
+    <p class="lede"><strong>Broadly healthy.</strong> Strength is steady and growing slightly, Emergency Services can field a ground team tonight, and cadet progression is moving. Recruiting is the one weak leg, and one finding needs a commander's decision.</p>
+    <div class="scoreboard num" role="group" aria-label="Headline figures">
+      <div class="score"><div class="k">Members</div><div class="v">42 <small>+3 / 12 mo</small></div></div>
+      <div class="score"><div class="k">Sustainability</div><div class="v">71 <small>Good</small></div></div>
+      <div class="score"><div class="k">ES readiness</div><div class="v">66 <small>Good</small></div></div>
+      <div class="score"><div class="k">Open findings</div><div class="v">3 <small>1 action</small></div></div>
+    </div>
+  </section>
+
+  <!-- NEEDS ATTENTION: one ranked queue, one line and one action each -->
+  <section class="queue" aria-label="Needs attention">
+    <div class="queue-head">
+      <h2>Needs attention</h2>
+      <span class="note">Ranked. When this list is empty, the unit is healthy and this section says so quietly.</span>
+    </div>
+
+    <div class="finding">
+      <span class="idx num">01</span>
+      <span class="flag flag-action">
+        <svg width="10" height="9" viewBox="0 0 10 9" aria-hidden="true"><path d="M5 0 10 9H0Z" fill="#FFFFFF"/></svg>
+        Action
+      </span>
+      <span class="body">Single point of failure: <span class="fact">Mission Radio Operator</span> has one qualified member and no backup in training.</span>
+      <a class="go" href="#">Review backup candidates →</a>
+    </div>
+
+    <div class="finding">
+      <span class="idx num">02</span>
+      <span class="flag flag-watch">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="none" stroke="#000000" stroke-width="1.4"/><path d="M5 2.6v2.9l1.8 1.2" fill="none" stroke="#000000" stroke-width="1.2"/></svg>
+        Watch
+      </span>
+      <span class="body"><span class="fact num">3 senior memberships</span> expire within 30 days; 5 more within 60.</span>
+      <a class="go" href="#">Open renewal list →</a>
+    </div>
+
+    <div class="finding">
+      <span class="idx num">03</span>
+      <span class="flag flag-plan">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="1" fill="none" stroke="#FFFFFF" stroke-width="1.4"/><path d="M3 5.2 4.6 6.8 7.2 3.4" fill="none" stroke="#FFFFFF" stroke-width="1.3"/></svg>
+        Plan
+      </span>
+      <span class="body"><span class="fact num">6 cadets</span> are blocked by HFZ ahead of the 15 September test night.</span>
+      <a class="go" href="#">Open Test Night view →</a>
+    </div>
+  </section>
+
+  <!-- ================= SECTION LEDGER =================
+       Collapsed rest state budget, enforced: one figure,
+       one state word, one alert count. Nothing else. -->
+
+  <!-- RECRUITING & RETENTION: shown expanded -->
+  <details class="sec" open>
+    <summary aria-label="Recruiting and Retention, score 71, good, one watch item">
+      <span class="caret" aria-hidden="true">
+        <svg width="10" height="12" viewBox="0 0 10 12"><path d="M2 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </span>
+      <h2>Recruiting &amp; Retention</h2>
+      <span class="rest">
+        <span class="fig num">71 <small>/ 100</small></span>
+        <span class="state">Good</span>
+        <span class="alertchip num"><span class="dot dot-yellow"></span>1</span>
+      </span>
+    </summary>
+    <div class="sec-body">
+      <div class="twocol">
+
+        <div class="card">
+          <div class="lhead">Sustainability score · components</div>
+          <div class="comp num"><span class="cl">Recruiting</span><span class="track"><span class="fill" style="width:58%"></span></span><span class="cv">58</span></div>
+          <div class="comp num"><span class="cl">Retention</span><span class="track"><span class="fill" style="width:82%"></span></span><span class="cv">82</span></div>
+          <div class="comp num"><span class="cl">Growth</span><span class="track"><span class="fill" style="width:64%"></span></span><span class="cv">64</span></div>
+          <div class="comp num"><span class="cl">Stability</span><span class="track"><span class="fill" style="width:90%"></span></span><span class="cv">90</span></div>
+          <details class="method">
+            <summary>How this score is computed</summary>
+            <p>Weighted composite: 25% recruiting, 35% retention, 25% growth, 15% stability, over 12 months of extract history. Bands: 80+ excellent, 65+ good, 50+ fair.</p>
+          </details>
+        </div>
+
+        <div class="card">
+          <div class="lhead">Twelve-month strength</div>
+          <svg class="sparkline" width="100%" height="40" viewBox="0 0 240 40" preserveAspectRatio="none" role="img" aria-label="Strength trend, 39 to 42 members over twelve months">
+            <line x1="0" y1="36" x2="240" y2="36" stroke="#ECECEC" stroke-width="1"/>
+            <polyline points="0,30 22,30 44,26 66,28 88,24 110,24 132,20 154,22 176,16 198,14 220,12 240,10"
+                      fill="none" stroke="#001871" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="240" cy="10" r="2.6" fill="#001871"/>
+          </svg>
+          <div class="ledger num">
+            <div class="lrow">
+              <span class="label">Joined, last 12 months</span>
+              <span class="leader"></span>
+              <span class="value">9</span>
+            </div>
+            <div class="lrow">
+              <span class="label">Renewed of those due</span>
+              <span class="leader"></span>
+              <span class="value">31 of 36 <small>(86%)</small></span>
+            </div>
+            <div class="lrow">
+              <span class="label">Net growth</span>
+              <span class="leader"></span>
+              <span class="value">+3</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="card">
+        <div class="lhead">Renewal watch · counts only, names on drill-down</div>
+        <div class="ledger num">
+          <div class="lrow">
+            <span class="label">Expire within 30 days</span>
+            <span class="leader"></span>
+            <span class="value">3 members</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Expire within 60 days</span>
+            <span class="leader"></span>
+            <span class="value">5 members</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Member breakdown<span class="sub">Seniors 19 · Cadets 21 · Patrons 2</span></span>
+            <span class="leader"></span>
+            <span class="value">42 total</span>
+          </div>
+        </div>
+        <p class="footnote">Twelve months of extract history analyzed. <a href="#">Open the renewal list →</a></p>
+      </div>
+    </div>
+  </details>
+
+  <!-- EMERGENCY SERVICES: shown collapsed; the rest state carries the verdict -->
+  <details class="sec">
+    <summary aria-label="Emergency Services, score 66, good, one action item">
+      <span class="caret" aria-hidden="true">
+        <svg width="10" height="12" viewBox="0 0 10 12"><path d="M2 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </span>
+      <h2>Emergency Services</h2>
+      <span class="rest">
+        <span class="fig num">66 <small>/ 100</small></span>
+        <span class="state">Good</span>
+        <span class="alertchip num"><span class="dot dot-red"></span>1</span>
+      </span>
+    </summary>
+    <div class="sec-body">
+      <div class="card">
+        <!-- The capability sentence leads. The score never outranks it. -->
+        <p class="capability"><strong>Tonight, Riverside can field 1 ground team and 1 UDF team.</strong> Aircrew is not a mission this unit is staffed for.</p>
+        <div class="ledger num">
+          <div class="lhead">Qualifications</div>
+          <div class="lrow">
+            <span class="label">Active qualifications</span>
+            <span class="leader"></span>
+            <span class="value">31</span>
+          </div>
+          <div class="lrow">
+            <span class="label">In training</span>
+            <span class="leader"></span>
+            <span class="value">12</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Expired</span>
+            <span class="leader"></span>
+            <span class="value">6</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Expiring within 90 days</span>
+            <span class="leader"></span>
+            <span class="value">4</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Members without GES</span>
+            <span class="leader"></span>
+            <span class="value">2</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Evaluator coverage<span class="sub">3 potential evaluators on roster</span></span>
+            <span class="leader"></span>
+            <span class="value">58%</span>
+          </div>
+        </div>
+
+        <!-- SPOF: position at rest; the name appears only on drill-down -->
+        <div class="inline-finding">
+          <span class="flag flag-action">
+            <svg width="10" height="9" viewBox="0 0 10 9" aria-hidden="true"><path d="M5 0 10 9H0Z" fill="#FFFFFF"/></svg>
+            Action
+          </span>
+          <span class="txt">Single point of failure: <strong>Mission Radio Operator</strong>, 1 qualified member.</span>
+          <a class="go" href="#">Deep dive →</a>
+        </div>
+
+        <details class="method">
+          <summary>How this score is computed</summary>
+          <p>Weighted composite: 35% teams, 25% qualification health, 15% evaluators, 15% risk, 10% pipeline. Bands: 80+ excellent, 65+ good, 50+ fair. The capability sentence above is the operational truth; the score is a summary of it.</p>
+        </details>
+      </div>
+    </div>
+  </details>
+
+  <!-- CADET PROGRAMS: collapsed -->
+  <details class="sec">
+    <summary aria-label="Cadet Programs, 4 promotion ready, steady, one plan item">
+      <span class="caret" aria-hidden="true">
+        <svg width="10" height="12" viewBox="0 0 10 12"><path d="M2 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </span>
+      <h2>Cadet Programs</h2>
+      <span class="rest">
+        <span class="fig num">4 <small>ready</small></span>
+        <span class="state">Steady</span>
+        <span class="alertchip num"><span class="dot dot-blue"></span>1</span>
+      </span>
+    </summary>
+    <div class="sec-body">
+      <div class="card">
+        <div class="lhead">Promotion blockers · 21 cadets</div>
+        <div class="ledger num">
+          <div class="lrow">
+            <span class="label">Ready to promote now</span>
+            <span class="leader"></span>
+            <span class="value">4</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Blocked by HFZ</span>
+            <span class="leader"></span>
+            <span class="value">6</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Blocked by time in grade</span>
+            <span class="leader"></span>
+            <span class="value">4</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Tested, awaiting board</span>
+            <span class="leader"></span>
+            <span class="value">2</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Milestone radar<span class="sub">Within one achievement of Mitchell</span></span>
+            <span class="leader"></span>
+            <span class="value">2 cadets</span>
+          </div>
+        </div>
+        <p class="footnote">Test night 15 September: 8 open tests. <a href="#">Open Test Night view →</a></p>
+      </div>
+    </div>
+  </details>
+
+  <!-- PROFESSIONAL DEVELOPMENT: collapsed -->
+  <details class="sec">
+    <summary aria-label="Professional Development, 3 approvals pending, steady, no alerts">
+      <span class="caret" aria-hidden="true">
+        <svg width="10" height="12" viewBox="0 0 10 12"><path d="M2 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </span>
+      <h2>Professional Development</h2>
+      <span class="rest">
+        <span class="fig num">3 <small>pending</small></span>
+        <span class="state">Steady</span>
+        <span class="alertchip num"><span class="dot dot-none"></span>0</span>
+      </span>
+    </summary>
+    <div class="sec-body">
+      <div class="card">
+        <div class="lhead">Education &amp; Training · 19 seniors</div>
+        <div class="ledger num">
+          <div class="lrow">
+            <span class="label">Levels funnel<span class="sub">L1 19 · L2 11 · L3 6 · L4 2 · L5 1</span></span>
+            <span class="leader"></span>
+            <span class="value">funnel</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Completed, awaiting approval</span>
+            <span class="leader"></span>
+            <span class="value">3</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Teach this next<span class="sub">Most-needed open task across members</span></span>
+            <span class="leader"></span>
+            <span class="value">OPSEC refresher · 5 members</span>
+          </div>
+        </div>
+        <p class="footnote"><a href="#">Open the Seniors page →</a></p>
+      </div>
+    </div>
+  </details>
+
+  <!-- GOOGLE WORKSPACE: demoted to a collapsed, neutral, admin-leaning section -->
+  <details class="sec">
+    <summary aria-label="Google Workspace, 14 of 19 accounts active, informational, no alerts">
+      <span class="caret" aria-hidden="true">
+        <svg width="10" height="12" viewBox="0 0 10 12"><path d="M2 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </span>
+      <h2>Google Workspace</h2>
+      <span class="rest">
+        <span class="fig num">14 <small>of 19</small></span>
+        <span class="state">Informational</span>
+        <span class="alertchip num"><span class="dot dot-none"></span>0</span>
+      </span>
+    </summary>
+    <div class="sec-body">
+      <div class="card">
+        <div class="ledger num">
+          <div class="lrow">
+            <span class="label">Senior accounts active</span>
+            <span class="leader"></span>
+            <span class="value">14 of 19</span>
+          </div>
+          <div class="lrow">
+            <span class="label">Signed in within 30 days</span>
+            <span class="leader"></span>
+            <span class="value">12</span>
+          </div>
+        </div>
+        <p class="footnote">Admin-facing adoption data from the optional Workspace CSV. Not a readiness signal.</p>
+      </div>
+    </div>
+  </details>
+
+</main>
+
+<footer class="footer">
+  <span class="num">v2.0.0</span>
+  <a class="gh" href="#">
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path fill="#001871" d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.34c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.72-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/>
+    </svg>
+    GitHub
+  </a>
+</footer>
+
+<script>
+  function toggleDrawer(btn) {
+    var d = document.getElementById('drawer');
+    var open = d.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+</script>
+
+</body>
+</html>

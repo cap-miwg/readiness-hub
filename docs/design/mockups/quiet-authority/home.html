@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Readiness Hub · Home · Quiet Authority mockup</title>
+<style>
+  /* ------------------------------------------------------------------
+     QUIET AUTHORITY
+     Palette: Symbol Blue #001871, Silver Gray #9EA2A2, Scarlet #BA0C2F,
+     Air Force Yellow #FFCD00, black, white, and 20% tints only:
+     blue-20 #CCD1E3, silver-20 #ECECEC, scarlet-20 #F1CED5, yellow-20 #FFF5CC.
+     Blue is the only chromatic voice on this page except one yellow warning dot.
+  ------------------------------------------------------------------ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #FFFFFF; color: #000000;
+    font-size: 15px; line-height: 1.5;
+  }
+  a { color: #001871; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  :focus-visible { outline: 2px solid #CCD1E3; outline-offset: 2px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---- top bar ---- */
+  .topbar { position: sticky; top: 0; z-index: 10; background: #FFFFFF; border-bottom: 1px solid #ECECEC; }
+  .topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 16px; }
+  .hamburger { display: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 6px; }
+  .hamburger:hover { background: #ECECEC; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #001871; font-weight: 600; font-size: 16px; letter-spacing: -0.01em; white-space: nowrap; }
+  .brand:hover { text-decoration: none; }
+  .tabs { display: flex; align-self: stretch; margin-left: 8px; }
+  .tabs a { display: flex; align-items: center; padding: 0 11px; font-size: 14px; color: #000000; }
+  .tabs a:hover { text-decoration: none; box-shadow: inset 0 -2px 0 #9EA2A2; }
+  .tabs a[aria-current="page"] { color: #001871; font-weight: 600; box-shadow: inset 0 -2px 0 #001871; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .ctl { position: relative; }
+  .unit-btn { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #ECECEC; border-radius: 6px; font-size: 13px; max-width: 300px; }
+  .unit-btn:hover { border-color: #9EA2A2; }
+  .unit-btn .charter { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .unit-btn .uname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chev-sm { color: #9EA2A2; flex: none; }
+  .asof { display: flex; align-items: center; gap: 7px; font-size: 12px; padding: 7px 9px; border-radius: 6px; white-space: nowrap; }
+  .asof:hover { background: #ECECEC; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .dot-gray { background: #9EA2A2; }
+  .dot-warn { background: #FFCD00; }
+  .dot-alert { background: #BA0C2F; }
+  .user-btn { width: 32px; height: 32px; border-radius: 50%; background: #CCD1E3; color: #001871; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; background: #FFFFFF; border: 1px solid #ECECEC; border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.10); min-width: 264px; padding: 8px; }
+  .panel-note { font-size: 12px; line-height: 1.55; padding: 8px 10px; }
+  .panel-note .muted { color: #9EA2A2; }
+  .menu a { display: block; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #000000; }
+  .menu a:hover { background: #ECECEC; text-decoration: none; }
+  .menu .who { padding: 8px 10px 10px; border-bottom: 1px solid #ECECEC; margin-bottom: 6px; font-size: 13px; }
+  .menu .who .sub { color: #9EA2A2; font-size: 12px; }
+
+  /* unit picker */
+  .unit-panel { width: 340px; max-height: 62vh; overflow: auto; }
+  .subunits { display: flex; align-items: center; gap: 8px; padding: 9px 10px 11px; border-bottom: 1px solid #ECECEC; margin-bottom: 6px; font-size: 13px; }
+  .subunits input { accent-color: #001871; }
+  .unit-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .unit-row:hover { background: #ECECEC; }
+  .unit-row .ch { font-variant-numeric: tabular-nums; color: #9EA2A2; flex: none; width: 84px; }
+  .unit-row .nm { overflow: hidden; text-overflow: ellipsis; }
+  .unit-row[aria-selected="true"] { background: #CCD1E3; color: #001871; font-weight: 600; }
+  .unit-row[aria-selected="true"] .ch { color: #001871; }
+  .ind-1 { padding-left: 24px; }
+  .ind-2 { padding-left: 40px; }
+
+  /* mobile drawer */
+  .drawer { border-top: 1px solid #ECECEC; background: #FFFFFF; padding: 8px 24px 20px; }
+  .drawer nav a { display: block; padding: 12px 0; font-size: 16px; color: #000000; border-bottom: 1px solid #ECECEC; }
+  .drawer nav a[aria-current="page"] { color: #001871; font-weight: 600; }
+  .drawer .field { margin-top: 16px; font-size: 13px; }
+  .drawer .field label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9EA2A2; font-weight: 600; margin-bottom: 6px; }
+  .drawer select { width: 100%; font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid #9EA2A2; border-radius: 6px; background: #FFFFFF; color: #000000; }
+  .drawer .subunits { border-bottom: 0; padding-left: 0; }
+
+  /* ---- content ---- */
+  main { max-width: 1024px; margin: 0 auto; padding: 52px 24px 0; }
+  .kicker { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9EA2A2; font-weight: 600; }
+  h1 { font-size: 32px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; margin-top: 8px; }
+  .lede { margin-top: 8px; max-width: 62ch; }
+  .lead { font-size: 19px; line-height: 1.45; font-weight: 400; max-width: 58ch; }
+  .sect { border-top: 1px solid #ECECEC; margin-top: 48px; padding-top: 20px; }
+  .sect-label-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+  .sect-label-row .spacer { margin-left: auto; }
+  .sect-link { font-size: 13px; white-space: nowrap; }
+
+  .figures { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 24px; }
+  .figures.four { grid-template-columns: repeat(4, 1fr); }
+  .fig { border-left: 1px solid #ECECEC; padding: 2px 24px; }
+  .fig:first-child { border-left: 0; padding-left: 0; }
+  .fig .v { font-size: 40px; font-weight: 300; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .fig .k { margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9EA2A2; font-weight: 600; }
+  .fig .sub { margin-top: 4px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+
+  .check { list-style: none; margin-top: 6px; max-width: 640px; }
+  .check li { display: flex; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid #ECECEC; font-size: 14px; }
+  .check li:last-child { border-bottom: 0; }
+  .check .tick { flex: none; width: 16px; text-align: center; color: #001871; font-weight: 600; }
+  .check .pend { color: #9EA2A2; font-weight: 400; }
+  .check .state { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .check .state.done { color: #9EA2A2; }
+
+  .unit-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .unit-head h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .unit-head .charter { font-size: 13px; color: #9EA2A2; font-variant-numeric: tabular-nums; }
+  .meeting { margin-top: 6px; font-size: 14px; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; }
+  .news { list-style: none; }
+  .news li { padding: 13px 0; border-bottom: 1px solid #ECECEC; }
+  .news li:last-child { border-bottom: 0; }
+  .news .meta { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9EA2A2; font-weight: 600; margin-bottom: 3px; }
+  .news p { font-size: 14px; max-width: 52ch; }
+  .news .ver { font-variant-numeric: tabular-nums; }
+  .more { display: inline-block; margin-top: 14px; font-size: 13px; }
+
+  .fresh p { font-size: 14px; max-width: 68ch; }
+
+  .footer { max-width: 1024px; margin: 72px auto 0; padding: 18px 24px 44px; border-top: 1px solid #ECECEC; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 12px; color: #9EA2A2; }
+  .footer .ver { font-variant-numeric: tabular-nums; }
+
+  /* ---- responsive ---- */
+  @media (max-width: 940px) {
+    .tabs { display: none; }
+    .hamburger { display: flex; }
+    .unit-btn .uname { display: none; }
+  }
+  @media (max-width: 640px) {
+    .topbar-inner { padding: 0 12px; gap: 8px; }
+    .topbar-right { gap: 6px; }
+    .hamburger { width: 36px; }
+    .brand span { font-size: 15px; }
+    .unit-btn { padding: 6px 8px; }
+    main { padding: 36px 16px 0; }
+    h1 { font-size: 26px; }
+    .figures, .figures.four { grid-template-columns: 1fr 1fr; row-gap: 24px; }
+    .fig { padding: 2px 16px; }
+    .fig:nth-child(odd) { border-left: 0; padding-left: 0; }
+    .fig .v { font-size: 32px; }
+    .cols { grid-template-columns: 1fr; gap: 40px; }
+    .asof .asof-txt { display: none; }
+    .footer { padding: 18px 16px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <button class="hamburger" aria-label="Menu" aria-expanded="false" aria-controls="drawer" onclick="tgDrawer(this)">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M1 3.5h16M1 9h16M1 14.5h16" stroke="#000000" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+
+    <a class="brand" href="#" aria-label="Readiness Hub home">
+      <!-- Neutral placeholder mark: deployments mount their official logo here. -->
+      <svg width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Logo placeholder">
+        <title>Logo placeholder</title>
+        <circle cx="14" cy="14" r="12.25" fill="none" stroke="#001871" stroke-width="1.5"/>
+        <path d="M14 7.2 L20.2 19.6 H7.8 Z" fill="#001871"/>
+      </svg>
+      <span>Readiness Hub</span>
+    </a>
+
+    <nav class="tabs" aria-label="Primary">
+      <a href="#" aria-current="page">Home</a>
+      <a href="#">Unit Overview</a>
+      <a href="#">Seniors</a>
+      <a href="#">Cadets</a>
+      <a href="#">Reports</a>
+      <a href="#">Org Chart</a>
+    </nav>
+
+    <div class="topbar-right">
+      <div class="ctl">
+        <button class="unit-btn" aria-haspopup="listbox" aria-expanded="false" onclick="tg('unitPanel', this)">
+          <span class="charter num">MI-104</span>
+          <span class="uname">Riverside Composite Sqdn</span>
+          <svg class="chev-sm" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="#9EA2A2" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <div id="unitPanel" class="panel unit-panel" hidden>
+          <label class="subunits"><input type="checkbox" checked> Include sub-units</label>
+          <div class="unit-row" role="option" aria-selected="false"><span class="ch">GLR-MI-001</span><span class="nm">Wing Headquarters</span></div>
+          <div class="unit-row ind-1" role="option" aria-selected="false"><span class="ch">GLR-MI-702</span><span class="nm">Group 2 Headquarters</span></div>
+          <div class="unit-row ind-2" role="option" aria-selected="false"><span class="ch">GLR-MI-042</span><span class="nm">Lakeshore Cadet Sqdn</span></div>
+          <div class="unit-row ind-2" role="option" aria-selected="true"><span class="ch">GLR-MI-104</span><span class="nm">Riverside Composite Sqdn</span></div>
+          <div class="unit-row ind-2" role="option" aria-selected="false"><span class="ch">GLR-MI-118</span><span class="nm">Fairfield Composite Sqdn</span></div>
+          <div class="unit-row ind-2" role="option" aria-selected="false"><span class="ch">GLR-MI-205</span><span class="nm">Huron Valley Senior Sqdn</span></div>
+        </div>
+      </div>
+
+      <div class="ctl">
+        <button class="asof" aria-expanded="false" onclick="tg('asofPop', this)">
+          <span class="dot dot-gray" aria-hidden="true"></span>
+          <span class="asof-txt num">As of 28 Aug</span>
+        </button>
+        <div id="asofPop" class="panel" hidden>
+          <p class="panel-note">
+            Figures reflect the CAPWATCH extract dated <strong class="num">28 Aug 2026</strong>,
+            ingested <span class="num">29 Aug at 05:12</span>. Last run completed normally.<br>
+            <span class="muted">Records are corrected in eServices and arrive with the next nightly extract. Deployment contact: it@wing.example.</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="ctl">
+        <button class="user-btn" aria-label="Account menu" aria-expanded="false" onclick="tg('userMenu', this)">JM</button>
+        <div id="userMenu" class="panel menu" hidden>
+          <div class="who">Capt J. Morales<br><span class="sub">GLR-MI-104 · Riverside Composite Sqdn</span></div>
+          <a href="#">My progress</a>
+          <a href="#">Settings</a>
+          <a href="#">Admin</a>
+          <a href="#">Sign out</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="drawer" class="drawer" hidden>
+    <nav aria-label="Primary, mobile">
+      <a href="#" aria-current="page">Home</a>
+      <a href="#">Unit Overview</a>
+      <a href="#">Seniors</a>
+      <a href="#">Cadets</a>
+      <a href="#">Reports</a>
+      <a href="#">Org Chart</a>
+    </nav>
+    <div class="field">
+      <label for="unitSelect">Unit</label>
+      <select id="unitSelect">
+        <optgroup label="Wing">
+          <option>GLR-MI-001 · Wing Headquarters</option>
+        </optgroup>
+        <optgroup label="Group 2">
+          <option>GLR-MI-702 · Group 2 Headquarters</option>
+          <option>GLR-MI-042 · Lakeshore Cadet Sqdn</option>
+          <option selected>GLR-MI-104 · Riverside Composite Sqdn</option>
+          <option>GLR-MI-118 · Fairfield Composite Sqdn</option>
+          <option>GLR-MI-205 · Huron Valley Senior Sqdn</option>
+        </optgroup>
+      </select>
+      <label class="subunits" style="margin-top:10px;"><input type="checkbox" checked> Include sub-units</label>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Masthead: the mirror before the telescope. -->
+  <section aria-label="Greeting">
+    <p class="kicker num">Friday 29 August 2026 · Figures as of the 28 August extract</p>
+    <h1>Good evening, Capt Morales.</h1>
+  </section>
+
+  <!-- MY PROGRESS -->
+  <section class="sect" aria-labelledby="lbl-progress">
+    <div class="sect-label-row">
+      <p class="kicker" id="lbl-progress">My progress</p>
+      <span class="spacer"></span>
+      <a class="sect-link" href="#">Full record</a>
+    </div>
+    <p class="lead">Your next promotion review is for Maj. Time in grade is met in 148 days, and Level 3 is the remaining requirement in your control: two tasks left.</p>
+
+    <div class="figures">
+      <div class="fig">
+        <div class="v">148</div>
+        <div class="k">Days to time in grade, Maj</div>
+      </div>
+      <div class="fig">
+        <div class="v">2</div>
+        <div class="k">Tasks left in Level 3</div>
+      </div>
+      <div class="fig">
+        <div class="v">1</div>
+        <div class="k">Qual expiring in 90 days</div>
+        <div class="sub"><span class="dot dot-warn" aria-hidden="true"></span><span class="sr">Warning:</span><span class="num">GTM3, expires 12 Nov</span></div>
+      </div>
+    </div>
+
+    <div class="sect-label-row" style="margin-top:32px; margin-bottom:0;">
+      <p class="kicker">Level 3 checklist</p>
+    </div>
+    <ul class="check">
+      <li><span class="tick" aria-hidden="true">&#10003;</span> Officer Basic Course <span class="state done">Done</span></li>
+      <li><span class="tick" aria-hidden="true">&#10003;</span> Senior rating in primary specialty track <span class="state done">Done</span></li>
+      <li><span class="tick pend" aria-hidden="true">&#9675;</span> Twelve months serving in a duty position <span class="state num">8 of 12 months</span></li>
+      <li><span class="tick pend" aria-hidden="true">&#9675;</span> Wing conference or squadron leadership course <span class="state">Pending</span></li>
+    </ul>
+  </section>
+
+  <!-- MY UNIT -->
+  <section class="sect" aria-labelledby="lbl-unit">
+    <div class="sect-label-row">
+      <p class="kicker" id="lbl-unit">My unit</p>
+      <span class="spacer"></span>
+      <a class="sect-link" href="#">Open Unit Overview</a>
+    </div>
+    <div class="unit-head">
+      <h2>Riverside Composite Sqdn</h2>
+      <span class="charter num">GLR-MI-104 · Composite</span>
+    </div>
+    <p class="meeting">Meets Thursdays at 18:30, Riverside National Guard Armory.</p>
+    <p class="lede">Broadly healthy. <a href="#">Three findings need attention</a>; everything else reads clean.</p>
+
+    <div class="figures">
+      <div class="fig">
+        <div class="v">64</div>
+        <div class="k">Members</div>
+      </div>
+      <div class="fig">
+        <div class="v">72</div>
+        <div class="k">Sustainability</div>
+      </div>
+      <div class="fig">
+        <div class="v">66</div>
+        <div class="k">ES readiness</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLATFORM VOICE -->
+  <section class="sect" aria-label="Platform">
+    <div class="cols">
+      <div>
+        <div class="sect-label-row">
+          <p class="kicker">Announcements</p>
+        </div>
+        <ul class="news">
+          <li>
+            <p class="meta num">26 Aug · 1st Lt R. Okafor, IT Officer</p>
+            <p>The Readiness Hub 2.0 preview is open to all members. Send feedback through the link in the account menu.</p>
+          </li>
+          <li>
+            <p class="meta num">19 Aug · 1st Lt R. Okafor, IT Officer</p>
+            <p>Scheduled maintenance Saturday 30 August, 06:00 to 07:00. The Hub will be briefly unavailable.</p>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <div class="sect-label-row">
+          <p class="kicker">What&rsquo;s new</p>
+        </div>
+        <ul class="news">
+          <li>
+            <p class="meta"><span class="ver num">2.0.0</span> · Unit Overview</p>
+            <p>Sections are now collapsible and remember your layout between visits.</p>
+          </li>
+          <li>
+            <p class="meta"><span class="ver num">2.0.0</span> · Unit selector</p>
+            <p>Charter numbers are back, and units are grouped by command structure.</p>
+          </li>
+          <li>
+            <p class="meta"><span class="ver num">2.0.0</span> · Reports</p>
+            <p>Every export now prints the extract date it was built from.</p>
+          </li>
+        </ul>
+        <a class="more" href="#">Full changelog</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA FRESHNESS -->
+  <section class="sect fresh" aria-labelledby="lbl-data">
+    <div class="sect-label-row">
+      <p class="kicker" id="lbl-data">About the data</p>
+    </div>
+    <p>Every figure on this site comes from the nightly CAPWATCH extract. Current extract: <strong class="num">28 August 2026</strong>, ingested at <span class="num">05:12</span>. The Hub is read only; records are corrected in eServices and appear here with the next extract.</p>
+  </section>
+</main>
+
+<footer class="footer">
+  <span class="ver">Readiness Hub v2.0.0-dev</span>
+  <a href="#">View source on GitHub</a>
+</footer>
+
+<script>
+  // Tiny toggles only: no navigation, no fetch.
+  function tg(id, btn) {
+    var el = document.getElementById(id);
+    var wasOpen = !el.hidden;
+    document.querySelectorAll('.panel').forEach(function (p) { p.hidden = true; });
+    document.querySelectorAll('[aria-haspopup],[aria-label="Account menu"],.asof').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+    el.hidden = wasOpen;
+    if (btn) btn.setAttribute('aria-expanded', String(!wasOpen));
+  }
+  function tgDrawer(btn) {
+    var d = document.getElementById('drawer');
+    d.hidden = !d.hidden;
+    btn.setAttribute('aria-expanded', String(!d.hidden));
+  }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.ctl')) {
+      document.querySelectorAll('.panel').forEach(function (p) { p.hidden = true; });
+    }
+  });
+</script>
+</body>
+</html>
