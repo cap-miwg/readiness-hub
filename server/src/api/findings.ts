@@ -166,28 +166,28 @@ export function rankFindings(
   }
 
   // -- watch --
-  if (sources.membershipsExpiring30 > 0) {
-    const n = sources.membershipsExpiring30
+  // The two expiry bands read as one sentence (the mockups' grammar):
+  // "1 membership expires within 30 days; 5 more within 60." A solo band
+  // keeps its own phrasing, and the nearer band always carries the urgency.
+  if (sources.membershipsExpiring30 > 0 || sources.membershipsExpiring60 > 0) {
+    const n30 = sources.membershipsExpiring30
+    const n60 = sources.membershipsExpiring60
+    let text: string
+    if (n30 > 0 && n60 > 0) {
+      text = `${n30} ${plural(n30, 'membership expires', 'memberships expire')} within 30 days; ${n60} more within 60.`
+    } else if (n30 > 0) {
+      text = `${n30} ${plural(n30, 'membership expires', 'memberships expire')} within 30 days.`
+    } else {
+      text = `${n60} ${plural(n60, 'membership expires', 'memberships expire')} within 60 days.`
+    }
     candidates.push({
-      id: 'memberships-expiring-30',
+      id: 'memberships-expiring',
       category: 'watch',
-      text: `${n} ${plural(n, 'membership expires', 'memberships expire')} within 30 days.`,
+      text,
       href: `/reports?report=membership-lapse${scope.replace('?', '&')}`,
       actionLabel: 'Open renewal list',
-      magnitude: n,
-    })
-  }
-  if (sources.membershipsExpiring60 > 0) {
-    const n = sources.membershipsExpiring60
-    candidates.push({
-      id: 'memberships-expiring-60',
-      category: 'watch',
-      text: `${n} more ${plural(n, 'membership expires', 'memberships expire')} within 60 days.`,
-      href: `/reports?report=membership-lapse${scope.replace('?', '&')}`,
-      actionLabel: 'Open renewal list',
-      // On equal counts the nearer 30-day band ranks first; a much larger
-      // 31-60 band still outranks it by magnitude, per the ranking rule.
-      magnitude: n - 0.5,
+      // 30-day urgency dominates; the 60-day band contributes fractionally.
+      magnitude: n30 * 2 + n60 / 100,
     })
   }
   if (sources.qualsExpiring30 > 0) {

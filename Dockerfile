@@ -9,6 +9,8 @@ RUN npm ci
 # The shared contracts type-import from server/src/domain, so the web
 # typecheck needs the full server source tree (types only; nothing is bundled).
 COPY server/src /build/server/src
+# Home's What's New panel bakes the changelog in at build time (?raw import).
+COPY CHANGELOG.md /build/CHANGELOG.md
 COPY web/ ./
 RUN npm run build
 

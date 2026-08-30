@@ -52,7 +52,7 @@ describe('rankFindings: the ranked Needs Attention queue', () => {
     expect(findings.map(f => f.id)).toEqual([
       'es-quals-expired',
       'spof-ground-team-leader',
-      'memberships-expiring-30',
+      'memberships-expiring',
       'cadets-ready',
       'tig-within-14',
     ])
@@ -107,7 +107,7 @@ describe('rankFindings: the ranked Needs Attention queue', () => {
     expect(byId.get('memberships-expired')?.text).toBe(
       '1 membership has expired while the member is still on the active roster.',
     )
-    expect(byId.get('memberships-expiring-30')?.text).toBe(
+    expect(byId.get('memberships-expiring')?.text).toBe(
       '1 membership expires within 30 days.',
     )
     expect(byId.get('cadets-ready')?.text).toBe(
@@ -135,27 +135,20 @@ describe('rankFindings: the ranked Needs Attention queue', () => {
     )
   })
 
-  it('orders the membership bands by magnitude, nearer band first on ties', () => {
-    const bigLater = rankFindings(
+  it('merges the membership bands into one sentence, nearer band leading', () => {
+    const both = rankFindings(
       sources({ membershipsExpiring30: 2, membershipsExpiring60: 9 }),
       1,
       false,
     )
-    expect(bigLater.map(f => f.id)).toEqual([
-      'memberships-expiring-60',
-      'memberships-expiring-30',
-    ])
-    expect(bigLater[0]?.text).toBe('9 more memberships expire within 60 days.')
+    expect(both.map(f => f.id)).toEqual(['memberships-expiring'])
+    expect(both[0]?.text).toBe('2 memberships expire within 30 days; 9 more within 60.')
 
-    const tied = rankFindings(
-      sources({ membershipsExpiring30: 3, membershipsExpiring60: 3 }),
-      1,
-      false,
-    )
-    expect(tied.map(f => f.id)).toEqual([
-      'memberships-expiring-30',
-      'memberships-expiring-60',
-    ])
+    const solo60 = rankFindings(sources({ membershipsExpiring60: 9 }), 1, false)
+    expect(solo60[0]?.text).toBe('9 memberships expire within 60 days.')
+
+    const solo30 = rankFindings(sources({ membershipsExpiring30: 1 }), 1, false)
+    expect(solo30[0]?.text).toBe('1 membership expires within 30 days.')
   })
 })
 
