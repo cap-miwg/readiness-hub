@@ -267,10 +267,17 @@ export function getCadetProtectionStatus(
   const effectiveBasicEligible = basicEligible && !advancedRequired
 
   const basicLabel = isCadet ? 'Cadet Protection - Cadet Course' : 'Cadet Protection - Basic Course'
+  // An Advanced completion also counts as a Basic completion, provided Basic was
+  // taken at least once. Without this, a member who completed Advanced but doesn't
+  // hold a commander-tier duty shows overdue on a stale Basic date.
+  const basicDone = completion?.basic ?? null
+  const advancedDone = completion?.advanced ?? null
+  const effectiveBasicDone =
+    basicDone !== null && advancedDone !== null && advancedDone > basicDone ? advancedDone : basicDone
   const basic = buildCpCourse(
     'basic',
     basicLabel,
-    completion?.basic ?? null,
+    effectiveBasicDone,
     effectiveBasicRequired,
     effectiveBasicEligible,
     asOf,

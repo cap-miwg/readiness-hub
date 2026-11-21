@@ -10,6 +10,7 @@ import {
 } from '../src/reports/generators.js'
 import { emptyReportData, type JsonLevelsProgress, type ReportData, type ReportMember } from '../src/reports/types.js'
 import type { LevelId } from '../src/domain/constants/index.js'
+import { buildTrainingIndex, getCadetProtectionStatus } from '../src/reports/helpers.js'
 
 const ASOF = new Date(2026, 7, 29)
 
@@ -351,5 +352,39 @@ describe('TLC compliance views', () => {
     expect(row['unit']).toBe('GLR-MI-205')
     expect(row['qualified']).toBe(1)
     expect(row['compliance']).toBe('Needs TLC')
+  })
+})
+
+describe('Cadet Protection: Advanced counts for Basic', () => {
+  const senior = member(40)
+  const index = (rows: { capid: number; typeCrs: string; completed: Date }[]) => buildTrainingIndex(rows)
+  const BASIC = 'Cadet Protection - Basic Course'
+  const ADVANCED = 'Cadet Protection - Advanced Course'
+
+  it('a later Advanced completion renews Basic when Basic was taken at least once', () => {
+    const training = index([
+      { capid: 40, typeCrs: BASIC, completed: new Date(2023, 6, 19) },
+      { capid: 40, typeCrs: ADVANCED, completed: new Date(2026, 5, 7) },
+    ])
+    const cp = getCadetProtectionStatus(senior, training, false, ASOF)
+    expect(cp.basic.lastCompleted).toEqual(new Date(2026, 5, 7))
+    expect(cp.basic.status).toBe('current')
+    expect(cp.isCompliant).toBe(true)
+  })
+
+  it('an Advanced completion without any Basic does not satisfy Basic', () => {
+    const training = index([{ capid: 40, typeCrs: ADVANCED, completed: new Date(2026, 5, 7) }])
+    const cp = getCadetProtectionStatus(senior, training, false, ASOF)
+    expect(cp.basic.lastCompleted).toBeNull()
+    expect(cp.basic.status).toBe('missing')
+  })
+
+  it('an Advanced completion older than Basic does not move the Basic date', () => {
+    const training = index([
+      { capid: 40, typeCrs: BASIC, completed: new Date(2026, 3, 1) },
+      { capid: 40, typeCrs: ADVANCED, completed: new Date(2024, 0, 1) },
+    ])
+    const cp = getCadetProtectionStatus(senior, training, false, ASOF)
+    expect(cp.basic.lastCompleted).toEqual(new Date(2026, 3, 1))
   })
 })
